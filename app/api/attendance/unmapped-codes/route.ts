@@ -2,8 +2,9 @@ import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { ATTENDANCE_SCHEMA_ERROR_HELP, normalizeBiometricSchemaError } from "@/lib/biometric-attendance"
+import { ATTENDANCE_SCHEMA_ERROR_HELP, isMissingBiometricSchemaError } from "@/lib/biometric-attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export async function GET() {
   try {
@@ -53,11 +54,14 @@ export async function GET() {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    const normalized = normalizeBiometricSchemaError(error)
-    logServerError("Failed to list unmapped biometric codes", normalized)
+    logServerError("Failed to list unmapped biometric codes", error)
+    const isSchemaError = isMissingBiometricSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalized.message },
-      { status: normalized.message === ATTENDANCE_SCHEMA_ERROR_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_ERROR_HELP : sanitizeRouteError(error, "Failed to list unmapped codes"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }

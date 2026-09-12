@@ -68,6 +68,26 @@ const toRule = (r: any): PayRule => ({
   pfPercent: r.pf_percent == null ? null : Number(r.pf_percent),
 })
 
+/**
+ * READING A RULE IS NOT ADMIN-ONLY, THOUGH WRITING ONE IS. Deliberate, and raised as an
+ * inconsistency by Greptile — POST, PUT and DELETE all check isAdminRole and this does not.
+ *
+ * What a rule contains is estate POLICY, not anybody's pay: a retention mode and percentage, an
+ * overtime multiplier, a full-day hour count, a PF percentage. There is no wage in this table —
+ * daily_rate and monthly_wage live on attendance_workers. So a rule says "this estate holds 20% of
+ * the day and pays 1.2x after eight hours", which is a thing its own staff may read.
+ *
+ * The mutations are restricted for a different reason, stated on the [id] route: changing what
+ * every worker is held back is a decision, and `accounts` sits in USER_MUTATION_MODULES so
+ * canWriteModule alone would let the daily muster writer make it.
+ *
+ * The practical constraint is that WorkerMoneyPanel renders for non-admins with canAdmin={false}
+ * and reads this to show the rule in force. Gating it would blank that panel for the writer who
+ * uses it most, to withhold a number the estate is not keeping from them.
+ *
+ * Tenant isolation is enforced below by runTenantQuery and by RLS, which is the boundary that
+ * actually matters here.
+ */
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")

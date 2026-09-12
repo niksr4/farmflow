@@ -85,6 +85,61 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (!before) return NextResponse.json({ success: false, error: "Rule not found" }, { status: 404 })
 
     const b = parsed.data
+
+    /**
+     * THE PAIR RULE IS ABOUT THE ROW THAT RESULTS, NOT THE ROW THAT WAS SENT.
+     *
+     * `worker_pay_rules_retention_pair` and its overtime twin require mode and value to be set or
+     * cleared together. This is a PARTIAL update, so whether a payload satisfies them depends on
+     * what is already stored -- and no schema over the body alone can know that. Zod refinements
+     * were doing what they could and it was not enough: `{ retentionValue: null }` on a rule that
+     * has a mode passes every check on the payload, clears one column, and hits the constraint.
+     * The estate gets a 500 that says "Could not update the rule" for what is a plain 400.
+     *
+     * So the merge is computed first and the pair is checked on the RESULT. That covers every
+     * combination at once, including the ones a body-only schema cannot see, and it is the same
+     * merge the UPDATE below performs -- written here rather than inferred, so the two cannot
+     * drift.
+     *
+     * Raised by Greptile on the pay-rules PR, 2026-09-11 (P2).
+     */
+    const merged = {
+      retentionMode: b.retentionMode !== undefined ? b.retentionMode : before.retention_mode,
+      retentionValue: b.retentionValue !== undefined ? b.retentionValue : before.retention_value,
+      overtimeMode: b.overtimeMode !== undefined ? b.overtimeMode : before.overtime_mode,
+      overtimeValue: b.overtimeValue !== undefined ? b.overtimeValue : before.overtime_value,
+    }
+    const pairBroken = (mode: unknown, value: unknown) =>
+      (mode === null || mode === undefined) !== (value === null || value === undefined)
+
+    if (pairBroken(merged.retentionMode, merged.retentionValue)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Retention needs both a type and a number, or neither. To stop retaining, clear both.",
+        },
+        { status: 400 },
+      )
+    }
+    if (pairBroken(merged.overtimeMode, merged.overtimeValue)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Overtime needs both a type and a number, or neither. To stop paying it, clear both.",
+        },
+        { status: 400 },
+      )
+    }
+    // The percentage ceiling has the same shape: it depends on the mode that ENDS UP stored, which
+    // a payload changing only the value cannot see.
+    if (merged.retentionMode === "percent_of_day" && Number(merged.retentionValue ?? 0) > 100) {
+      return NextResponse.json(
+        { success: false, error: "A percentage of the day's pay cannot be more than 100" },
+        { status: 400 },
+      )
+    }
+
     /**
      * Every rule field uses the "was it sent" form rather than COALESCE, because null is a real
      * value here -- clearing retentionMode is how an estate stops retaining from a date, and

@@ -3,6 +3,7 @@ import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 type SummaryRange = {
   startDate: string
@@ -159,7 +160,7 @@ export async function GET(request: Request) {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -194,8 +195,13 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error("Error building weekly summary:", error)
-    const message = error?.message || "Failed to load summary"
-    const status = /startDate|endDate|YYYY-MM-DD|Provide both/.test(message) ? 400 : 500
-    return NextResponse.json({ success: false, error: message }, { status })
+    return buildAdminErrorResponse(error, "Failed to load summary", {
+      ownerRequired: true,
+      statusByMessage: {
+        "Provide both startDate and endDate together": 400,
+        "Dates must be in YYYY-MM-DD format": 400,
+        "startDate must be before or equal to endDate": 400,
+      },
+    })
   }
 }

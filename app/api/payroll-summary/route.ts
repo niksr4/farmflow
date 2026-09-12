@@ -45,6 +45,36 @@ export async function GET(request: Request) {
     // question for the reports, which scope by the block the work happened on.
     const estateFilter = accountsSql``
 
+    /**
+     * "This worker has something owed or held against them in THIS period."
+     *
+     * Written once because it is asked twice, and the two askings had drifted. The roster gate
+     * below reads `active OR <this>`, and the has-anything-happened gate reads `<this> OR salary`.
+     * When the first listed only muster, attendance and picking while the second also counted
+     * ledger rows, an INACTIVE worker carrying a deduction or an adjustment and nothing else
+     * failed the first gate and vanished — while the second gate, four lines further down, said
+     * in as many words that a ledger entry is payroll activity. The money was recorded, the
+     * worker was gone from the list, and the totals were short by exactly their line.
+     *
+     * Found by Greptile on the pay-rules PR, 2026-09-11. It was mine, from the fix that stopped
+     * `w.active = TRUE` erasing Rs 81,925 of work at Medappa: I widened the gate for work and
+     * forgot that money can arrive without work attached.
+     *
+     * Every term is period-scoped — ledger_totals filters entry_date to the run, so this admits
+     * nobody on the strength of an entry from a closed week.
+     *
+     * A MONTHLY SALARY IS DELIBERATELY NOT HERE. salary_earnings still requires `active`, because
+     * somebody who left in August must not keep accruing September's salary. It appears only in
+     * the second gate, where the worker has already passed the roster test.
+     */
+    const workedThisPeriod = accountsSql`(
+      COALESCE(a.days_present, 0) > 0
+      OR COALESCE(m.muster_total, 0) > 0
+      OR COALESCE(p.picking_total, 0) > 0
+      OR COALESCE(l.total_deductions, 0) <> 0
+      OR COALESCE(l.total_adjustments, 0) <> 0
+    )`
+
     const rows = await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -198,17 +228,11 @@ export async function GET(request: Request) {
            */
           AND (
             w.active = TRUE
-            OR COALESCE(m.muster_total, 0) > 0
-            OR COALESCE(a.days_present, 0) > 0
-            OR COALESCE(p.picking_total, 0) > 0
+            OR ${workedThisPeriod}
           )
           ${estateFilter}
           AND (
-            COALESCE(a.days_present, 0) > 0
-            OR COALESCE(m.muster_total, 0) > 0
-            OR COALESCE(p.picking_total, 0) > 0
-            OR COALESCE(l.total_deductions, 0) > 0
-            OR COALESCE(l.total_adjustments, 0) > 0
+            ${workedThisPeriod}
             -- Owed regardless of the roll. A salaried writer nobody ticked is still owed their
             -- month, and leaving them off the sheet is how they get missed on payday.
             OR s.salary_total IS NOT NULL
@@ -228,7 +252,7 @@ export async function GET(request: Request) {
      * that must agree with lib/pay-rules.ts forever. Four small reads against a period's worth of
      * rows is the cheaper half of that trade.
      */
-    const [ruleRows, workedRows, overtimeRows, ledgerRows] = await Promise.all([
+    const [ruleRows, workedRows, attendanceOnlyRows, overtimeRows, ledgerRows] = await Promise.all([
       runTenantQuery(
         accountsSql, tenantContext,
         accountsSql`
@@ -263,6 +287,50 @@ export async function GET(request: Request) {
           WHERE tenant_id = ${tenantContext.tenantId}
             AND work_date BETWEEN ${startDate}::date AND ${endDate}::date
           GROUP BY worker_id, work_date
+        `,
+      ),
+      /**
+       * DAYS THAT WERE MARKED BUT NEVER ALLOCATED — the retention basis for an estate that takes
+       * attendance and does not run the muster.
+       *
+       * ⚠ WITHOUT THIS, RETENTION SILENTLY DOES NOT APPLY TO THEM. Gross falls back to
+       * `days_present x daily_rate` for exactly these workers (see attendance_earnings above), so
+       * they ARE paid — but the retention input was drawn only from labour_assignments, which is
+       * empty for them. An estate could set "hold 20% of the day", watch the column appear, and
+       * withhold nothing at all. Net pay overstated by the whole retention, on every worker, for
+       * ever. Raised by Greptile on PR #11, 2026-09-12.
+       *
+       * This is NOT the same question as retention on a monthly salary, which is deliberately not
+       * held (see lib/payroll-period.ts). A salary has no day to take a percentage of; an
+       * attendance row is precisely a day, at a known daily rate. "20% of the day's pay" is
+       * well-defined here and undefined there.
+       *
+       * NOT EXISTS against labour_assignments is what stops a day being counted twice: where the
+       * muster has allocated the day, the query above already carries it at the rate actually
+       * earned, which is the more precise figure.
+       *
+       * Monthly-paid workers are excluded for the same reason their gross comes from salary_total
+       * rather than from days x rate.
+       */
+      runTenantQuery(
+        accountsSql, tenantContext,
+        accountsSql`
+          SELECT ar.worker_id,
+                 ar.attendance_date::text AS work_date,
+                 1::numeric               AS day_fraction,
+                 COALESCE(w.daily_rate, 0)::numeric AS rate
+          FROM attendance_records ar
+          JOIN attendance_workers w ON w.id = ar.worker_id
+          WHERE ar.tenant_id = ${tenantContext.tenantId}
+            AND ar.attendance_date BETWEEN ${startDate}::date AND ${endDate}::date
+            AND w.daily_rate IS NOT NULL
+            AND NOT (w.worker_type = ANY(${MONTHLY_PAID_WORKER_TYPES as unknown as string[]}))
+            AND NOT EXISTS (
+              SELECT 1 FROM labour_assignments la
+              WHERE la.tenant_id = ${tenantContext.tenantId}
+                AND la.worker_id = ar.worker_id
+                AND la.work_date = ar.attendance_date
+            )
         `,
       ),
       runTenantQuery(
@@ -300,7 +368,11 @@ export async function GET(request: Request) {
 
     const periodInput = {
       rules,
-      workedDays: (workedRows as any[]).map((r) => ({
+      /**
+       * Allocated days first, then the marked-but-unallocated ones. Disjoint by construction —
+       * the second query excludes any date the first can speak for — so nothing is counted twice.
+       */
+      workedDays: [...(workedRows as any[]), ...(attendanceOnlyRows as any[])].map((r) => ({
         workerId: String(r.worker_id),
         workDate: String(r.work_date),
         dayFraction: Number(r.day_fraction) || 0,

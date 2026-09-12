@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { EXCLUDE_REVALUATION_SQL } from "@/lib/revaluation-notes"
 import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
@@ -246,12 +247,8 @@ export async function GET(request: Request) {
             -- they produced are the ones the estate has been operating on -- they reconcile
             -- against the ledger exactly, so recomputing them would break a working stock count
             -- to tidy a display.
-            AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
-          -- "Price correction" is what the revalue block writes today; "Price updated" is
-          -- what older rows carry. Excluding only the old spelling counted every recent
-          -- revaluation as stock purchased -- Rs 64.42 crore of phantom purchases on
-          -- HoneyFarm alone, from one item being repriced three times.
-          AND COALESCE(notes, '') NOT ILIKE 'Price correction%'
+            -- Both note spellings; lib/revaluation-notes.ts holds the list and the reasoning.
+            ${EXCLUDE_REVALUATION_SQL}
             ${inventoryDateClause}
             ${estateClause}
         `,

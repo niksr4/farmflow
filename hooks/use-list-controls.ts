@@ -72,8 +72,11 @@ export function useListControls<T>(items: T[], options: ListControlsOptions<T>) 
           })),
       }
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- facets/searchFields are stable config,
-    // matching how sorters are treated below.
+    // facets/searchFields are stable config, matching how sorters are treated below. The directive
+    // below MUST stay on one line: wrapped onto two, "next line" becomes the second comment line,
+    // the suppression does nothing, and the warning it was written for stays live -- which is
+    // exactly what had happened here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, search, facetValues])
 
   const filtered = useMemo(

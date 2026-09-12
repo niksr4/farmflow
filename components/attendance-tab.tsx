@@ -17,6 +17,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   Download,
   FileText,
   Fingerprint,
@@ -75,6 +76,8 @@ type AttendanceRecordDetail = {
   checkInTime: string | null
   checkOutTime: string | null
   source: "manual" | "biometric"
+  /** Hours beyond the normal day. Null means none recorded, which is not the same as 0 typed. */
+  overtimeHours: number | null
 }
 
 /**
@@ -166,6 +169,18 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
   )
   const [weeklySummary, setWeeklySummary] = useState<AttendanceSummaryRow[]>([])
   const [presentRecords, setPresentRecords] = useState<AttendanceRecordDetail[]>([])
+  /**
+   * Overtime hours per worker, as typed. Kept as strings so a half-typed "1." is not coerced to 1
+   * under the writer's fingers.
+   *
+   * Behind a toggle because overtime is rare and the muster is a phone screen: an input on every
+   * one of thirty-six rows, every day, for a thing used a few times a season, is how a column
+   * stops being read. Revealed automatically when the day already has some, so an existing entry
+   * can never be invisible.
+   */
+  const [overtimeDraft, setOvertimeDraft] = useState<Record<string, string>>({})
+  const [savedOvertime, setSavedOvertime] = useState<Record<string, string>>({})
+  const [showOvertime, setShowOvertime] = useState(false)
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
   const [showCodes, setShowCodes] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -261,7 +276,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
         // ?scope=all is the explicit "every estate" signal; an empty ?estate= deliberately falls
         // back to the cookie in resolveActiveEstate, which is exactly what must not happen here.
         const scope = estate ? `&estate=${encodeURIComponent(estate)}` : "&scope=all"
-        const res = await fetch(`/api/attendance?date=${date}${scope}`, { cache: "no-store" })  // eslint-disable-line
+        const res = await fetch(`/api/attendance?date=${date}${scope}`, { cache: "no-store" })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to load")
 
@@ -274,7 +289,18 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
 
         setWorkers(fetchedWorkers)
         setWeeklySummary(Array.isArray(data.weeklySummary) ? data.weeklySummary : [])
-        setPresentRecords(Array.isArray(data.presentRecords) ? data.presentRecords : [])
+        const records: AttendanceRecordDetail[] = Array.isArray(data.presentRecords) ? data.presentRecords : []
+        setPresentRecords(records)
+        const overtime = Object.fromEntries(
+          records
+            .filter((r) => r.overtimeHours != null && Number(r.overtimeHours) > 0)
+            .map((r) => [r.workerId, String(r.overtimeHours)]),
+        )
+        setOvertimeDraft(overtime)
+        setSavedOvertime(overtime)
+        // A day that already carries overtime shows it without being asked. Hiding a recorded
+        // figure behind a toggle nobody flipped is how a wage goes out wrong.
+        if (Object.keys(overtime).length > 0) setShowOvertime(true)
         setAssignments(Array.isArray(data.assignments) ? data.assignments : [])
         setPickingWorkerIds(Array.isArray(data.pickingWorkerIds) ? data.pickingWorkerIds : [])
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
@@ -325,11 +351,30 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
    * confirmation; the returned string is ignored by modern browsers but is still required to
    * trigger the prompt at all.
    */
+  /** Only the workers actually present, and only real hours. The server rejects anything else. */
+  const overtimePayload = useMemo(() => {
+    const present = new Set(presentWorkerIds)
+    const out: Record<string, number> = {}
+    for (const [workerId, raw] of Object.entries(overtimeDraft)) {
+      const hours = Number(raw)
+      if (present.has(workerId) && Number.isFinite(hours) && hours > 0) out[workerId] = hours
+    }
+    return out
+  }, [overtimeDraft, presentWorkerIds])
+
   const rollIsUnsaved = useMemo(() => {
     if (presentWorkerIds.length !== savedPresentWorkerIds.length) return true
     const saved = new Set(savedPresentWorkerIds)
-    return presentWorkerIds.some((id) => !saved.has(id))
-  }, [presentWorkerIds, savedPresentWorkerIds])
+    if (presentWorkerIds.some((id) => !saved.has(id))) return true
+    // Overtime counts as unsaved work too: typing 2 hours and navigating away must warn, exactly
+    // as ticking somebody present does.
+    const typed = Object.entries(overtimePayload).map(([id, h]) => `${id}:${h}`).sort().join("|")
+    const stored = Object.entries(savedOvertime)
+      .map(([id, h]) => `${id}:${Number(h)}`)
+      .sort()
+      .join("|")
+    return typed !== stored
+  }, [presentWorkerIds, savedPresentWorkerIds, overtimePayload, savedOvertime])
 
   useEffect(() => {
     if (!rollIsUnsaved) return
@@ -408,7 +453,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
       const presence = await fetch(`/api/attendance${estateQuery}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, presentWorkerIds }),
+        body: JSON.stringify({ date: selectedDate, presentWorkerIds, overtimeHours: overtimePayload }),
       })
       const presenceData = await presence.json().catch(() => ({}))
       if (!presence.ok || !presenceData?.success) {
@@ -568,7 +613,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
       const res = await fetch(`/api/attendance${estateQuery}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, presentWorkerIds }),
+        body: JSON.stringify({ date: selectedDate, presentWorkerIds, overtimeHours: overtimePayload }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to save")
@@ -958,6 +1003,28 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
           )
         )}
 
+        {/* Overtime is opt-in per day, because most days have none and thirty-six empty boxes on a
+            phone is how a column stops being read. Shown already open when the day carries any. */}
+        {!batchMode && presentCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowOvertime((v) => !v)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition-colors touch-manipulation",
+              showOvertime
+                ? "border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+                : "border-stone-200 bg-white text-stone-500 dark:border-white/[0.08] dark:bg-card",
+            )}
+          >
+            <Clock3 className="h-3.5 w-3.5" />
+            {Object.keys(overtimePayload).length > 0
+              ? `Overtime · ${Object.keys(overtimePayload).length}`
+              : showOvertime
+                ? "Hide overtime"
+                : "Record overtime"}
+          </button>
+        )}
+
         {error && <p className="text-sm text-red-600 px-1">{error}</p>}
 
         {loading ? (
@@ -1058,6 +1125,46 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                               "No rate"
                             )}
                           </p>
+                          {/* Only for someone present: overtime on an absent worker is a wage for a
+                              day nobody was there, and the server refuses it. stopPropagation
+                              because the whole row toggles presence — typing hours must not also
+                              mark the person absent. */}
+                          {showOvertime && isPresent && (
+                            <div
+                              className="mt-1 flex items-center gap-1.5"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <label
+                                htmlFor={`ot-${worker.id}`}
+                                className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400"
+                              >
+                                OT
+                              </label>
+                              <input
+                                id={`ot-${worker.id}`}
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                max={16}
+                                step="0.25"
+                                placeholder="0"
+                                aria-label={`Overtime hours for ${worker.name}`}
+                                value={overtimeDraft[worker.id] ?? ""}
+                                onChange={(event) => {
+                                  const next = event.target.value
+                                  setOvertimeDraft((cur) => {
+                                    if (next === "") {
+                                      const { [worker.id]: _removed, ...rest } = cur
+                                      return rest
+                                    }
+                                    return { ...cur, [worker.id]: next }
+                                  })
+                                }}
+                                className="h-7 w-16 rounded border border-stone-200 bg-white px-1.5 text-[12px] tabular-nums dark:border-white/[0.12] dark:bg-card"
+                              />
+                              <span className="text-[10px] font-medium text-stone-400">hrs</span>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>

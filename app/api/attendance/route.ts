@@ -9,10 +9,11 @@ import {
   ATTENDANCE_SCHEMA_HELP,
   getAttendanceWeekWindow,
   getTodayAttendanceDate,
+  isMissingAttendanceSchemaError,
   normalizeAttendanceDate,
-  normalizeAttendanceSchemaError,
 } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { cookies } from "next/headers"
 import { resolveActiveEstate } from "@/lib/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
@@ -30,6 +31,35 @@ const normalizeWorkerIds = (value: unknown) =>
         .filter((entry) => UUID_PATTERN.test(entry)),
     ),
   )
+
+/** The longest overtime a single day can hold. A guard against a typo, not a policy. */
+const MAX_OVERTIME_HOURS = 16
+
+/**
+ * Overtime hours keyed by worker, from the muster save.
+ *
+ * Returns null on ANY malformed entry rather than dropping it. Silently discarding a bad value
+ * would mean the writer types 8 into the wrong box, sees the save succeed, and finds the hours
+ * missing from the wage sheet a week later — the failure this whole codebase keeps producing.
+ * A rejected save is answerable; a partial one is not.
+ *
+ * 0 is normal and means "none", so it maps to null: the column stays NULL for everyone without
+ * overtime, and payroll's `overtime_hours IS NOT NULL` filter keeps meaning what it says.
+ */
+const normalizeOvertimeHours = (value: unknown): Map<string, number> | null => {
+  if (value === undefined || value === null) return new Map()
+  if (typeof value !== "object" || Array.isArray(value)) return null
+
+  const out = new Map<string, number>()
+  for (const [workerId, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!UUID_PATTERN.test(workerId.trim())) return null
+    if (raw === null || raw === "" || raw === undefined) continue
+    const hours = Number(raw)
+    if (!Number.isFinite(hours) || hours < 0 || hours > MAX_OVERTIME_HOURS) return null
+    if (hours > 0) out.set(workerId.trim(), Math.round(hours * 100) / 100)
+  }
+  return out
+}
 
 export async function GET(request: Request) {
   try {
@@ -112,7 +142,7 @@ export async function GET(request: Request) {
         ORDER BY LOWER(full_name), created_at ASC
       `,
       accountsSql`
-        SELECT worker_id, check_in_time, check_out_time, source
+        SELECT worker_id, check_in_time, check_out_time, source, overtime_hours
         FROM attendance_records
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
@@ -263,6 +293,9 @@ export async function GET(request: Request) {
         checkInTime: row.check_in_time ? String(row.check_in_time) : null,
         checkOutTime: row.check_out_time ? String(row.check_out_time) : null,
         source: row.source === "biometric" ? "biometric" : "manual",
+        // Null rather than 0 so the box renders empty, not "0" — the screen has to be able to
+        // show "none recorded" without looking like somebody typed a zero.
+        overtimeHours: row.overtime_hours === null || row.overtime_hours === undefined ? null : Number(row.overtime_hours),
       })),
       weeklySummary: weeklyRows.map((row: any) => ({
         workerId: String(row.id),
@@ -275,11 +308,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
 
-    const normalizedError = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to load attendance snapshot", normalizedError)
+    logServerError("Failed to load attendance snapshot", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalizedError.message },
-      { status: normalizedError.message === ATTENDANCE_SCHEMA_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to load attendance snapshot"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }
@@ -300,6 +336,27 @@ export async function PUT(request: Request) {
     const presentWorkerIds = normalizeWorkerIds(body?.presentWorkerIds)
     if (Array.isArray(body?.presentWorkerIds) && presentWorkerIds.length !== body.presentWorkerIds.length) {
       return NextResponse.json({ success: false, error: "One or more worker IDs are invalid" }, { status: 400 })
+    }
+
+    const overtimeHours = normalizeOvertimeHours(body?.overtimeHours)
+    if (!overtimeHours) {
+      return NextResponse.json(
+        { success: false, error: `Overtime must be a number of hours between 0 and ${MAX_OVERTIME_HOURS}` },
+        { status: 400 },
+      )
+    }
+    /**
+     * Overtime belongs to a day somebody worked. Recording it against a worker the same save marks
+     * ABSENT is not a smaller mistake than a bad number — it is a wage for a day nobody was there,
+     * and it would survive as an orphan row the muster screen never shows again.
+     */
+    const presentSet = new Set(presentWorkerIds)
+    const overtimeForAbsent = [...overtimeHours.keys()].filter((id) => !presentSet.has(id))
+    if (overtimeForAbsent.length > 0) {
+      return NextResponse.json(
+        { success: false, error: "Overtime can only be recorded for a worker marked present that day" },
+        { status: 400 },
+      )
     }
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
@@ -417,6 +474,45 @@ export async function PUT(request: Request) {
       `)
     }
 
+    /**
+     * Overtime, after the rows exist.
+     *
+     * TWO STATEMENTS, AND THE CLEARING ONE IS NOT OPTIONAL. Without it a mistyped 8 could never be
+     * taken back: the next save would simply omit that worker, the UPDATE would skip them, and the
+     * hours would sit on the row for ever, paid every run. "Absent from the payload" has to mean
+     * "none", because that is what an empty box on the screen means.
+     *
+     * Scoped to the same estate clause and the same date as everything above, so saving one
+     * estate's roll cannot clear another's overtime — the mistake that deleted Bopaiah's punch.
+     */
+    const overtimeWorkerIds = [...overtimeHours.keys()]
+    attendanceQueries.push(accountsSql`
+      UPDATE attendance_records
+      SET overtime_hours = NULL
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND attendance_date = ${date}
+        AND overtime_hours IS NOT NULL
+        AND NOT (worker_id = ANY(${overtimeWorkerIds}))
+        ${estateWorkerScopeClause}
+    `)
+    for (const [workerId, hours] of overtimeHours) {
+      attendanceQueries.push(accountsSql`
+        UPDATE attendance_records
+        SET overtime_hours = ${hours}
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND attendance_date = ${date}
+          AND worker_id = ${workerId}::uuid
+          -- SAME SCOPE AS THE CLEARING QUERY ABOVE, and it has to be spelled here too.
+          --
+          -- The presence validation is TENANT-scoped, not estate-scoped, so a worker id from
+          -- another estate passes it. Without this clause an estate-scoped save could write
+          -- payroll-relevant overtime onto a row outside the estate it claimed to be saving,
+          -- while the clearing query four lines up refused to touch that same row. Two halves of
+          -- one rule disagreeing is the shape that deleted Bopaiah's punch.
+          ${estateWorkerScopeClause}
+      `)
+    }
+
     await runTenantQueries(accountsSql, tenantContext, attendanceQueries)
 
     await logAuditEvent(accountsSql, sessionUser, {
@@ -444,11 +540,14 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
 
-    const normalizedError = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to save attendance", normalizedError)
+    logServerError("Failed to save attendance", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalizedError.message },
-      { status: normalizedError.message === ATTENDANCE_SCHEMA_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to save attendance"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }

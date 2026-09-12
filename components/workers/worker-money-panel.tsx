@@ -76,6 +76,8 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
    * ever had, which is a query, which belongs on the server.
    */
   const [held, setHeld] = useState(0)
+  /** Outstanding advance over the whole ledger, derived server-side. Null until it arrives. */
+  const [serverOwed, setServerOwed] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -109,6 +111,9 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
       if (ledger?.success) {
         setEntries(ledger.entries || [])
         setHeld(Number(ledger.retentionHeldToDate) || 0)
+        setServerOwed(
+          typeof ledger.outstandingAdvanceToDate === "number" ? ledger.outstandingAdvanceToDate : null,
+        )
       }
       if (rules?.success) {
         setRule(rules.effectiveRule ?? null)
@@ -133,8 +138,20 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
    *
    * The cautious direction on purpose: it can over-report a debt, never under-report one. Payroll
    * shows the figure net of recovery for the run it is computing; this shows the ceiling.
+   *
+   * ⚠ TAKEN FROM THE SERVER, NOT FROM `entries`. This used to be outstandingAdvance(entries), and
+   * `entries` is a PAGE — the route returns the 200 newest rows by default. Past that an older
+   * unpaid advance silently drops out of the sum and the debt is understated; an older repayment
+   * dropping out overstates it. Either way the screen shows a confident figure computed from a
+   * truncated history, with nothing to say it was truncated. Raised by Greptile 2026-09-12.
+   *
+   * The fallback keeps the old behaviour for the brief moment before the first response lands,
+   * and for a server too old to send the field.
    */
-  const owed = useMemo(() => outstandingAdvance(entries), [entries])
+  const owed = useMemo(
+    () => (serverOwed != null ? serverOwed : outstandingAdvance(entries)),
+    [serverOwed, entries],
+  )
 
   const retentionPerDay = useMemo(() => {
     if (!rule?.retentionMode || rule.retentionValue == null) return null

@@ -204,9 +204,24 @@ BEGIN
     RAISE EXCEPTION '149: worker_ledger is missing %', missing;
   END IF;
 
-  -- Every existing row must still recover the way it did before this ran.
-  IF EXISTS (SELECT 1 FROM worker_ledger WHERE recover_over_periods <> 1) THEN
-    RAISE EXCEPTION '149: an existing ledger row changed its recovery schedule -- the default is wrong';
+  -- This once asserted that NO worker_ledger row had recover_over_periods <> 1, to prove the
+  -- column's default had not altered how existing rows recover.
+  --
+  -- It was right exactly once. The application supports schedules of 1 to 60 periods and the demo
+  -- data creates a ten-period advance, so the moment any estate records a real multi-period advance
+  -- this check fails on re-run — turning a correct database into a migration error and blocking
+  -- every later migration behind it. The assertion could not tell "the default is wrong" from
+  -- "somebody used the feature". Raised by Greptile, 2026-09-12.
+  --
+  -- The property it was defending is covered without the rerun hazard: the column is added with
+  -- DEFAULT 1 NOT NULL above, so rows that predate it necessarily carry 1, and the CHECK constraint
+  -- keeps every value >= 1.
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'worker_ledger'
+      AND column_name = 'recover_over_periods' AND column_default LIKE '%1%'
+  ) THEN
+    RAISE EXCEPTION '149: worker_ledger.recover_over_periods lost its default of 1';
   END IF;
 
   IF NOT EXISTS (

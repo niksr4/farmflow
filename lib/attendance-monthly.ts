@@ -60,6 +60,25 @@ export type MonthlyAttendanceInput = {
   creditedByDate: Record<string, number>
   /** ISO date this worker joined the roster. Days before it are blank, not absences. */
   onRosterFrom: string | null
+  /**
+   * ISO date after which this worker is no longer on the roster. Days after it are blank, NOT
+   * absences. Null for anyone still on the roll.
+   *
+   * ⚠ WHY THIS HAD TO EXIST. A report includes anyone with a record in the period, so somebody who
+   * left in March still appears in a January-to-September report — and with no end date, every
+   * working day from April onward was marked A. A departed worker accumulated six months of
+   * absences they could not possibly have incurred, and the yearly totals disagreed with the
+   * monthly ones for the same months.
+   *
+   * We do not know when anybody LEFT: attendance_workers records `active` and `created_at`, and
+   * nothing else. What we do know is when they were last seen. Marking the days after that as
+   * absent asserts they were expected and did not come, which is a claim the data cannot support;
+   * marking them blank says only that they were not on the roll, which is what we actually know.
+   * Symmetric with onRosterFrom, and deliberately so.
+   *
+   * Raised by Greptile, 2026-09-11.
+   */
+  onRosterUntil?: string | null
 }
 
 export type MonthlyAttendanceTotals = {
@@ -139,10 +158,13 @@ const markFor = (
   credited: number | undefined,
   onRosterFrom: string | null,
   today: string,
+  onRosterUntil?: string | null,
 ): MonthlyMark => {
-  // Not an absence: nobody can fail to turn up before they were hired or after today.
+  // Not an absence: nobody can fail to turn up before they were hired, after they left, or
+  // after today.
   if (day.iso > today) return "-"
   if (onRosterFrom && day.iso < onRosterFrom) return "-"
+  if (onRosterUntil && day.iso > onRosterUntil) return "-"
 
   const worked = Number(credited) || 0
   if (worked > 0) {
@@ -180,7 +202,7 @@ export function buildMonthlyAttendance(
   return workers.map((worker, index) => {
     const totals = emptyTotals()
     const marks = days.map((day) => {
-      const mark = markFor(day, worker.creditedByDate[day.iso], worker.onRosterFrom, today)
+      const mark = markFor(day, worker.creditedByDate[day.iso], worker.onRosterFrom, today, worker.onRosterUntil)
       if (mark === "P") {
         totals.present += 1
         totals.daysPayable += 1

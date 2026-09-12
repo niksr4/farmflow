@@ -246,11 +246,27 @@ describe("the figures that would be silently wrong rather than obviously wrong",
     expect(week("thin_week", 2).net).toBe(2880)
   })
 
-  it("an early repayment reduces what is owed without changing the instalment", () => {
-    // Taken 5 Aug, so recovery starts in W1 and runs all four weeks at 8,000 / 4.
+  it("an early repayment shortens the recovery instead of being collected twice", () => {
+    /**
+     * Rs 8,000 taken 5 Aug over four runs; Rs 3,000 handed back in cash on the 20th.
+     *
+     * ⚠ THIS TEST USED TO ASSERT THE BUG, and its own comment said so out loud: "8,000 less 3,000
+     * repaid less four instalments, FLOORED AT ZERO". Four instalments is Rs 8,000 from wages, and
+     * with Rs 3,000 already returned that is Rs 11,000 collected against Rs 8,000 lent. The floor
+     * was not a safety net, it was the thing hiding the overcharge — owed read a tidy Rs 0 the
+     * whole way down.
+     *
+     * Written from what the code did rather than from what the estate owes, which is how a test
+     * ends up defending a defect. Greptile raised the underlying fault on 2026-09-11.
+     *
+     * Now the schedule is bounded by the debt: W1 and W2 take their full Rs 2,000, W3 takes the
+     * Rs 1,000 that is left, W4 takes nothing. Rs 5,000 from wages plus Rs 3,000 in cash is
+     * exactly Rs 8,000.
+     */
     const wk = w("repaid_early")
-    for (const r of wk) expect(r.advance).toBe(2000)
-    expect(wk[3].owed).toBe(0) // 8,000 less 3,000 repaid less four instalments, floored at zero
+    expect(wk.map((r: any) => r.advance)).toEqual([2000, 2000, 1000, 0])
+    expect(wk.reduce((sum: number, r: any) => sum + r.advance, 0)).toBe(5000)
+    expect(wk[3].owed).toBe(0) // owed nothing, and nothing over-collected to get there
   })
 
   it("the exempt worker is held nothing, on a higher rate, all month", () => {

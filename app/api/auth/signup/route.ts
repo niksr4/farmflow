@@ -6,6 +6,7 @@ import { isDbConfigured } from "@/lib/server/db"
 import { createOrRefreshSignupRequest } from "@/lib/server/onboarding/signup"
 import { SIGNUP_EMAIL_PATTERN, normalizeOnboardingError, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const signupBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
@@ -92,14 +93,20 @@ export async function POST(request: Request) {
       { headers },
     )
   } catch (error) {
+    // Same repo-wide normalizeOnboardingError passthrough gap as resend-verification and
+    // verify-email (found in the same batch): unmatched errors pass through unchanged, so their
+    // raw `.message` -- including a genuine DB/connection failure -- would otherwise reach the
+    // client. Status classification still uses the raw message server-side only; sanitizeRouteError
+    // decides what actually gets sent.
     const normalizedError = normalizeOnboardingError(error)
-    const message = normalizedError.message || "Failed to create signup request"
+    const rawMessage = normalizedError.message || "Failed to create signup request"
     const status =
-      message === "An account already exists for this email"
+      rawMessage === "An account already exists for this email"
         ? 409
-        : message.includes("Unable to send verification email")
+        : rawMessage.includes("Unable to send verification email")
           ? 502
           : 400
+    const message = sanitizeRouteError(normalizedError, "Failed to create signup request")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }

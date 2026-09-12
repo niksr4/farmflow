@@ -1,0 +1,161 @@
+{
+  "strictness": 3,
+  "commentTypes": [
+    "logic"
+  ],
+  "excludeAuthors": [
+    "dependabot[bot]"
+  ],
+  "ignorePatterns": "pnpm-lock.yaml\n.next/**\ncoverage/**\nplaywright-report/**\n**/*.generated.*",
+  "instructions": "This is a multi-tenant farm-management product used by five real coffee estates in Coorg, India. It handles wages paid to labourers, stock valuation and money owed. Its characteristic failure is NOT a crash: it is a confident wrong answer. Almost every serious defect found in this codebase returned a plausible number that was silently incorrect, and nothing threw. Review accordingly. Prefer flagging a figure that could be quietly wrong over a style concern. When a guard, filter or condition exists, ask what happens when it does not match rather than assuming it does. When two pieces of code express the same rule, check they still agree. A wrong number on a wage sheet is a worker underpaid, not a cosmetic issue.",
+  "customContext": {
+    "rules": [
+      {
+        "rule": "An INSERT ... ON CONFLICT whose conflict target matches a PARTIAL unique index must repeat that index's WHERE predicate. Postgres cannot infer a partial index otherwise and the statement fails at PLAN time with 42P10, rolling back the whole surrounding transaction. current_inventory's unique indexes are partial on (location_id IS NULL) and (location_id IS NOT NULL); worker_pay_rules' are partial on (worker_id IS NULL / IS NOT NULL); rainfall_records' on (estate IS NULL / IS NOT NULL). This has reached production twice: it broke all expense editing for a tenant in August 2026, and left the update_inventory() trigger unable to create a stock slot at all.",
+        "scope": [
+          "app/**/*.ts",
+          "lib/**/*.ts",
+          "scripts/**/*.sql",
+          "scripts/**/*.mjs"
+        ]
+      },
+      {
+        "rule": "Any SUM or aggregate of money over transaction_history must exclude revaluation rows, and there are TWO note spellings: 'Price correction%' AND 'Price updated%'. Correcting an item's price writes a deplete-and-restock pair at the entire holding; both rows carry money but nothing was bought or consumed. Excluding only one spelling produced Rs 105 crore of phantom depletion and Rs 64 crore of phantom purchases. Use EXCLUDE_REVALUATION_SQL from lib/revaluation-notes.ts rather than writing the filter inline. Row-level readers (ledger replay, reconciliation, exports) must NOT filter them out — only money totals.",
+        "scope": [
+          "app/**/*.ts",
+          "lib/**/*.ts"
+        ]
+      },
+      {
+        "rule": "A route handler must never return a raw error.message, error.toString() or String(error) to the client. Postgres errors leak column names, constraint names and connection details. Route the message through sanitizeRouteError(error, fallback) or an equivalent helper.",
+        "scope": [
+          "app/api/**/route.ts"
+        ]
+      },
+      {
+        "rule": "Every query touching a table with a tenant_id column must go through runTenantQuery / runTenantQueries / runTenantTransaction. RLS is enforced by the app_runtime role, so a raw sql`` call outside that wrapper returns ZERO ROWS with no error rather than failing — a silent empty result that reads as 'no data' rather than 'broken'. adminSql is the deliberate exception for DDL and self-healing.",
+        "scope": [
+          "app/**/*.ts",
+          "lib/**/*.ts"
+        ]
+      },
+      {
+        "rule": "AbortControllers are for READS only. Never abort a POST, PUT, PATCH or DELETE. Aborting a mutation does not roll back the server: the client reports failure for a write that committed, the user retries, and duplicate records follow. Mutations get single-flight and are allowed to finish.",
+        "scope": [
+          "components/**/*.tsx",
+          "hooks/**/*.ts",
+          "lib/**/*.ts"
+        ]
+      },
+      {
+        "rule": "Postgres date and timestamp columns must be cast ::text in the SELECT. The Neon driver returns JS Date objects parsed at midnight UTC, so an un-cast date renders one day early in IST and every row shows '5:30 AM'. The bug signature is String(date).slice(0, 10) applied to a Date rather than a string.",
+        "scope": [
+          "app/**/*.ts",
+          "lib/**/*.ts"
+        ]
+      },
+      {
+        "rule": "A guard must not be measured against data that the thing it guards against can move. A server-side price sanity check was added that compared a new restock against current_inventory.avg_price — the exact value bad rows had already corrupted — so a poisoned average made correct data impossible to enter. Check what the guard's baseline is derived from.",
+        "scope": [
+          "app/**/*.ts",
+          "lib/**/*.ts"
+        ]
+      },
+      {
+        "rule": "When the same rule is expressed in two places, flag it. Two SQL conditions in app/api/payroll-summary listed overlapping but different definitions of 'this worker had activity this period'; the roster gate omitted ledger entries that the gate four lines below explicitly counted, so an inactive worker with a deduction vanished from the wage sheet while their money stayed recorded. Prefer one named definition used twice over two hand-written copies.",
+        "scope": [
+          "app/**/*.ts",
+          "lib/**/*.ts"
+        ]
+      },
+      {
+        "rule": "A scheduled deduction must be bounded by what is actually owed, not only by the schedule. Advance recovery computed instalments purely from amount, period count and start date, ignoring cash repayments — so an Rs 8,000 advance plus an Rs 3,000 repayment still collected four full instalments, taking Rs 11,000, while the displayed balance clamped at zero and hid it. Any Math.max(0, ...) on a balance can conceal over-recovery: check whether the excess is reported anywhere.",
+        "scope": [
+          "lib/pay-rules.ts",
+          "lib/payroll-period.ts",
+          "app/api/payroll-summary/**",
+          "app/api/worker-ledger/**"
+        ]
+      },
+      {
+        "rule": "A test must assert what the code SHOULD do, not what it currently does. tests/payroll-month-report.test.ts asserted an advance over-recovery as correct and explained it in a comment ('less four instalments, floored at zero'), which is Rs 11,000 collected against Rs 8,000 lent written down as the expected answer. If a test's comment describes a surprising outcome as normal, question the outcome rather than accepting the comment.",
+        "scope": [
+          "tests/**/*.ts"
+        ]
+      },
+      {
+        "rule": "Never write a literal NUL byte into a source file; use the escape \\0. A raw NUL makes the whole file binary to grep, ripgrep, git diff and code-review tooling, so it silently disappears from every text search pointed at it. This repository has roughly seventy tests that assert by reading source and matching strings.",
+        "scope": [
+          "**/*.ts",
+          "**/*.tsx",
+          "**/*.mjs"
+        ]
+      },
+      {
+        "rule": "Before ranking the severity of a finding, consider whether the feature has any data. Lot traceability, curing, quality, receivables, billing, compliance, documents, market-pricing and plant-health are built, shipped and used by nobody — zero rows across all tenants. An endpoint there returning nothing is almost always 'no data exists' rather than 'broken'.",
+        "scope": [
+          "app/api/lots/**",
+          "app/api/curing/**",
+          "app/api/quality/**",
+          "app/api/receivables/**",
+          "app/api/billing/**",
+          "app/api/compliance/**",
+          "app/api/documents/**"
+        ]
+      },
+      {
+        "rule": "Migrations are sequential SQL in scripts/ and are applied manually to dev and prod separately. Sort migration numbers NUMERICALLY, never lexicographically — '100-x.sql' < '87-x.sql' as strings, and that bug once bootstrapped three-digit migrations as 'already applied' without ever running them. Also note that schema_migrations recording a file as applied does not prove its effect survived: a recorded migration's function was later found absent from both databases, leaving a whole tab dead for seven months.",
+        "scope": [
+          "scripts/**"
+        ]
+      },
+      {
+        "rule": "Never write a backtick inside a SQL tagged template, not even in a comment. `sql`...`` is a template literal, so a stray backtick closes the string and the file stops compiling — or worse, changes what the query is. Referring to a column as `active` inside a query comment has broken this build three times in one day. Write column names bare in SQL comments.",
+        "scope": [
+          "app/**/*.ts",
+          "lib/**/*.ts"
+        ]
+      }
+    ],
+    "files": [
+      {
+        "path": "CLAUDE.md",
+        "description": "Project guide: architecture, module system, tenant isolation, migrations, deployment, and the strategic decisions that must not be second-guessed.",
+        "scope": [
+          "**/*"
+        ]
+      },
+      {
+        "path": "docs/RELEASE-FLOW.md",
+        "description": "How code reaches production, why main must equal production, and the gate in front of it.",
+        "scope": [
+          "scripts/**",
+          ".github/**"
+        ]
+      }
+    ],
+    "other": [
+      {
+        "content": "Long explanatory comments in this codebase are deliberate and load-bearing: most record a specific production incident, the figure it cost, and why the obvious alternative is wrong. Do not suggest removing or shortening them, and read them before flagging the code they sit above — the answer to many objections is already written there.",
+        "scope": [
+          "**/*"
+        ]
+      },
+      {
+        "content": "Tests here mostly assert by reading source text and matching strings, because vitest runs in environment 'node' with no jsdom and no testing-library, so no component is ever mounted. A refactor that moves a string literal can break such a test without breaking behaviour, and conversely these tests cannot see rendering bugs at all. Bear that asymmetry in mind when reviewing test changes.",
+        "scope": [
+          "tests/**"
+        ]
+      },
+      {
+        "content": "Estates are the users: coffee and pepper growers in Coorg with a writer taking the muster on a phone. Error messages and labels should name the thing on the paperwork in front of them — an invoice total, a day's pay, a storehouse — not the system's internal model. Flag user-facing copy that describes a database concept.",
+        "scope": [
+          "components/**",
+          "app/**"
+        ]
+      }
+    ]
+  },
+  "includeConfidenceScore": true,
+  "includeIssuesTable": true
+}

@@ -150,6 +150,7 @@ export async function GET(request: Request) {
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'deduction'  AND in_period), 0) AS period_deductions,
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'adjustment' AND in_period), 0) AS period_adjustments,
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'advance'),    0) AS lifetime_advances,
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'repayment'),  0) AS lifetime_repayments,
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'deduction'),  0) AS lifetime_deductions,
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'adjustment'), 0) AS lifetime_adjustments,
                 -- Accruals are derived, not written, so these are normally zero. Kept so an estate
@@ -250,6 +251,26 @@ export async function GET(request: Request) {
        * was not about one worker.
        */
       retentionHeldToDate,
+      /**
+       * What the worker still owes, over the WHOLE ledger — advanced less cash repaid.
+       *
+       * ⚠ DERIVED HERE, NOT IN THE CLIENT. The Workers panel used to compute this from `entries`,
+       * which is a PAGE: 200 newest rows by default. Past that, an older unpaid advance drops out
+       * and the debt is understated, or an older repayment drops out and it is overstated — and
+       * nothing on screen would say the history had been truncated. Latent today (no estate has
+       * recorded a ledger entry yet) and certain later, because advances are the kind of row that
+       * accumulates for years.
+       *
+       * Raised by Greptile, 2026-09-12. Matches outstandingAdvance(entries) with no period given:
+       * the cautious figure, not netted against instalments recovered so far, because this
+       * endpoint does not know which payroll runs have happened.
+       */
+      outstandingAdvanceToDate: balance
+        ? Math.max(
+            0,
+            Math.round(((Number(balance.lifetime_advances) || 0) - (Number(balance.lifetime_repayments) || 0)) * 100) / 100,
+          )
+        : null,
       ...(balance
         ? {
             // Named windows. `period` is what this run deducts and must agree with
@@ -262,6 +283,7 @@ export async function GET(request: Request) {
               },
               lifetime: {
                 advances: Number(balance.lifetime_advances) || 0,
+                repayments: Number(balance.lifetime_repayments) || 0,
                 deductions: Number(balance.lifetime_deductions) || 0,
                 adjustments: Number(balance.lifetime_adjustments) || 0,
               },

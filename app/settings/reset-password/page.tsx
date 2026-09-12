@@ -71,9 +71,11 @@ export default function ResetPasswordPage() {
       </div>
       <Card className="w-full border-emerald-200/70 bg-white/95">
         <CardHeader>
-          <CardTitle>Password Rotation Required</CardTitle>
+          <CardTitle>{user?.passwordResetRequired ? "Password Rotation Required" : "Change Password"}</CardTitle>
           <CardDescription>
-            {user?.username ? `${user.username},` : "You"} must set a new password before continuing.
+            {user?.passwordResetRequired
+              ? `${user?.username ? `${user.username}, y` : "Y"}ou must set a new password before continuing.`
+              : "Update the password on your account."}
           </CardDescription>
         </CardHeader>
         <CardContent>

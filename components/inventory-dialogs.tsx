@@ -20,6 +20,7 @@ import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
 import { inventoryUnitOptions, isLegacyInventoryUnit, kgFromBags } from "@/lib/inventory-units"
 import { isRestockType } from "@/lib/inventory-edit-rules"
+import InventoryPriceBackfillPanel from "@/components/inventory-price-backfill-panel"
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -77,6 +78,8 @@ type DialogProps = {
   setInventoryEditForm: React.Dispatch<React.SetStateAction<InventoryEditForm>>
   setInventoryEditLocationId: (id: string) => void
   handleSaveInventoryEdit: () => void
+  /** Reload inventory after unpriced restocks are given a price. */
+  onInventoryPricesBackfilled?: () => void
 
   // Delete confirm dialog
   deleteConfirmDialogOpen: boolean
@@ -371,7 +374,7 @@ export default function InventoryDialogs(p: DialogProps) {
                 />
                 {editRequiresPrice && (
                   <p id="edit-transaction-price-error" className="text-xs text-destructive">
-                    Restocks need the price paid per unit — ₹0 corrupts the average cost for every future depletion.
+                    Restocks need the total paid — ₹0 corrupts the average cost for every future depletion.
                   </p>
                 )}
                 {editIsRestock && p.editingTransactionIsLegacyZeroPriced && !(Number(p.editingTransaction.price) > 0) && (
@@ -476,6 +479,17 @@ export default function InventoryDialogs(p: DialogProps) {
               />
               <p className="text-xs text-muted-foreground">Changing this revalues the current stock — recorded as a deplete + restock pair so it survives future recalculations.</p>
             </div>
+            {/* Renders nothing unless this item actually has restocks with no price on them. The
+                field above revalues the whole holding; this fills in the gaps instead, which is the
+                right tool when the average is wrong because prices are MISSING rather than stale. */}
+            {p.editingInventoryItem ? (
+              <InventoryPriceBackfillPanel
+                itemType={p.editingInventoryItem.name}
+                locationId={p.inventoryEditLocationId}
+                unit={p.inventoryEditForm.unit || p.editingInventoryItem.unit || "kg"}
+                onApplied={p.onInventoryPricesBackfilled}
+              />
+            ) : null}
           </div>
           <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>
             <Button variant="outline" onClick={() => { p.setIsInventoryEditDialogOpen(false); p.setEditingInventoryItem(null) }}>Cancel</Button>

@@ -1897,8 +1897,8 @@ export default function InventorySystem() {
     }
     if (String(tx.transaction_type).toLowerCase().includes("restock") && !(Number(tx.price) > 0)) {
       toast({
-        title: "Unit price required",
-        description: "Enter the price paid per unit — restocks at ₹0 corrupt the average cost for every future depletion.",
+        title: "What did this cost?",
+        description: "Enter the TOTAL paid for this stock — the figure on the invoice, delivery included. FarmFlow works out the per-unit rate from it. Stock added without a price is consumed for free by every expense that draws on it.",
         variant: "destructive",
       })
       return
@@ -2119,8 +2119,8 @@ export default function InventorySystem() {
       })
     ) {
       toast({
-        title: "Unit price required",
-        description: "Enter the price paid per unit — restocks at ₹0 corrupt the average cost for every future depletion.",
+        title: "What did this cost?",
+        description: "Enter the TOTAL paid for this stock — the figure on the invoice, delivery included. FarmFlow works out the per-unit rate from it. Stock added without a price is consumed for free by every expense that draws on it.",
         variant: "destructive",
       })
       return
@@ -5046,6 +5046,7 @@ export default function InventorySystem() {
           setInventoryEditForm={setInventoryEditForm}
           setInventoryEditLocationId={setInventoryEditLocationId}
           handleSaveInventoryEdit={handleSaveInventoryEdit}
+          onInventoryPricesBackfilled={() => { void refreshData(true) }}
           deleteConfirmDialogOpen={deleteConfirmDialogOpen}
           setDeleteConfirmDialogOpen={setDeleteConfirmDialogOpen}
           setTransactionToDelete={setTransactionToDelete}

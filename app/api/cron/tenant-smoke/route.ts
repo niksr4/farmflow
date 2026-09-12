@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { runTenantSmokeAgent } from "@/lib/server/agents/tenant-smoke-agent"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -59,9 +60,8 @@ async function handleCronInvocation(request: Request) {
       })
     }
     logServerError("Tenant smoke cron invocation failed", error)
-    const message = error?.message || "Tenant smoke agent failed"
     const status = isAgentTableMissing(error) ? 503 : 500
-    return NextResponse.json({ success: false, error: message }, { status })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Tenant smoke agent failed") }, { status })
   }
 }
 

@@ -58,6 +58,25 @@ export function useHeroTotals({
   canShowRainfall,
   canShowSeason,
 }: Params): HeroTotals {
+  /**
+   * What a cached hero total is keyed on.
+   *
+   * THE BUG THIS FIXES. Every effect below guarded with `xLoadedRef.current === tenantId`, and
+   * nothing ever cleared the ref -- so once a figure loaded for a tenant it never loaded again.
+   * Seven of the ten put the fiscal year INTO their query, and changing the fiscal year is a
+   * setState in this same component, not a remount, so the refs survived it and the guard returned
+   * early. Switching to last season left processing, dispatch, sales, other sales, curing, quality
+   * and pepper showing THIS season's figures -- on a strip that also displayed the year you had
+   * just selected. Until a full page reload.
+   *
+   * Four of this file's eight lint warnings were pointing straight at it: those effects used
+   * currentFiscalYear and omitted it from their deps. Adding the dep alone would NOT have fixed
+   * it -- the effect would re-run and the ref guard would still bail. The guard was the bug; the
+   * warning was the symptom.
+   *
+   * Rainfall, receivables and exceptions are not period-scoped, so they keep the tenant-only key.
+   */
+  const periodKey = `${tenantId}|${currentFiscalYear.startDate}|${currentFiscalYear.endDate}`
   const [processingTotals, setProcessingTotals] = useState({ arabicaKg: 0, arabicaBags: 0, robustaKg: 0, robustaBags: 0, loading: false, error: null as string | null })
   const [dispatchHeroTotals, setDispatchHeroTotals] = useState({ arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0, totalDispatches: 0, loading: false, error: null as string | null })
   const [salesHeroTotals, setSalesHeroTotals] = useState({ arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0, totalSales: 0, totalRevenue: 0, loading: false, error: null as string | null })
@@ -87,7 +106,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowProcessing) return
     if (!shouldLoadHomeMetrics) return
-    if (processingLoadedRef.current === tenantId) return
+    if (processingLoadedRef.current === periodKey) return
     const controller = new AbortController()
     const load = async () => {
       setProcessingTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -108,19 +127,19 @@ export function useHeroTotals({
           },
           { arabicaKg: 0, arabicaBags: 0, robustaKg: 0, robustaBags: 0 },
         )
-        if (!controller.signal.aborted) { setProcessingTotals({ ...totals, loading: false, error: null }); processingLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setProcessingTotals({ ...totals, loading: false, error: null }); processingLoadedRef.current = periodKey }
       } catch (error: any) {
         if (!controller.signal.aborted) setProcessingTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load processing totals" }))
       }
     }
     load()
     return () => controller.abort()
-  }, [tenantId, canShowProcessing, shouldLoadHomeMetrics])
+  }, [tenantId, canShowProcessing, shouldLoadHomeMetrics, periodKey, currentFiscalYear.startDate, currentFiscalYear.endDate])
 
   useEffect(() => {
     if (!tenantId || !canShowDispatch) return
     if (!shouldLoadHomeMetrics) return
-    if (dispatchLoadedRef.current === tenantId) return
+    if (dispatchLoadedRef.current === periodKey) return
     const controller = new AbortController()
     const load = async () => {
       setDispatchHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -141,19 +160,19 @@ export function useHeroTotals({
           },
           { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
-        if (!controller.signal.aborted) { setDispatchHeroTotals({ ...totals, totalDispatches: Number(json?.totalCount) || 0, loading: false, error: null }); dispatchLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setDispatchHeroTotals({ ...totals, totalDispatches: Number(json?.totalCount) || 0, loading: false, error: null }); dispatchLoadedRef.current = periodKey }
       } catch (error: any) {
         if (!controller.signal.aborted) setDispatchHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load dispatch totals" }))
       }
     }
     load()
     return () => controller.abort()
-  }, [tenantId, canShowDispatch, shouldLoadHomeMetrics])
+  }, [tenantId, canShowDispatch, shouldLoadHomeMetrics, periodKey, currentFiscalYear.startDate, currentFiscalYear.endDate])
 
   useEffect(() => {
     if (!tenantId || !canShowSales) return
     if (!shouldLoadHomeMetrics) return
-    if (salesLoadedRef.current === tenantId) return
+    if (salesLoadedRef.current === periodKey) return
     const controller = new AbortController()
     const load = async () => {
       setSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -174,14 +193,14 @@ export function useHeroTotals({
           },
           { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
-        if (!controller.signal.aborted) { setSalesHeroTotals({ ...totals, totalSales: Number(json?.totalCount) || 0, totalRevenue: Number(json?.totalRevenue) || 0, loading: false, error: null }); salesLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setSalesHeroTotals({ ...totals, totalSales: Number(json?.totalCount) || 0, totalRevenue: Number(json?.totalRevenue) || 0, loading: false, error: null }); salesLoadedRef.current = periodKey }
       } catch (error: any) {
         if (!controller.signal.aborted) setSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load sales totals" }))
       }
     }
     load()
     return () => controller.abort()
-  }, [tenantId, canShowSales, shouldLoadHomeMetrics])
+  }, [tenantId, canShowSales, shouldLoadHomeMetrics, periodKey, currentFiscalYear.startDate, currentFiscalYear.endDate])
 
   useEffect(() => {
     if (!tenantId || !canShowOtherSales) {
@@ -189,7 +208,7 @@ export function useHeroTotals({
       return
     }
     if (!shouldLoadHomeMetrics) return
-    if (otherSalesLoadedRef.current === tenantId) return
+    if (otherSalesLoadedRef.current === periodKey) return
     const controller = new AbortController()
     const load = async () => {
       setOtherSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -198,14 +217,14 @@ export function useHeroTotals({
         const res = await fetch(`/api/other-sales?${params.toString()}`, { cache: "no-store", signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load other sales totals")
-        if (!controller.signal.aborted) { setOtherSalesHeroTotals({ totalRevenue: Number(json?.totals?.totalRevenue) || 0, totalCount: Number(json?.totalCount) || 0, loading: false, error: null }); otherSalesLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setOtherSalesHeroTotals({ totalRevenue: Number(json?.totals?.totalRevenue) || 0, totalCount: Number(json?.totalCount) || 0, loading: false, error: null }); otherSalesLoadedRef.current = periodKey }
       } catch (error: any) {
         if (!controller.signal.aborted) setOtherSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load other sales totals" }))
       }
     }
     load()
     return () => controller.abort()
-  }, [tenantId, canShowOtherSales, shouldLoadHomeMetrics])
+  }, [tenantId, canShowOtherSales, shouldLoadHomeMetrics, periodKey, currentFiscalYear.startDate, currentFiscalYear.endDate])
 
   useEffect(() => {
     if (!tenantId || !canShowReceivables) return
@@ -244,7 +263,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowCuring) return
     if (!shouldLoadHomeMetrics) return
-    if (curingLoadedRef.current === tenantId) return
+    if (curingLoadedRef.current === periodKey) return
     const controller = new AbortController()
     const load = async () => {
       setCuringHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -275,7 +294,7 @@ export function useHeroTotals({
             avgMoistureDrop: totals.moistureDropCount ? totals.moistureDropTotal / totals.moistureDropCount : 0,
             loading: false, error: null,
           })
-          curingLoadedRef.current = tenantId
+          curingLoadedRef.current = periodKey
         }
       } catch (error: any) {
         if (!controller.signal.aborted) setCuringHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load curing totals" }))
@@ -283,12 +302,12 @@ export function useHeroTotals({
     }
     load()
     return () => controller.abort()
-  }, [tenantId, canShowCuring, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
+  }, [tenantId, canShowCuring, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics, periodKey])
 
   useEffect(() => {
     if (!tenantId || !canShowQuality) return
     if (!shouldLoadHomeMetrics) return
-    if (qualityLoadedRef.current === tenantId) return
+    if (qualityLoadedRef.current === periodKey) return
     const controller = new AbortController()
     const load = async () => {
       setQualityHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -318,7 +337,7 @@ export function useHeroTotals({
             avgDefects: totals.defectsCount ? totals.defectsTotal / totals.defectsCount : 0,
             loading: false, error: null,
           })
-          qualityLoadedRef.current = tenantId
+          qualityLoadedRef.current = periodKey
         }
       } catch (error: any) {
         if (!controller.signal.aborted) setQualityHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load quality totals" }))
@@ -326,12 +345,12 @@ export function useHeroTotals({
     }
     load()
     return () => controller.abort()
-  }, [tenantId, canShowQuality, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
+  }, [tenantId, canShowQuality, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics, periodKey])
 
   useEffect(() => {
     if (!tenantId || !canShowPepper) return
     if (!shouldLoadHomeMetrics) return
-    if (pepperLoadedRef.current === tenantId) return
+    if (pepperLoadedRef.current === periodKey) return
     const controller = new AbortController()
     const load = async () => {
       setPepperHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -359,7 +378,7 @@ export function useHeroTotals({
             avgDryPercent: totals.dryPctCount ? totals.dryPctTotal / totals.dryPctCount : 0,
             loading: false, error: null,
           })
-          pepperLoadedRef.current = tenantId
+          pepperLoadedRef.current = periodKey
         }
       } catch (error: any) {
         if (!controller.signal.aborted) setPepperHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load pepper totals" }))
@@ -367,7 +386,7 @@ export function useHeroTotals({
     }
     load()
     return () => controller.abort()
-  }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
+  }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics, periodKey])
 
   useEffect(() => {
     if (!tenantId || !canShowRainfall) return

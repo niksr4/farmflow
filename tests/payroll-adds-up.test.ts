@@ -174,14 +174,43 @@ describe("a wage sheet shows everyone who worked", () => {
 
   it("does not filter the roster down to who is still on it", () => {
     expect(mainWhere).not.toMatch(/WHERE w\.tenant_id = \$\{tenantContext\.tenantId\}\s*\n\s*AND w\.active = TRUE/)
-    expect(mainWhere).toMatch(/w\.active = TRUE\s*\n\s*OR COALESCE\(m\.muster_total, 0\) > 0/)
+    // The roster gate is `active OR <had something happen this period>`. The right-hand side is
+    // now one named fragment rather than an inline list — see below for why.
+    expect(mainWhere).toMatch(/w\.active = TRUE\s*\n\s*OR \$\{workedThisPeriod\}/)
   })
 
   it("admits a former worker only when they actually worked in this period", () => {
     // Otherwise deactivating a duplicate repopulates every past week with an empty row.
-    for (const term of ["OR COALESCE(m.muster_total, 0) > 0", "OR COALESCE(a.days_present, 0) > 0", "OR COALESCE(p.picking_total, 0) > 0"]) {
+    for (const term of ["COALESCE(m.muster_total, 0) > 0", "COALESCE(a.days_present, 0) > 0", "COALESCE(p.picking_total, 0) > 0"]) {
       expect(route).toContain(term)
     }
+  })
+
+  it("counts a ledger entry as activity in BOTH gates, not just the second", () => {
+    /**
+     * THE REGRESSION THIS EXISTS FOR. The two gates were written out separately and drifted: the
+     * roster gate listed muster, attendance and picking, while the has-anything-happened gate four
+     * lines below also counted worker_ledger deductions and adjustments.
+     *
+     * So an INACTIVE worker carrying a deduction and nothing else failed the first gate and
+     * vanished from the sheet — while the second gate said, in as many words, that a ledger entry
+     * is payroll activity. The money was recorded and the worker was not on the list, so the
+     * totals were short by exactly their line.
+     *
+     * Mine, from the fix that stopped `w.active = TRUE` erasing Rs 81,925 of work at Medappa: I
+     * widened the gate for WORK and forgot that money can arrive without work attached. Raised by
+     * Greptile, 2026-09-11. Latent — prod carries no ledger deductions or adjustments at all yet.
+     *
+     * Fixed by naming the condition once and using it in both places, so they cannot disagree
+     * again. This asserts the single definition rather than the two copies.
+     */
+    expect(route).toMatch(/const workedThisPeriod = accountsSql`\(/)
+    const fragment = route.slice(route.indexOf("const workedThisPeriod"), route.indexOf("const rows ="))
+    for (const term of ["l.total_deductions", "l.total_adjustments", "a.days_present", "m.muster_total", "p.picking_total"]) {
+      expect(fragment, `${term} missing from the shared activity definition`).toContain(term)
+    }
+    // Used in both gates, never re-spelt inline in one of them.
+    expect((route.match(/\$\{workedThisPeriod\}/g) ?? []).length).toBe(2)
   })
 
   it("still refuses to accrue a salary for somebody who has left", () => {
@@ -233,5 +262,50 @@ describe("retention held is derived, because nothing writes it", () => {
       .join("\n")
     expect(codeOnly).not.toContain("retentionHeld(entries)")
     expect(codeOnly).not.toMatch(/import \{[^}]*retentionHeld/)
+  })
+})
+
+describe("retention applies to a day that was marked but never allocated", () => {
+  const route = read("app/api/payroll-summary/route.ts")
+
+  /**
+   * ⚠ AN ESTATE THAT TAKES ATTENDANCE AND DOES NOT RUN THE MUSTER WAS HELD NOTHING.
+   *
+   * Gross falls back to `days_present x daily_rate` for exactly those workers — attendance_earnings
+   * COALESCEs salary, then muster, then days x rate — so they ARE paid. But the retention input was
+   * drawn only from labour_assignments, which for them is empty. An estate could set "hold 20% of
+   * the day", watch the column appear on the wage sheet, and withhold nothing at all: net pay
+   * overstated by the entire retention, on every worker, indefinitely.
+   *
+   * Raised by Greptile on PR #11, 2026-09-12. Latent — production carries no pay rules yet — but
+   * three of the four live estates take attendance without allocating, so it would have been the
+   * FIRST thing any of them hit.
+   *
+   * Distinct from the monthly-salary decision in lib/payroll-period.ts, which deliberately holds
+   * nothing: a salary has no day to take a percentage of, an attendance row is precisely a day at a
+   * known rate. Well-defined here, undefined there.
+   */
+  it("feeds marked-but-unallocated days into the retention basis", () => {
+    expect(route).toContain("attendanceOnlyRows")
+    expect(route).toMatch(/workedDays: \[\.\.\.\(workedRows as any\[\]\), \.\.\.\(attendanceOnlyRows as any\[\]\)\]/)
+  })
+
+  it("excludes any day the muster already speaks for, so nothing is held twice", () => {
+    // The two sources must be disjoint: where an allocation exists it carries the rate actually
+    // earned, which is the more precise figure and the one every other screen reports.
+    const block = route.slice(route.indexOf("DAYS THAT WERE MARKED BUT NEVER ALLOCATED"))
+    expect(block.slice(0, 2600)).toMatch(/NOT EXISTS \(\s*SELECT 1 FROM labour_assignments la/)
+  })
+
+  it("leaves monthly-paid workers out, matching where their gross comes from", () => {
+    const block = route.slice(route.indexOf("DAYS THAT WERE MARKED BUT NEVER ALLOCATED"))
+    expect(block.slice(0, 2600)).toContain("MONTHLY_PAID_WORKER_TYPES")
+  })
+
+  it("takes the rate from the worker's own daily rate, and skips those without one", () => {
+    // A worker with no rate earns nothing from this basis, so holding a percentage of it would be
+    // holding a percentage of an unknown. missingRate already flags them elsewhere.
+    const block = route.slice(route.indexOf("DAYS THAT WERE MARKED BUT NEVER ALLOCATED"))
+    expect(block.slice(0, 2600)).toContain("w.daily_rate IS NOT NULL")
   })
 })
