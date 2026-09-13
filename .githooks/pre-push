@@ -18,6 +18,23 @@
 # and let CI decide.
 set -uo pipefail
 
+# A DELETION PUSHES NO CODE, so there is nothing for lint, typecheck or the test suite to have an
+# opinion about. Git feeds each ref update to this hook on stdin as
+# "<local ref> <local sha> <remote ref> <remote sha>", and for a delete the local sha is all
+# zeroes. Tidying up thirteen merged branches otherwise means running the whole suite thirteen
+# times, forty seconds apiece, to verify nothing — which is how a hook teaches people to reach for
+# --no-verify, and then they keep reaching for it when it matters.
+all_deletes=1
+saw_ref=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  saw_ref=1
+  case "$local_sha" in *[!0]*) all_deletes=0 ;; esac
+done
+if [ "$saw_ref" -eq 1 ] && [ "$all_deletes" -eq 1 ]; then
+  echo "▶ pre-push: branch deletion only — nothing to verify"
+  exit 0
+fi
+
 # Exit codes and messages that mean "the toolchain never got to run", not "your code is wrong".
 ENV_FAILURE_PATTERN='ENOSPC|ENOMEM|no space left|cannot allocate memory|EACCES.*node_modules|Cannot find module .*(next|vitest|eslint)|ERR_PNPM_.*_FAIL'
 
