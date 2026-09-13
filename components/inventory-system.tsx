@@ -108,6 +108,15 @@ import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
 import {
+  buildLocationMap,
+  itemTypesForMovement,
+  movementUnitByItemType as deriveMovementUnits,
+  recentDrilldownTransactions as deriveRecentDrilldown,
+  resolveLocationLabel as deriveLocationLabel,
+  selectedLocationLabel as deriveSelectedLocationLabel,
+  summariseFilteredInventory,
+} from "@/components/inventory-system/stock-derivations"
+import {
   seasonProgress as deriveSeasonProgress,
   filterEmptyMetrics as deriveFilterEmptyMetrics,
   availableExportDatasets as deriveExportDatasets,
@@ -1515,48 +1524,23 @@ export default function InventorySystem() {
     setTransactionSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
   }
 
-  const locationMap = useMemo(() => {
-    return new Map(locations.map((loc) => [loc.id, loc]))
-  }, [locations])
+  const locationMap = useMemo(() => buildLocationMap(locations), [locations])
 
   const resolveLocationLabel = useCallback(
-    (locationId?: string | null, fallback?: string) => {
-      if (!locationId) return UNASSIGNED_LABEL
-      const location = locationMap.get(locationId)
-      if (location) {
-        return location.name || location.code || "Unknown"
-      }
-      if (fallback) return fallback
-      return "Unknown"
-    },
+    (locationId?: string | null, fallback?: string) => deriveLocationLabel(locationMap, locationId, fallback),
     [locationMap],
   )
 
-  const selectedLocationLabel = useMemo(() => {
-    if (selectedLocationId === LOCATION_ALL) return "All stores"
-    if (selectedLocationId === LOCATION_UNASSIGNED) return UNASSIGNED_LABEL
-    return resolveLocationLabel(selectedLocationId)
-  }, [selectedLocationId, resolveLocationLabel])
+  const selectedLocationLabel = useMemo(
+    () => deriveSelectedLocationLabel(locationMap, selectedLocationId),
+    [locationMap, selectedLocationId],
+  )
 
 
   // computed lists
-  const allItemTypesForDropdown = Array.from(
-    new Set(
-      [...inventory.map((i) => normalizeInventoryItemType(i.name)), ...transactions.map((t) => normalizeInventoryItemType(t.item_type))].filter(Boolean),
-    ),
-  ).sort()
+  const allItemTypesForDropdown = itemTypesForMovement(inventory, transactions)
   const hasMovementItemTypes = allItemTypesForDropdown.length > 0
-  const movementUnitByItemType = useMemo(() => {
-    const units = new Map<string, string>()
-    inventory.forEach((item) => {
-      const itemType = normalizeInventoryItemType(item.name)
-      const unit = String(item.unit || "").trim() || "kg"
-      if (itemType && !units.has(itemType)) {
-        units.set(itemType, unit)
-      }
-    })
-    return units
-  }, [inventory])
+  const movementUnitByItemType = useMemo(() => deriveMovementUnits(inventory), [inventory])
   const resolveInventoryUnitForItemType = useCallback(
     (itemType: string, fallbackUnit?: string) => {
       const normalizedItemType = normalizeInventoryItemType(itemType)
@@ -1605,20 +1589,10 @@ export default function InventorySystem() {
   const resolvedInventoryValue = inventorySummary.totalValue
   const inventoryValueCaveat = inventorySummary.caveat
 
-  const filteredInventoryTotals = useMemo(() => {
-    const totalQuantity = filteredAndSortedInventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
-    const totalValue = filteredAndSortedInventory.reduce((sum, item) => {
-      const valueInfo = resolveItemValue(item)
-      return sum + (valueInfo.totalValue || 0)
-    }, 0)
-    const units = Array.from(new Set(filteredAndSortedInventory.map((item) => item.unit || "unit")))
-    return {
-      totalQuantity,
-      totalValue,
-      itemCount: filteredAndSortedInventory.length,
-      unitLabel: units.length === 1 ? units[0] : "mixed units",
-    }
-  }, [filteredAndSortedInventory, resolveItemValue])
+  const filteredInventoryTotals = useMemo(
+    () => summariseFilteredInventory(filteredAndSortedInventory, resolveItemValue),
+    [filteredAndSortedInventory, resolveItemValue],
+  )
 
   const selectedInventoryDrilldownItem = useMemo(() => {
     if (!inventoryDrilldownItemName) return null
@@ -1649,15 +1623,10 @@ export default function InventorySystem() {
       .finally(() => setIsLoadingItemDrilldown(false))
   }, [inventoryDrilldownItemName])
 
-  const recentDrilldownTransactions = useMemo(() => {
-    if (!inventoryDrilldownItemName) return []
-    const sorted = [...itemDrilldownTransactions].sort((a, b) => {
-      const dateA = a.transaction_date ? parseCustomDateString(a.transaction_date) : null
-      const dateB = b.transaction_date ? parseCustomDateString(b.transaction_date) : null
-      return (dateB?.getTime() || 0) - (dateA?.getTime() || 0)
-    })
-    return drilldownShowAll ? sorted : sorted.slice(0, 6)
-  }, [itemDrilldownTransactions, inventoryDrilldownItemName, drilldownShowAll])
+  const recentDrilldownTransactions = useMemo(
+    () => (inventoryDrilldownItemName ? deriveRecentDrilldown(itemDrilldownTransactions, drilldownShowAll) : []),
+    [itemDrilldownTransactions, inventoryDrilldownItemName, drilldownShowAll],
+  )
 
   useEffect(() => {
     if (!inventoryDrilldownItemName) return
