@@ -92,7 +92,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
           { value: "payroll" as AttendanceSection, label: "Payroll", icon: IndianRupee },
           // Sits beside Payroll because it answers the same shape of question over the same
           // period -- who was here, for how long -- and is what gets checked when a wage is queried.
-          { value: "report" as AttendanceSection, label: "Attendance", icon: CalendarRange },
+          { value: "report" as AttendanceSection, label: "Attendance reports", icon: CalendarRange },
           // Sits last because it is a one-off: you commission a terminal once and then never
           // open this again, unlike everything to its left.
           { value: "scanner" as AttendanceSection, label: "Scanner", icon: Fingerprint },

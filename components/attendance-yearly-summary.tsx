@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Download, Loader2 } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2, Printer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import type { YearlyAttendanceRow } from "@/lib/attendance-yearly"
 import { formatHoursHm } from "@/lib/attendance-hours"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 /**
  * The yearly summary — a month per line per worker, laid out like the sheet the office files.
@@ -57,6 +58,39 @@ export default function AttendanceYearlySummary() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ran, setRan] = useState(false)
+  const [estateName, setEstateName] = useState("Estate")
+  const [downloading, setDownloading] = useState(false)
+
+  /**
+   * Excel, formatted — not the raw CSV.
+   *
+   * The CSV route already produces exactly the right rows, so the workbook is built FROM it rather
+   * than from a second pass over the data: two builders drift, and the file people actually file
+   * is the one that would drift unnoticed. lib/spreadsheet.ts adds the borders, the frozen white-on
+   * -emerald header and the bolded total rows, which is what makes it printable as it stands.
+   */
+  const downloadXlsx = useCallback(async () => {
+    setDownloading(true)
+    try {
+      const res = await fetch(`/api/attendance/yearly?from=${from}&to=${to}&format=csv`, { cache: "no-store" })
+      if (!res.ok) throw new Error("Could not build the export")
+      const csv = await res.text()
+      const bytes = await buildXlsxArrayBufferFromCsv(csv, "Yearly Summary", {
+        title: `${estateName} — Yearly Attendance Summary`,
+        subtitle: `${from} to ${to}`,
+      })
+      const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME_TYPE }))
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `attendance-yearly-${from}-to-${to}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError("Could not build the Excel file")
+    } finally {
+      setDownloading(false)
+    }
+  }, [from, to, estateName])
 
   const run = useCallback(
     async (signal?: AbortSignal) => {
@@ -69,6 +103,7 @@ export default function AttendanceYearlySummary() {
         if (!res.ok || !data?.success) throw new Error(data?.error || "Could not build the report")
         setRows(data.workers || [])
         setSummary(data.summary || null)
+        if (data.estateName) setEstateName(String(data.estateName))
         setRan(true)
       } catch (e: unknown) {
         if (signal?.aborted || (e instanceof DOMException && e.name === "AbortError")) return
@@ -113,11 +148,22 @@ export default function AttendanceYearlySummary() {
           )}
         </Button>
         {rows.length > 0 && (
-          <Button variant="outline" asChild className="h-11">
-            <a href={`/api/attendance/yearly?from=${from}&to=${to}&format=csv`}>
-              <Download className="mr-1 h-4 w-4" /> CSV
-            </a>
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => void downloadXlsx()} disabled={downloading} className="h-11">
+              <FileSpreadsheet className="mr-1 h-4 w-4" /> {downloading ? "Building…" : "Excel"}
+            </Button>
+            {/* Print is how a PDF gets made here. The browser's own dialogue saves to PDF on every
+                platform the estates use, it honours the print stylesheet, and it needs no server
+                renderer — the daily sheet has worked this way since it was built. */}
+            <Button variant="outline" onClick={() => window.print()} className="h-11">
+              <Printer className="mr-1 h-4 w-4" /> Print / PDF
+            </Button>
+            <Button variant="outline" asChild className="h-11">
+              <a href={`/api/attendance/yearly?from=${from}&to=${to}&format=csv`}>
+                <Download className="mr-1 h-4 w-4" /> CSV
+              </a>
+            </Button>
+          </>
         )}
       </div>
 
