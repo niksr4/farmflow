@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Download, Loader2 } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2, Printer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { StatTile } from "@/components/ui/stat-tile"
 import { cn } from "@/lib/utils"
 import type { MonthlyDay, MonthlyMark, MonthlyAttendanceRow } from "@/lib/attendance-monthly"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 /**
  * The monthly attendance grid, in the layout HoneyFarm's office already reads.
@@ -51,6 +52,7 @@ const formatDays = (value: number) => (Number.isInteger(value) ? String(value) :
 
 export default function AttendanceMonthlyGrid() {
   const [month, setMonth] = useState(currentMonth())
+  const [buildingXlsx, setBuildingXlsx] = useState(false)
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +73,40 @@ export default function AttendanceMonthlyGrid() {
       setLoading(false)
     }
   }, [])
+
+  /**
+   * The same rows as the CSV button, formatted.
+   *
+   * Built FROM the csv endpoint rather than from `rows`: the server already decides which workers
+   * belong on the sheet and in what order, and a second assembly here would be a second opinion
+   * about the roster that nobody would notice diverging. lib/spreadsheet.ts supplies the borders,
+   * the frozen header and the bolded totals.
+   *
+   * The month is read from state rather than from a loaded-range snapshot because this grid
+   * reloads on every month change and shows a spinner while it does — there is no window in which
+   * the table and the picker disagree. (The yearly report has two date boxes and does need that
+   * guard; see attendance-yearly-summary.tsx.)
+   */
+  const downloadXlsx = useCallback(async () => {
+    setBuildingXlsx(true)
+    try {
+      const res = await fetch(`/api/attendance/monthly?month=${month}&format=csv`, { cache: "no-store" })
+      if (!res.ok) throw new Error("export failed")
+      const bytes = await buildXlsxArrayBufferFromCsv(await res.text(), "Attendance", {
+        title: `Monthly Attendance — ${month}`,
+      })
+      const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME_TYPE }))
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `attendance-${month}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // The CSV button beside it still works; a failed workbook must not blank the grid.
+    } finally {
+      setBuildingXlsx(false)
+    }
+  }, [month])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -116,6 +152,28 @@ export default function AttendanceMonthlyGrid() {
           >
             <Download className="mr-1.5 h-3.5 w-3.5" />
             CSV
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 rounded-xl"
+            disabled={rows.length === 0 || buildingXlsx}
+            onClick={() => void downloadXlsx()}
+          >
+            <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+            {buildingXlsx ? "Building…" : "Excel"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 rounded-xl"
+            disabled={rows.length === 0}
+            onClick={() => window.print()}
+          >
+            <Printer className="mr-1.5 h-3.5 w-3.5" />
+            Print / PDF
           </Button>
         </div>
       </header>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { StatTile } from "@/components/ui/stat-tile"
 import { attendanceReportToCsv, type AttendanceReportRow, type AttendanceReportSummary } from "@/lib/attendance-report"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 /**
  * Daily attendance report — the FarmFlow replacement for the SmartOffice365 daily report.
@@ -23,6 +24,7 @@ export default function AttendanceReportPage() {
   const [reportDate, setReportDate] = useState("")
   // Which tile is selected. "24 absent" is a number; the useful action is "who?".
   const [filter, setFilter] = useState<"all" | "present" | "absent" | "noCheckOut">("all")
+  const [buildingXlsx, setBuildingXlsx] = useState(false)
   const [devices, setDevices] = useState<{ total: number; online: number; offline: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -110,6 +112,36 @@ export default function AttendanceReportPage() {
               disabled={!visibleRows.length}
             >
               Download CSV
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!visibleRows.length || buildingXlsx}
+              onClick={async () => {
+                /**
+                 * From the VISIBLE rows, exactly like the CSV beside it — not from the server's
+                 * csv format, which would return all 45 workers while the table showed the 24
+                 * absentees. The filter is the point: the subset is what somebody acts on, so the
+                 * file has to be the subset.
+                 */
+                setBuildingXlsx(true)
+                try {
+                  const csv = attendanceReportToCsv(visibleRows, reportDate || date)
+                  const bytes = await buildXlsxArrayBufferFromCsv(csv, "Daily Attendance", {
+                    title: `Daily Attendance — ${reportDate || date}`,
+                    subtitle: filter === "all" ? undefined : `Filtered: ${filter}`,
+                  })
+                  const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME_TYPE }))
+                  const a = document.createElement("a")
+                  a.href = url
+                  a.download = `attendance-${reportDate || date}${filter === "all" ? "" : `-${filter}`}.xlsx`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                } finally {
+                  setBuildingXlsx(false)
+                }
+              }}
+            >
+              {buildingXlsx ? "Building…" : "Download Excel"}
             </Button>
           </div>
 

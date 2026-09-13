@@ -22,7 +22,39 @@ export type ResolvedDevice = { tenantId: string; deviceId: string }
  */
 const OWNER_CONTEXT = normalizeTenantContext(undefined, "owner")
 
+/**
+ * Serial → tenant, cached for a few seconds.
+ *
+ * ⚠ WHY A CACHE AT ALL. The terminals poll every few minutes and ~96% of those requests carry no
+ * punches, yet each one paid a cross-tenant lookup before anything else could happen. Devices are
+ * registered once and then not touched: production has two rows in biometric_devices, and the
+ * answer to "which tenant owns serial X" is the same on every heartbeat for months at a time.
+ *
+ * ⚠ AND WHY IT IS SHORT. This is the gate that decides which tenant's data a device may write to,
+ * so a stale entry is an authorisation decision made on old information. Deactivating a device has
+ * to take effect promptly, which is why the window is seconds rather than minutes and why a
+ * NEGATIVE result is never cached — an unknown serial must keep being asked about, or a device
+ * registered a moment ago would be refused until the entry expired.
+ *
+ * Per-instance and therefore best-effort: serverless instances come and go, and a cold one simply
+ * does the lookup. That is the correct failure mode — it costs a round trip, never correctness.
+ */
+const DEVICE_CACHE_TTL_MS = 15_000
+const deviceCache = new Map<string, { value: ResolvedDevice; expiresAt: number }>()
+
+/** Drop a serial from the cache — call after registering, renaming or deactivating a device. */
+export function forgetDeviceSerial(serialNumber: string): void {
+  deviceCache.delete(serialNumber)
+}
+
 export async function resolveTenantByDeviceSerial(sql: NeonSql, serialNumber: string): Promise<ResolvedDevice | null> {
+  const cached = deviceCache.get(serialNumber)
+  if (cached && cached.expiresAt > Date.now()) return cached.value
+  if (cached) deviceCache.delete(serialNumber)
+  return resolveTenantByDeviceSerialUncached(sql, serialNumber)
+}
+
+async function resolveTenantByDeviceSerialUncached(sql: NeonSql, serialNumber: string): Promise<ResolvedDevice | null> {
   const rows = await runTenantQuery(
     sql,
     OWNER_CONTEXT,
@@ -35,7 +67,10 @@ export async function resolveTenantByDeviceSerial(sql: NeonSql, serialNumber: st
     `,
   )
   if (!rows.length) return null
-  return { deviceId: String((rows[0] as any).id), tenantId: String((rows[0] as any).tenant_id) }
+  const resolved = { deviceId: String((rows[0] as any).id), tenantId: String((rows[0] as any).tenant_id) }
+  // Only a hit is cached; see the note above on why a miss must not be.
+  deviceCache.set(serialNumber, { value: resolved, expiresAt: Date.now() + DEVICE_CACHE_TTL_MS })
+  return resolved
 }
 
 export async function touchDeviceLastSeen(sql: NeonSql, tenantContext: TenantContext, deviceId: string): Promise<void> {

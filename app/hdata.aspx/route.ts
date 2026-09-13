@@ -1,5 +1,6 @@
+import { after } from "next/server"
 import { accountsSql, isDbConfigured } from "@/lib/server/db"
-import { checkRateLimit } from "@/lib/rate-limit"
+import { checkRateLimit, checkRateLimits } from "@/lib/rate-limit"
 import { normalizeTenantContext } from "@/lib/server/tenant-db"
 import { extractClientIp } from "@/lib/server/request-security"
 import { logSecurityEvent } from "@/lib/server/security-events"
@@ -84,14 +85,26 @@ export async function POST(request: Request) {
     return new Response("", { status: 413 })
   }
 
-  // Both limits precede the body read: buffering up to MAX_HDATA_BODY_BYTES before deciding
-  // whether the caller may send it does the expensive half of the work regardless. Per-IP first,
-  // because the per-serial bucket below is keyed on attacker-supplied input.
-  const ipLimit = await checkRateLimit("biometricIp", clientIp).catch(() => null)
-  if (ipLimit && !ipLimit.success) return new Response("", { status: 429 })
-
-  const serialLimit = await checkRateLimit("biometricPunch", serialNumber || clientIp).catch(() => null)
-  if (serialLimit && !serialLimit.success) return new Response("", { status: 429 })
+  /**
+   * Both limits precede the body read: buffering up to MAX_HDATA_BODY_BYTES before deciding whether
+   * the caller may send it does the expensive half of the work regardless.
+   *
+   * ONE ROUND TRIP FOR BOTH. They used to be two sequential statements, and this endpoint is by far
+   * the busiest in the application — 5.4 hours of total span time in the week to 2026-09-12 at a
+   * p95 of 2,678 ms, against 303 actual punches, because the terminals heartbeat whether or not
+   * they have anything to say. Sentry raised the pattern as "Consecutive HTTP POST".
+   *
+   * Both buckets are still checked and still evaluated independently; only the trip is shared. The
+   * per-IP ceiling still exists because the per-serial bucket is keyed on attacker-supplied input,
+   * and rotating a serial would otherwise mint a fresh bucket per request.
+   */
+  const limits = await checkRateLimits([
+    { key: "biometricIp", identifier: clientIp },
+    { key: "biometricPunch", identifier: serialNumber || clientIp },
+  ]).catch(() => null)
+  if (limits && [...limits.values()].some((result) => !result.success)) {
+    return new Response("", { status: 429 })
+  }
 
   if (!isValidHdataSerial(serialNumber)) {
     return rejectUnrecognizedDevice(request, serialNumber, clientIp, requestCode)
@@ -107,7 +120,17 @@ export async function POST(request: Request) {
   const tenantContext = normalizeTenantContext(resolved.tenantId, BIOMETRIC_DEVICE_ROLE)
 
   try {
-    await touchDeviceLastSeen(accountsSql, tenantContext, resolved.deviceId).catch(() => undefined)
+    /**
+     * OFF THE CRITICAL PATH. last_seen_at powers one label on the device settings screen; making
+     * every heartbeat wait for it bought nothing and cost a round trip on the busiest endpoint here.
+     *
+     * `after()` rather than a floating promise: a serverless function can freeze the moment it
+     * responds, so an un-awaited write is not merely late, it may never run. after() is the
+     * platform's contract for "finish this before you freeze".
+     */
+    after(() => {
+      void touchDeviceLastSeen(accountsSql, tenantContext, resolved.deviceId).catch(() => undefined)
+    })
 
     // An enrolment carries the name typed on the terminal keypad -- the only place a device code
     // is ever human-readable. Recorded (not acted on) so the mapping panel can suggest it. The

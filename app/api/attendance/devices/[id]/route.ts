@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { forgetDeviceSerial } from "@/lib/server/biometric-attendance"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
@@ -144,6 +145,19 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
       `,
     )
+
+    /**
+     * Drop the serial from the resolver's cache immediately.
+     *
+     * resolveTenantByDeviceSerial keeps a short per-instance cache so the heartbeat does not look
+     * the same serial up every few minutes. Without this, de-registering a device would leave it
+     * able to write for the length of the TTL — brief, but this is the gate deciding which tenant
+     * a terminal may write into, and "brief" is not the same as "no".
+     *
+     * Per-instance, so it clears the instance that served this request; others expire on their own
+     * within seconds. Belt and braces rather than the whole guarantee, which is the TTL.
+     */
+    forgetDeviceSerial(String((existing[0] as any).serial_number || ""))
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "delete",
