@@ -59,6 +59,19 @@ export default function AttendanceYearlySummary() {
   const [error, setError] = useState<string | null>(null)
   const [ran, setRan] = useState(false)
   const [estateName, setEstateName] = useState("Estate")
+  /**
+   * The range that produced the rows CURRENTLY ON SCREEN — not the range in the date boxes.
+   *
+   * ⚠ THE EXPORTS MUST FOLLOW THE REPORT, NOT THE INPUTS. Both used to read `from`/`to` directly,
+   * so any moment the two disagreed produced a file covering a different period from the table
+   * above it — plausible, correctly formatted, and wrong. The window is real: a failed load leaves
+   * the previous rows visible while the boxes have already moved, and a `type="month"` input fires
+   * on every spin, so a mid-change click lands in the gap.
+   *
+   * Nobody would catch it from the file: an attendance sheet for the wrong months looks exactly
+   * like one for the right months. Raised by Greptile, 2026-09-13.
+   */
+  const [loadedRange, setLoadedRange] = useState<{ from: string; to: string } | null>(null)
   const [downloading, setDownloading] = useState(false)
 
   /**
@@ -72,17 +85,19 @@ export default function AttendanceYearlySummary() {
   const downloadXlsx = useCallback(async () => {
     setDownloading(true)
     try {
-      const res = await fetch(`/api/attendance/yearly?from=${from}&to=${to}&format=csv`, { cache: "no-store" })
+      if (!loadedRange) return
+      const { from: gotFrom, to: gotTo } = loadedRange
+      const res = await fetch(`/api/attendance/yearly?from=${gotFrom}&to=${gotTo}&format=csv`, { cache: "no-store" })
       if (!res.ok) throw new Error("Could not build the export")
       const csv = await res.text()
       const bytes = await buildXlsxArrayBufferFromCsv(csv, "Yearly Summary", {
         title: `${estateName} — Yearly Attendance Summary`,
-        subtitle: `${from} to ${to}`,
+        subtitle: `${gotFrom} to ${gotTo}`,
       })
       const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME_TYPE }))
       const a = document.createElement("a")
       a.href = url
-      a.download = `attendance-yearly-${from}-to-${to}.xlsx`
+      a.download = `attendance-yearly-${gotFrom}-to-${gotTo}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch {
@@ -90,7 +105,7 @@ export default function AttendanceYearlySummary() {
     } finally {
       setDownloading(false)
     }
-  }, [from, to, estateName])
+  }, [loadedRange, estateName])
 
   const run = useCallback(
     async (signal?: AbortSignal) => {
@@ -104,12 +119,14 @@ export default function AttendanceYearlySummary() {
         setRows(data.workers || [])
         setSummary(data.summary || null)
         if (data.estateName) setEstateName(String(data.estateName))
+        setLoadedRange({ from, to })
         setRan(true)
       } catch (e: unknown) {
         if (signal?.aborted || (e instanceof DOMException && e.name === "AbortError")) return
         setError(e instanceof Error ? e.message : "Could not build the report")
         setRows([])
         setSummary(null)
+        setLoadedRange(null)
       } finally {
         if (!signal?.aborted) setLoading(false)
       }
@@ -147,7 +164,7 @@ export default function AttendanceYearlySummary() {
             "Show"
           )}
         </Button>
-        {rows.length > 0 && (
+        {rows.length > 0 && loadedRange && (
           <>
             <Button variant="outline" onClick={() => void downloadXlsx()} disabled={downloading} className="h-11">
               <FileSpreadsheet className="mr-1 h-4 w-4" /> {downloading ? "Building…" : "Excel"}
@@ -159,7 +176,7 @@ export default function AttendanceYearlySummary() {
               <Printer className="mr-1 h-4 w-4" /> Print / PDF
             </Button>
             <Button variant="outline" asChild className="h-11">
-              <a href={`/api/attendance/yearly?from=${from}&to=${to}&format=csv`}>
+              <a href={`/api/attendance/yearly?from=${loadedRange.from}&to=${loadedRange.to}&format=csv`}>
                 <Download className="mr-1 h-4 w-4" /> CSV
               </a>
             </Button>
@@ -168,6 +185,16 @@ export default function AttendanceYearlySummary() {
       </div>
 
       {error && <p className="px-1 text-sm text-red-600">{error}</p>}
+
+      {/* The boxes and the table have drifted apart — usually a load that failed. Said plainly,
+          because the exports below deliberately follow the TABLE, and a download that covers
+          different months from the dates on screen needs explaining before it happens, not after. */}
+      {loadedRange && (loadedRange.from !== from || loadedRange.to !== to) && !loading && (
+        <p className="px-1 text-xs text-amber-700 dark:text-amber-500">
+          Showing {loadedRange.from} to {loadedRange.to}. Press Show to move to the dates above —
+          downloads cover what is on screen.
+        </p>
+      )}
 
       {summary && rows.length > 0 && (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-5 dark:border-white/[0.08] dark:bg-white/[0.08]">
