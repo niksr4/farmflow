@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { Fragment, useCallback, useState } from "react"
 import { CalendarDays, Clock, Download, Loader2, TriangleAlert, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -277,9 +277,8 @@ export default function AttendanceReportTab() {
               {workers.map((w) => {
                 const open = expanded === w.workerId
                 return (
-                  <>
+                  <Fragment key={w.workerId}>
                     <tr
-                      key={w.workerId}
                       onClick={() => setExpanded(open ? null : w.workerId)}
                       className="cursor-pointer border-b border-stone-100 last:border-0 hover:bg-stone-50 dark:border-white/[0.05] dark:hover:bg-white/[0.03]"
                     >
@@ -333,7 +332,7 @@ export default function AttendanceReportTab() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 )
               })}
             </tbody>

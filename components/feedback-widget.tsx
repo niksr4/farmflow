@@ -126,6 +126,7 @@ export default function FeedbackWidget({ currentTab }: Props) {
 
               {/* Message */}
               <Textarea
+                aria-label="Feedback message"
                 placeholder={
                   type === "bug"
                     ? "Describe what happened and what you expected…"

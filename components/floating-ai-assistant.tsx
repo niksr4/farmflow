@@ -373,6 +373,7 @@ export default function FloatingAiAssistant() {
               }}
               rows={4}
               placeholder="Ask about your data or where to find something..."
+              aria-label="Ask FarmFlow Assistant"
               className="min-h-[7rem] resize-none"
             />
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
