@@ -148,15 +148,53 @@ describe("what an item is measured in", () => {
     expect(unitForItemType(units, "DAP")).toBe("kg")
   })
 
+  it("uses the unit from the store the movement is going INTO", () => {
+    /**
+     * ⚠ THE BUG THIS REPLACES, and the test that used to sit here defended it.
+     *
+     * The map merged every store and kept whichever row came first, and the comment called that
+     * deliberate — "a data problem to fix in inventory rather than a choice to make per movement".
+     * That was wrong. The movement form asks which shed the stock is going into, so the unit was
+     * never ambiguous; the code was throwing the answer away. Diesel in litres in one shed and
+     * kilograms in another would be recorded in whichever sorted first, silently.
+     *
+     * Raised by Greptile on PR #13. Not reachable on production today — no item is stocked in more
+     * than one store — but Medappa keeps two sheds.
+     */
+    const units = movementUnitByItemType([
+      { name: "Diesel", unit: "L", location_id: "shed-a" },
+      { name: "Diesel", unit: "kg", location_id: "shed-b" },
+    ])
+    expect(unitForItemType(units, "Diesel", undefined, "shed-a")).toBe("L")
+    expect(unitForItemType(units, "Diesel", undefined, "shed-b")).toBe("kg")
+  })
+
+  it("falls back to the item's unit elsewhere for a store that does not stock it yet", () => {
+    /**
+     * NOT the old behaviour returning. A shed with no row for an item has no opinion about its
+     * unit, and the item's unit everywhere else is a far better guess than "kg" — the first
+     * restock into a new shed should inherit litres, not silently become kilograms. The difference
+     * is that a store which DOES hold the item now always wins.
+     */
+    const units = movementUnitByItemType([{ name: "Diesel", unit: "L", location_id: "shed-a" }])
+    expect(unitForItemType(units, "Diesel", undefined, "shed-new")).toBe("L")
+  })
+
+  it("asks no store when none is chosen", () => {
+    // A filter spanning every shed has no destination to ask about.
+    const units = movementUnitByItemType([{ name: "Diesel", unit: "L", location_id: "shed-a" }])
+    expect(unitForItemType(units, "Diesel")).toBe("L")
+    expect(unitForItemType(units, "Diesel", undefined, null)).toBe("L")
+  })
+
   it("is readable by the picker's spelling, whatever case the stock row used", () => {
     /**
      * The consequence of folding the picker and NOT folding this: the list offers "Urea", the map
      * holds "urea", the lookup misses and the form silently falls back to kg. A litres item
-     * recorded in kilograms with nothing on screen to say so — the failure this product specialises
-     * in. Both are folded, and unitForItemType is the single place that knows it.
+     * recorded in kilograms with nothing on screen to say so.
      */
-    const units = movementUnitByItemType([{ name: "petrol", unit: "L" }])
-    expect(unitForItemType(units, "Petrol")).toBe("L")
+    const units = movementUnitByItemType([{ name: "petrol", unit: "L", location_id: "s1" }])
+    expect(unitForItemType(units, "Petrol", undefined, "s1")).toBe("L")
     expect(unitForItemType(units, "  PETROL ")).toBe("L")
   })
 
@@ -167,15 +205,14 @@ describe("what an item is measured in", () => {
     expect(unitForItemType(units, "")).toBe("kg")
   })
 
-  it("keeps the FIRST unit when the same item appears in two stores", () => {
-    /**
-     * Deliberate. The same item exists once per store, and two rows disagreeing about the unit is
-     * a data problem to fix in inventory — not a choice to make per movement. Silently switching a
-     * form from litres to kilograms partway through entry is worse than being consistently wrong,
-     * because the writer has no way to notice.
-     */
-    const units = movementUnitByItemType([{ name: "Petrol", unit: "L" }, { name: "Petrol", unit: "kg" }])
-    expect(unitForItemType(units, "Petrol")).toBe("L")
+  it("keeps the first unit when one store lists the same item twice", () => {
+    // Within a single shed a duplicate really is a data problem, and there is no third fact to
+    // prefer — unlike the cross-store case above, where the destination decides.
+    const units = movementUnitByItemType([
+      { name: "Petrol", unit: "L", location_id: "s1" },
+      { name: "Petrol", unit: "kg", location_id: "s1" },
+    ])
+    expect(unitForItemType(units, "Petrol", undefined, "s1")).toBe("L")
   })
 })
 

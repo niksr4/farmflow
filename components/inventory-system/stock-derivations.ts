@@ -120,42 +120,74 @@ export function itemTypesForMovement(
   return [...canonical.values()].sort()
 }
 
-/**
- * The unit each item is held in, so a movement inherits it instead of asking again.
- *
- * FIRST ROW WINS, deliberately. The same item can appear once per store, and a later row disagreeing
- * about the unit is a data problem to fix in inventory rather than a choice to make per movement —
- * silently switching a form from litres to kilograms mid-entry would be worse than being
- * consistently wrong. Defaults to kg, which is what every estate here measures most things in.
- *
- * ⚠ KEYED CASE-INSENSITIVELY, TO MATCH THE PICKER. itemTypesForMovement now offers one entry per
- * item as the database counts them, preferring the inventory's spelling. If this map were keyed on
- * the exact string, an item whose ledger spelling differs in case would miss the lookup and the
- * form would quietly fall back to "kg" — a litres item recorded in kilograms, with nothing on
- * screen to say so. Use unitForItemType() to read it so the folding happens in one place.
- */
-export function movementUnitByItemType(
-  inventory: readonly { name?: string | null; unit?: string | null }[],
-): Map<string, string> {
-  const units = new Map<string, string>()
-  for (const item of inventory) {
-    const itemType = normalizeInventoryItemType(item.name ?? "").toLowerCase()
-    const unit = String(item.unit || "").trim() || "kg"
-    if (itemType && !units.has(itemType)) units.set(itemType, unit)
-  }
-  return units
+export type MovementUnits = {
+  /** `${locationId}::${folded item}` → that store's unit for that item. */
+  byStore: Map<string, string>
+  /** folded item → the first unit seen in any store, for a store that does not stock it yet. */
+  anyStore: Map<string, string>
 }
 
-/** Read the map above without every caller having to remember how it is keyed. */
+/**
+ * The unit each item is held in, PER STORE, so a movement inherits the right one.
+ *
+ * ⚠ THIS USED TO MERGE ACROSS STORES and keep whichever row came back first. The comment defending
+ * it said a second row disagreeing about the unit was "a data problem to fix in inventory rather
+ * than a choice to make per movement". That was wrong, and wrong in a way worth naming: the
+ * movement form asks which store the stock is going into, so the unit was never ambiguous — it was
+ * knowable, and the code was throwing the answer away. Diesel held in litres in one shed and
+ * kilograms in another would record a movement in whichever unit sorted first, with nothing on
+ * screen to say so. Raised by Greptile on PR #13, 2026-09-13.
+ *
+ * Not reachable today: no item on production is stocked in more than one store, let alone in two
+ * units. Medappa keeps two sheds, so it becomes reachable the day they stock the same item in both.
+ *
+ * FALLING BACK TO ANY STORE IS DELIBERATE and is not the old behaviour returning. A store that does
+ * not stock an item yet has no opinion about its unit, and the item's unit everywhere else is a far
+ * better guess than "kg" — the first restock into a new shed should inherit litres rather than
+ * silently becoming kilograms. What changed is that a store which DOES hold the item now always
+ * wins.
+ *
+ * Keys are folded to lower case to match itemTypesForMovement and update_inventory(); read this
+ * through unitForItemType so the folding lives in one place.
+ */
+export function movementUnitByItemType(
+  inventory: readonly { name?: string | null; unit?: string | null; location_id?: string | null }[],
+): MovementUnits {
+  const byStore = new Map<string, string>()
+  const anyStore = new Map<string, string>()
+
+  for (const item of inventory) {
+    const key = normalizeInventoryItemType(item.name ?? "").toLowerCase()
+    if (!key) continue
+    const unit = String(item.unit || "").trim() || "kg"
+    const storeKey = `${item.location_id ?? ""}::${key}`
+    if (!byStore.has(storeKey)) byStore.set(storeKey, unit)
+    if (!anyStore.has(key)) anyStore.set(key, unit)
+  }
+
+  return { byStore, anyStore }
+}
+
+/**
+ * The unit to record a movement in: this store's, else the item's elsewhere, else the fallback.
+ *
+ * `locationId` may be omitted where no store has been chosen — a filter spanning every store, for
+ * instance — in which case the item's unit anywhere is the only answer available.
+ */
 export function unitForItemType(
-  units: ReadonlyMap<string, string>,
+  units: MovementUnits,
   itemType: string,
   fallbackUnit?: string,
+  locationId?: string | null,
 ): string {
   const key = normalizeInventoryItemType(itemType).toLowerCase()
   const fallback = String(fallbackUnit || "").trim() || "kg"
   if (!key) return fallback
-  return units.get(key) || fallback
+  if (locationId) {
+    const here = units.byStore.get(`${locationId}::${key}`)
+    if (here) return here
+  }
+  return units.anyStore.get(key) || fallback
 }
 
 export type FilteredInventoryTotals = {

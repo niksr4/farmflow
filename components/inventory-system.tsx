@@ -1542,9 +1542,26 @@ export default function InventorySystem() {
   const allItemTypesForDropdown = itemTypesForMovement(inventory, transactions)
   const hasMovementItemTypes = allItemTypesForDropdown.length > 0
   const movementUnitByItemType = useMemo(() => deriveMovementUnits(inventory), [inventory])
+  /**
+   * The unit for a movement, from the store it is going INTO.
+   *
+   * transactionLocationId is the shed the form has selected; LOCATION_UNASSIGNED means none was
+   * chosen, so there is no store to ask and the item's unit anywhere is the right answer. Callers
+   * that know a different destination pass it explicitly.
+   */
   const resolveInventoryUnitForItemType = useCallback(
-    (itemType: string, fallbackUnit?: string) => unitForItemType(movementUnitByItemType, itemType, fallbackUnit),
-    [movementUnitByItemType],
+    (itemType: string, fallbackUnit?: string, locationId?: string | null) =>
+      unitForItemType(
+        movementUnitByItemType,
+        itemType,
+        fallbackUnit,
+        locationId !== undefined
+          ? locationId
+          : transactionLocationId && transactionLocationId !== LOCATION_UNASSIGNED && transactionLocationId !== LOCATION_ALL
+            ? transactionLocationId
+            : null,
+      ),
+    [movementUnitByItemType, transactionLocationId],
   )
   const selectedMovementUnit = useMemo(
     () => resolveInventoryUnitForItemType(newTransaction?.item_type || "", newTransaction?.unit),
