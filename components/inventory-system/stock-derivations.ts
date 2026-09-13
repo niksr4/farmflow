@@ -79,20 +79,45 @@ export function selectedLocationLabel(
  * Drawn from the CURRENT INVENTORY AND THE LEDGER BOTH, which is the part that is easy to get
  * wrong by simplifying. An item consumed down to nothing has no inventory row left but is all over
  * the transaction history, and an estate re-stocking it must be able to pick it by name rather
- * than re-typing it and creating a second spelling. Normalised so "Urea " and "urea" are one entry.
+ * than re-typing it and creating a second spelling.
+ *
+ * ── ONE ENTRY PER ITEM AS THE DATABASE COUNTS THEM ────────────────────────────────────────────
+ *
+ * Deduplicated case-INsensitively, because that is how update_inventory() matches a stock slot:
+ *
+ *     LOWER(REGEXP_REPLACE(BTRIM(ci.item_type), '\s+', ' ', 'g')) = LOWER(normalized_item_type)
+ *
+ * Listing "Urea" and "urea" separately offered two choices that the database then merged into one
+ * balance — two names, one slot, and a screen with no way to explain itself. The picker now agrees
+ * with the trigger.
+ *
+ * THE SPELLING SHOWN IS THE INVENTORY'S, not the ledger's, and not whichever sorted first.
+ * current_inventory holds the live slot, so its spelling is the one every balance, export and
+ * stock screen already displays; picking a historical variant instead would slowly rewrite the
+ * item's name through new transactions. Where an item exists only in history, its first ledger
+ * spelling is used — there is nothing else to prefer.
+ *
+ * Note this is a narrower change than lowercasing normalizeInventoryItemType would be: that
+ * function decides what gets STORED, and altering it would change item identity across every
+ * screen, export and import. This decides only what a picker OFFERS.
  */
 export function itemTypesForMovement(
   inventory: readonly { name?: string | null }[],
   transactions: readonly { item_type?: string | null }[],
 ): string[] {
-  return Array.from(
-    new Set(
-      [
-        ...inventory.map((item) => normalizeInventoryItemType(item.name ?? "")),
-        ...transactions.map((transaction) => normalizeInventoryItemType(transaction.item_type ?? "")),
-      ].filter(Boolean),
-    ),
-  ).sort()
+  const canonical = new Map<string, string>()
+
+  // Inventory first so its spelling wins the key; the ledger only fills in items no longer stocked.
+  for (const item of inventory) {
+    const name = normalizeInventoryItemType(item.name ?? "")
+    if (name && !canonical.has(name.toLowerCase())) canonical.set(name.toLowerCase(), name)
+  }
+  for (const transaction of transactions) {
+    const name = normalizeInventoryItemType(transaction.item_type ?? "")
+    if (name && !canonical.has(name.toLowerCase())) canonical.set(name.toLowerCase(), name)
+  }
+
+  return [...canonical.values()].sort()
 }
 
 /**
@@ -102,17 +127,35 @@ export function itemTypesForMovement(
  * about the unit is a data problem to fix in inventory rather than a choice to make per movement —
  * silently switching a form from litres to kilograms mid-entry would be worse than being
  * consistently wrong. Defaults to kg, which is what every estate here measures most things in.
+ *
+ * ⚠ KEYED CASE-INSENSITIVELY, TO MATCH THE PICKER. itemTypesForMovement now offers one entry per
+ * item as the database counts them, preferring the inventory's spelling. If this map were keyed on
+ * the exact string, an item whose ledger spelling differs in case would miss the lookup and the
+ * form would quietly fall back to "kg" — a litres item recorded in kilograms, with nothing on
+ * screen to say so. Use unitForItemType() to read it so the folding happens in one place.
  */
 export function movementUnitByItemType(
   inventory: readonly { name?: string | null; unit?: string | null }[],
 ): Map<string, string> {
   const units = new Map<string, string>()
   for (const item of inventory) {
-    const itemType = normalizeInventoryItemType(item.name ?? "")
+    const itemType = normalizeInventoryItemType(item.name ?? "").toLowerCase()
     const unit = String(item.unit || "").trim() || "kg"
     if (itemType && !units.has(itemType)) units.set(itemType, unit)
   }
   return units
+}
+
+/** Read the map above without every caller having to remember how it is keyed. */
+export function unitForItemType(
+  units: ReadonlyMap<string, string>,
+  itemType: string,
+  fallbackUnit?: string,
+): string {
+  const key = normalizeInventoryItemType(itemType).toLowerCase()
+  const fallback = String(fallbackUnit || "").trim() || "kg"
+  if (!key) return fallback
+  return units.get(key) || fallback
 }
 
 export type FilteredInventoryTotals = {

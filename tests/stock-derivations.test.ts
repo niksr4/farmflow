@@ -5,6 +5,7 @@ import {
   itemTypesForMovement,
   movementUnitByItemType,
   recentDrilldownTransactions,
+  unitForItemType,
   resolveLocationLabel,
   selectedLocationLabel,
   summariseFilteredInventory,
@@ -87,28 +88,41 @@ describe("which items a movement can be recorded against", () => {
     expect(types).toEqual(["Urea"])
   })
 
-  it("does NOT fold case, which the database does — a known and so far unexercised gap", () => {
+  it("shows ONE entry per item as the database counts them", () => {
     /**
-     * ⚠ THE UI AND THE DATABASE DISAGREE HERE, and this test exists to say so out loud rather than
-     * to endorse it.
+     * ⚠ THIS TEST USED TO ASSERT THE OPPOSITE, and Greptile was right to refuse it.
      *
-     * normalizeInventoryItemType trims and collapses whitespace; it does not lowercase. The
-     * update_inventory() trigger matches slots with
-     * `LOWER(REGEXP_REPLACE(BTRIM(item_type), '\s+', ' ', 'g'))` — case-INsensitively. So the
-     * picker would offer "Urea" and "urea" as two items while the database puts both movements in
-     * one slot: two names, one balance, and a screen that cannot explain itself.
+     * The first version pinned ["Urea", "urea"] — the behaviour as it stood — with a long comment
+     * calling it a known gap and arguing the fix was out of scope. That is precisely the shape this
+     * repository's own testing rule forbids, and the same shape as the payroll test that asserted
+     * an advance over-recovery as correct: it made the wrong behaviour LOAD-BEARING, so whoever
+     * came to fix it would find a red test in the way.
      *
-     * NOT FIXED HERE, deliberately. Lowercasing in the normaliser changes item IDENTITY across
-     * every screen, export and import in the product, which is not a thing to slip into a
-     * decomposition pass. And it has never happened: checked across all tenants on production
-     * 2026-09-13, zero item names in transaction_history or current_inventory differ only by case
-     * or whitespace. Adoption before severity.
+     * The scope argument was also wrong on inspection. Lowercasing normalizeInventoryItemType would
+     * change what gets STORED and therefore item identity everywhere — that really is out of scope.
+     * This function decides only what a PICKER OFFERS, and offering two names the database merges
+     * into one slot has no defence.
      *
-     * If this test ever starts failing because the normaliser changed, that is the decision being
-     * made — check the trigger agrees, and check what it does to existing names first.
+     * update_inventory() matches slots with LOWER(REGEXP_REPLACE(BTRIM(item_type), ...)), so the
+     * picker now agrees with the trigger.
      */
-    const types = itemTypesForMovement([{ name: "Urea" }, { name: "urea" }], [])
-    expect(types).toEqual(["Urea", "urea"])
+    expect(itemTypesForMovement([{ name: "Urea" }], [{ item_type: "urea" }])).toEqual(["Urea"])
+  })
+
+  it("prefers the spelling that current inventory uses", () => {
+    /**
+     * current_inventory holds the live slot, so its spelling is what every balance, export and
+     * stock screen already shows. Picking the ledger's variant instead would slowly rewrite the
+     * item's name through each new transaction — the name drifting because of which list happened
+     * to be read first.
+     */
+    expect(itemTypesForMovement([{ name: "Urea" }], [{ item_type: "UREA" }])).toEqual(["Urea"])
+    expect(itemTypesForMovement([{ name: "urea" }], [{ item_type: "Urea" }])).toEqual(["urea"])
+  })
+
+  it("falls back to the ledger spelling for an item no longer stocked", () => {
+    // Consumed to nothing, so there is no inventory row to prefer — and nothing else to choose.
+    expect(itemTypesForMovement([], [{ item_type: "Gramaxone" }])).toEqual(["Gramaxone"])
   })
 
   it("drops empties rather than offering a blank row", () => {
@@ -124,14 +138,33 @@ describe("which items a movement can be recorded against", () => {
 describe("what an item is measured in", () => {
   it("takes the unit from stock so a movement does not ask again", () => {
     const units = movementUnitByItemType([{ name: "Petrol", unit: "L" }, { name: "Urea", unit: "kg" }])
-    expect(units.get("Petrol")).toBe("L")
-    expect(units.get("Urea")).toBe("kg")
+    expect(unitForItemType(units, "Petrol")).toBe("L")
+    expect(unitForItemType(units, "Urea")).toBe("kg")
   })
 
   it("defaults to kg when a row carries no unit", () => {
     const units = movementUnitByItemType([{ name: "Urea", unit: "  " }, { name: "DAP", unit: null }])
-    expect(units.get("Urea")).toBe("kg")
-    expect(units.get("DAP")).toBe("kg")
+    expect(unitForItemType(units, "Urea")).toBe("kg")
+    expect(unitForItemType(units, "DAP")).toBe("kg")
+  })
+
+  it("is readable by the picker's spelling, whatever case the stock row used", () => {
+    /**
+     * The consequence of folding the picker and NOT folding this: the list offers "Urea", the map
+     * holds "urea", the lookup misses and the form silently falls back to kg. A litres item
+     * recorded in kilograms with nothing on screen to say so — the failure this product specialises
+     * in. Both are folded, and unitForItemType is the single place that knows it.
+     */
+    const units = movementUnitByItemType([{ name: "petrol", unit: "L" }])
+    expect(unitForItemType(units, "Petrol")).toBe("L")
+    expect(unitForItemType(units, "  PETROL ")).toBe("L")
+  })
+
+  it("falls back to the given unit, then to kg, for an item it has never seen", () => {
+    const units = movementUnitByItemType([{ name: "Urea", unit: "kg" }])
+    expect(unitForItemType(units, "Brand new item", "bags")).toBe("bags")
+    expect(unitForItemType(units, "Brand new item")).toBe("kg")
+    expect(unitForItemType(units, "")).toBe("kg")
   })
 
   it("keeps the FIRST unit when the same item appears in two stores", () => {
@@ -142,7 +175,7 @@ describe("what an item is measured in", () => {
      * because the writer has no way to notice.
      */
     const units = movementUnitByItemType([{ name: "Petrol", unit: "L" }, { name: "Petrol", unit: "kg" }])
-    expect(units.get("Petrol")).toBe("L")
+    expect(unitForItemType(units, "Petrol")).toBe("L")
   })
 })
 

@@ -111,6 +111,7 @@ import {
   buildLocationMap,
   itemTypesForMovement,
   movementUnitByItemType as deriveMovementUnits,
+  unitForItemType,
   recentDrilldownTransactions as deriveRecentDrilldown,
   resolveLocationLabel as deriveLocationLabel,
   selectedLocationLabel as deriveSelectedLocationLabel,
@@ -1542,11 +1543,7 @@ export default function InventorySystem() {
   const hasMovementItemTypes = allItemTypesForDropdown.length > 0
   const movementUnitByItemType = useMemo(() => deriveMovementUnits(inventory), [inventory])
   const resolveInventoryUnitForItemType = useCallback(
-    (itemType: string, fallbackUnit?: string) => {
-      const normalizedItemType = normalizeInventoryItemType(itemType)
-      if (!normalizedItemType) return String(fallbackUnit || "").trim() || "kg"
-      return movementUnitByItemType.get(normalizedItemType) || String(fallbackUnit || "").trim() || "kg"
-    },
+    (itemType: string, fallbackUnit?: string) => unitForItemType(movementUnitByItemType, itemType, fallbackUnit),
     [movementUnitByItemType],
   )
   const selectedMovementUnit = useMemo(
