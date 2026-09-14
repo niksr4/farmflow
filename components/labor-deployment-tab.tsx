@@ -39,7 +39,7 @@ import { deleteWithUndo } from "@/lib/undo-delete"
 import { EditRecordDialog } from "@/components/ui/edit-record-dialog"
 import { formatLocationLabel } from "@/lib/location-label"
 import { numericInputValue } from "@/lib/number-input"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
 
 
 interface ActivityCode {
@@ -340,8 +340,7 @@ export default function LaborDeploymentTab({
     }))
   }
 
-  const handleSubmitUnguarded = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmitUnguarded = async () => {
     if (isSubmitting) return
     if (locations.length > 0 && !formLocationId) {
       toast({ title: "Location required", description: "Select a location before saving.", variant: "destructive" })
@@ -423,7 +422,7 @@ export default function LaborDeploymentTab({
 
   // Mobile double-tap guard: `disabled` only takes effect on the next render, so two
   // fast taps both entered this handler and saved the entry twice. lib/single-flight.ts.
-  const handleSubmit = useSingleFlight(handleSubmitUnguarded)
+  const handleSubmit = useSingleFlightSubmit(handleSubmitUnguarded)
 
   const startEdit = (deployment: any) => {
     trackClick("labor_edit", { id: deployment.id })
@@ -1259,7 +1258,7 @@ export default function LaborDeploymentTab({
                           <div className="flex gap-2">
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
+                                <Button variant="ghost" size="icon" aria-label="Edit entry" onClick={() => startEdit(deployment)}>
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
@@ -1270,6 +1269,7 @@ export default function LaborDeploymentTab({
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  aria-label="Delete entry"
                                   onClick={() => handleDeleteWithUndo(deployment)}
                                 >
                                   <Trash2 className="h-4 w-4" />

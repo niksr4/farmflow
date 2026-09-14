@@ -42,6 +42,7 @@ export default function TrialBanner({ daysRemaining, onDismiss }: Props) {
         </Link>
         <button
           type="button"
+          aria-label="Dismiss"
           className="text-xs opacity-50 hover:opacity-80"
           onClick={onDismiss}
         >

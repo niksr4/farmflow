@@ -433,14 +433,14 @@ export default function ResourcesTab() {
           <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
             <div className="grid gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Lifecycle stage</Label>
+                <Label htmlFor="advisor-stage" className="text-xs uppercase tracking-[0.16em] text-slate-600">Lifecycle stage</Label>
                 <Select
                   value={advisorInput.stage}
                   onValueChange={(value) =>
                     setAdvisorInput((previous) => ({ ...previous, stage: value as AgronomyAdvisorInput["stage"] }))
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger id="advisor-stage" className="bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -454,14 +454,14 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Coffee focus</Label>
+                <Label htmlFor="advisor-variety" className="text-xs uppercase tracking-[0.16em] text-slate-600">Coffee focus</Label>
                 <Select
                   value={advisorInput.variety}
                   onValueChange={(value) =>
                     setAdvisorInput((previous) => ({ ...previous, variety: value as AgronomyAdvisorInput["variety"] }))
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger id="advisor-variety" className="bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -475,7 +475,7 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Rain pattern</Label>
+                <Label htmlFor="advisor-rainfall-pattern" className="text-xs uppercase tracking-[0.16em] text-slate-600">Rain pattern</Label>
                 <Select
                   value={advisorInput.rainfallPattern}
                   onValueChange={(value) =>
@@ -485,7 +485,7 @@ export default function ResourcesTab() {
                     }))
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger id="advisor-rainfall-pattern" className="bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -499,7 +499,7 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Leaf condition</Label>
+                <Label htmlFor="advisor-leaf-condition" className="text-xs uppercase tracking-[0.16em] text-slate-600">Leaf condition</Label>
                 <Select
                   value={advisorInput.leafCondition}
                   onValueChange={(value) =>
@@ -509,7 +509,7 @@ export default function ResourcesTab() {
                     }))
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger id="advisor-leaf-condition" className="bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -523,7 +523,7 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Soil drainage</Label>
+                <Label htmlFor="advisor-soil-drainage" className="text-xs uppercase tracking-[0.16em] text-slate-600">Soil drainage</Label>
                 <Select
                   value={advisorInput.soilDrainage}
                   onValueChange={(value) =>
@@ -533,7 +533,7 @@ export default function ResourcesTab() {
                     }))
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger id="advisor-soil-drainage" className="bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -547,14 +547,14 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Recent cherry drop</Label>
+                <Label htmlFor="advisor-cherry-drop" className="text-xs uppercase tracking-[0.16em] text-slate-600">Recent cherry drop</Label>
                 <Select
                   value={advisorInput.recentCherryDrop ? "yes" : "no"}
                   onValueChange={(value) =>
                     setAdvisorInput((previous) => ({ ...previous, recentCherryDrop: value === "yes" }))
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger id="advisor-cherry-drop" className="bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -565,8 +565,9 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Soil pH</Label>
+                <Label htmlFor="advisor-soil-ph" className="text-xs uppercase tracking-[0.16em] text-slate-600">Soil pH</Label>
                 <Input
+                  id="advisor-soil-ph"
                   type="number" inputMode="decimal"
                   step="0.1"
                   min="3.5"
@@ -578,8 +579,9 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Organic matter %</Label>
+                <Label htmlFor="advisor-organic-matter" className="text-xs uppercase tracking-[0.16em] text-slate-600">Organic matter %</Label>
                 <Input
+                  id="advisor-organic-matter"
                   type="number" inputMode="decimal"
                   step="0.1"
                   min="0"
@@ -591,14 +593,14 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Pest pressure this week</Label>
+                <Label htmlFor="advisor-pest-pressure" className="text-xs uppercase tracking-[0.16em] text-slate-600">Pest pressure this week</Label>
                 <Select
                   value={advisorInput.recentPestPressure ? "yes" : "no"}
                   onValueChange={(value) =>
                     setAdvisorInput((previous) => ({ ...previous, recentPestPressure: value === "yes" }))
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger id="advisor-pest-pressure" className="bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -609,8 +611,9 @@ export default function ResourcesTab() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Target yield gain %</Label>
+                <Label htmlFor="advisor-target-yield" className="text-xs uppercase tracking-[0.16em] text-slate-600">Target yield gain %</Label>
                 <Input
+                  id="advisor-target-yield"
                   type="number" inputMode="decimal"
                   step="1"
                   min="0"

@@ -189,9 +189,9 @@ export function AuditLogSection({
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="space-y-1">
-              <Label>Filter</Label>
+              <Label htmlFor="audit-log-filter">Filter</Label>
               <Select value={auditEntityType} onValueChange={onAuditEntityTypeChange}>
-                <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectTrigger id="audit-log-filter" className="w-full sm:w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

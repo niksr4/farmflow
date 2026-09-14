@@ -17,6 +17,7 @@ import { Pencil, Save, Trash2 } from "lucide-react"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 type LocationOption = {
   id: string
@@ -243,7 +244,7 @@ export default function OtherSalesTab({
     })
   }
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     if (!form.sale_date) {
       toast({ title: "Missing date", description: "Sale date is required.", variant: "destructive" })
       return
@@ -317,6 +318,10 @@ export default function OtherSalesTab({
       setIsSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only takes effect on the next render, so two fast taps
+  // both enter the handler before the first one flips isSaving. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const handleEdit = (record: OtherSalesRecord) => {
     setEditingRecord(record)
@@ -408,8 +413,9 @@ export default function OtherSalesTab({
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-2">
-            <Label>Date</Label>
+            <Label htmlFor="other-sale-date">Date</Label>
             <Input
+              id="other-sale-date"
               type="date"
               value={form.sale_date}
               onChange={(event) => setForm((prev) => ({ ...prev, sale_date: event.target.value }))}
@@ -417,9 +423,9 @@ export default function OtherSalesTab({
           </div>
 
           <div className="space-y-2">
-            <Label>Location</Label>
+            <Label htmlFor="other-sale-location">Location</Label>
             <Select value={form.location_id || undefined} onValueChange={(value) => setForm((prev) => ({ ...prev, location_id: value }))}>
-              <SelectTrigger>
+              <SelectTrigger id="other-sale-location">
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
@@ -433,9 +439,9 @@ export default function OtherSalesTab({
           </div>
 
           <div className="space-y-2">
-            <Label>Asset</Label>
+            <Label htmlFor="other-sale-asset">Asset</Label>
             <Select value={form.asset_type} onValueChange={(value) => setForm((prev) => ({ ...prev, asset_type: value }))}>
-              <SelectTrigger>
+              <SelectTrigger id="other-sale-asset">
                 <SelectValue placeholder="Select asset" />
               </SelectTrigger>
               <SelectContent>
@@ -449,7 +455,7 @@ export default function OtherSalesTab({
           </div>
 
           <div className="space-y-2">
-            <Label>Sale mode</Label>
+            <Label htmlFor="other-sale-mode">Sale mode</Label>
             <Select
               value={form.sale_mode}
               onValueChange={(value: "per_kg" | "contract") =>
@@ -462,7 +468,7 @@ export default function OtherSalesTab({
                 }))
               }
             >
-              <SelectTrigger>
+              <SelectTrigger id="other-sale-mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -478,8 +484,9 @@ export default function OtherSalesTab({
           {form.sale_mode === "per_kg" ? (
             <>
               <div className="space-y-2">
-                <Label>KGs sold</Label>
+                <Label htmlFor="other-sale-kgs">KGs sold</Label>
                 <Input
+                  id="other-sale-kgs"
                   type="number" inputMode="decimal"
                   min={0}
                   step="0.01"
@@ -490,8 +497,9 @@ export default function OtherSalesTab({
                 />
               </div>
               <div className="space-y-2">
-                <Label>Rate / KG (Rs)</Label>
+                <Label htmlFor="other-sale-rate">Rate / KG (Rs)</Label>
                 <Input
+                  id="other-sale-rate"
                   type="number" inputMode="decimal"
                   min={0}
                   step="0.01"
@@ -504,8 +512,9 @@ export default function OtherSalesTab({
             </>
           ) : (
             <div className="space-y-2">
-              <Label>Contract value (Rs)</Label>
+              <Label htmlFor="other-sale-contract">Contract value (Rs)</Label>
               <Input
+                id="other-sale-contract"
                 type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
@@ -518,13 +527,14 @@ export default function OtherSalesTab({
           )}
 
           <div className="space-y-2">
-            <Label>Revenue (Auto)</Label>
-            <Input value={formatCurrency(computedRevenue)} readOnly />
+            <Label htmlFor="other-sale-revenue">Revenue (Auto)</Label>
+            <Input id="other-sale-revenue" value={formatCurrency(computedRevenue)} readOnly />
           </div>
 
           <div className="space-y-2">
-            <Label>Buyer</Label>
+            <Label htmlFor="other-sale-buyer">Buyer</Label>
             <Input
+              id="other-sale-buyer"
               value={form.buyer_name}
               onChange={(event) => setForm((prev) => ({ ...prev, buyer_name: event.target.value }))}
               placeholder="Buyer name"
@@ -532,8 +542,9 @@ export default function OtherSalesTab({
           </div>
 
           <div className="space-y-2">
-            <Label>Bank Account</Label>
+            <Label htmlFor="other-sale-bank">Bank Account</Label>
             <Input
+              id="other-sale-bank"
               value={form.bank_account}
               onChange={(event) => setForm((prev) => ({ ...prev, bank_account: event.target.value }))}
               placeholder="Bank account"
@@ -541,8 +552,9 @@ export default function OtherSalesTab({
           </div>
 
           <div className="space-y-2 md:col-span-2 xl:col-span-4">
-            <Label>Notes</Label>
+            <Label htmlFor="other-sale-notes">Notes</Label>
             <Textarea
+              id="other-sale-notes"
               value={form.notes}
               onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
               placeholder="Optional notes"
@@ -572,7 +584,7 @@ export default function OtherSalesTab({
           </div>
           <div className="flex items-center gap-2">
             <Select value={locationFilter} onValueChange={setLocationFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger aria-label="Filter estate" className="w-[180px]">
                 <SelectValue placeholder="Filter estate" />
               </SelectTrigger>
               <SelectContent>

@@ -127,7 +127,7 @@ export default function RecordMovementPanel({
         {/* Item type */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Item / crop</label>
+            <label htmlFor="movement-item-type" className="text-sm font-medium text-neutral-700">Item / crop</label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -147,7 +147,7 @@ export default function RecordMovementPanel({
               onFieldChange("unit", resolveInventoryUnitForItemType(value))
             }}
           >
-            <SelectTrigger data-testid="movement-item-type-select" className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
+            <SelectTrigger id="movement-item-type" data-testid="movement-item-type-select" className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
               <SelectValue placeholder={hasMovementItemTypes ? "Select item type" : "No items yet"} />
             </SelectTrigger>
             <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
@@ -173,7 +173,7 @@ export default function RecordMovementPanel({
         {/* Location */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Estate block</label>
+            <label htmlFor="movement-location" className="text-sm font-medium text-neutral-700">Estate block</label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -186,7 +186,7 @@ export default function RecordMovementPanel({
             </TooltipProvider>
           </div>
           <Select value={transactionLocationId} onValueChange={onLocationChange}>
-            <SelectTrigger className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
+            <SelectTrigger id="movement-location" className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
               <SelectValue placeholder={locations.length ? "Select location" : "No locations yet"} />
             </SelectTrigger>
             <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
@@ -205,7 +205,7 @@ export default function RecordMovementPanel({
         <div className="grid gap-5 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-neutral-700">Movement Date</label>
+              <label htmlFor="movement-date" className="text-sm font-medium text-neutral-700">Movement Date</label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -218,6 +218,7 @@ export default function RecordMovementPanel({
               </TooltipProvider>
             </div>
             <Input
+              id="movement-date"
               type="date"
               value={transactionDateToInputValue(newTransaction?.transaction_date)}
               max={getTodayDateInputValue()}
@@ -228,7 +229,7 @@ export default function RecordMovementPanel({
           </div>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-neutral-700">Quantity</label>
+              <label htmlFor="movement-quantity" className="text-sm font-medium text-neutral-700">Quantity</label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -242,6 +243,7 @@ export default function RecordMovementPanel({
             </div>
             <div className="relative">
               <Input
+                id="movement-quantity"
                 data-testid="movement-quantity-input"
                 type="number" inputMode="decimal"
                 min={0}
@@ -344,9 +346,9 @@ export default function RecordMovementPanel({
               and it is the only part nobody can reconstruct from the numbers later. */}
           {newTransaction?.transaction_type !== "restock" && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-neutral-700">What happened to it?</label>
+              <label htmlFor="movement-loss-reason" className="text-sm font-medium text-neutral-700">What happened to it?</label>
               <Select value={lossReason} onValueChange={onLossReasonChange}>
-                <SelectTrigger data-testid="movement-loss-reason" className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
+                <SelectTrigger id="movement-loss-reason" data-testid="movement-loss-reason" className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
                   <SelectValue placeholder="Select a reason" />
                 </SelectTrigger>
                 <SelectContent className="z-[70]">
@@ -370,7 +372,7 @@ export default function RecordMovementPanel({
         {newTransaction?.transaction_type === "restock" && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-neutral-700">Total price paid (₹)</label>
+              <label htmlFor="movement-price" className="text-sm font-medium text-neutral-700">Total price paid (₹)</label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -385,6 +387,7 @@ export default function RecordMovementPanel({
               </TooltipProvider>
             </div>
             <Input
+              id="movement-price"
               type="number" inputMode="decimal"
               min={0}
               step="0.01"
@@ -423,7 +426,7 @@ export default function RecordMovementPanel({
         {/* Notes */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Notes (Optional)</label>
+            <label htmlFor="movement-notes" className="text-sm font-medium text-neutral-700">Notes (Optional)</label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -436,6 +439,7 @@ export default function RecordMovementPanel({
             </TooltipProvider>
           </div>
           <Textarea
+            id="movement-notes"
             placeholder="Add any additional details"
             value={newTransaction?.notes ?? ""}
             onChange={(e) => onFieldChange("notes", e.target.value)}

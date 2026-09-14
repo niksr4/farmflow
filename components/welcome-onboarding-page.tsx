@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { apiRequest } from "@/lib/api-client"
 import type { ModuleBundle } from "@/lib/modules"
 import type { AppLocale } from "@/lib/i18n"
@@ -134,6 +135,43 @@ export default function WelcomeOnboardingPage() {
       locationCode: !String(draft.primaryLocationCode || "").trim(),
     }
   }, [draft, touched])
+
+  const handleSubmitSetupUnguarded = async () => {
+    setTouched(true)
+    if (submitting) return
+    setSubmitting(true)
+    setError("")
+    try {
+      await apiRequest("/api/onboarding/setup", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      })
+      await update({
+        preferredLocale: draft?.preferredLocale,
+        setupCompleted: true,
+        requiresGuidedSetup: false,
+      })
+      setSetup((current) => (current ? { ...current, complete: true, preferredLocale: draft?.preferredLocale as AppLocale } : current))
+      if (draft) setLocale(draft.preferredLocale)
+      toast({
+        title: t("public.welcome.completeTitle"),
+        description: t("public.welcome.completeDescription"),
+      })
+      router.push("/dashboard")
+    } catch (saveError: any) {
+      const raw = String(saveError?.message || "")
+      const isUserFacing = raw.length > 0 && raw.length < 200 && !/sql|query|connect|prisma|econnrefused/i.test(raw)
+      setError(isUserFacing ? raw : "Couldn't save your setup — check your connection and try again.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Guards the mobile-double-tap gap `disabled={submitting}` alone leaves: `disabled` only takes
+  // effect on the next render, so two taps in the same tick can both read `submitting === false`
+  // and both fire this handler, creating the onboarding location/tenant setup twice. See
+  // hooks/use-single-flight.ts.
+  const handleSubmitSetup = useSingleFlight(handleSubmitSetupUnguarded)
 
   if (loading || !draft) {
     return (
@@ -362,36 +400,7 @@ export default function WelcomeOnboardingPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Button
                   disabled={submitting || setupBlockers.length > 0}
-                  onClick={async () => {
-                    setTouched(true)
-                    if (submitting) return
-                    setSubmitting(true)
-                    setError("")
-                    try {
-                      await apiRequest("/api/onboarding/setup", {
-                        method: "POST",
-                        body: JSON.stringify(draft),
-                      })
-                      await update({
-                        preferredLocale: draft.preferredLocale,
-                        setupCompleted: true,
-                        requiresGuidedSetup: false,
-                      })
-                      setSetup((current) => (current ? { ...current, complete: true, preferredLocale: draft.preferredLocale } : current))
-                      setLocale(draft.preferredLocale)
-                      toast({
-                        title: t("public.welcome.completeTitle"),
-                        description: t("public.welcome.completeDescription"),
-                      })
-                      router.push("/dashboard")
-                    } catch (saveError: any) {
-                      const raw = String(saveError?.message || "")
-                      const isUserFacing = raw.length > 0 && raw.length < 200 && !/sql|query|connect|prisma|econnrefused/i.test(raw)
-                      setError(isUserFacing ? raw : "Couldn't save your setup — check your connection and try again.")
-                    } finally {
-                      setSubmitting(false)
-                    }
-                  }}
+                  onClick={handleSubmitSetup}
                 >
                   {submitting ? t("public.welcome.submitting") : t("public.welcome.submit")}
                   <ArrowRight className="ml-2 h-4 w-4" />

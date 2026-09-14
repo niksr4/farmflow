@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -66,6 +66,9 @@ const OVERTIME_MODES = [
 ] as const
 
 export default function PayRuleForm({ workerId, dailyRate, current, currentRuleId, onSaved, onCancel }: Props) {
+  // Unique per mounted instance -- this form can be open for several workers at once (each row's
+  // expansion is independent), so a static id would collide across rows the moment two are open.
+  const instanceId = useId()
   const [saving, setSaving] = useState(false)
   /**
    * Add a new dated rule, or correct the one already in force.
@@ -197,9 +200,9 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
     <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label className="text-xs">Retention</Label>
+          <Label htmlFor={`${instanceId}-retention`} className="text-xs">Retention</Label>
           <Select value={form.retentionMode} onValueChange={(v) => setForm((p) => ({ ...p, retentionMode: v as any }))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id={`${instanceId}-retention`}><SelectValue /></SelectTrigger>
             <SelectContent>
               {RETENTION_MODES.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
             </SelectContent>
@@ -208,8 +211,9 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
 
         {form.retentionMode !== "none" && (
           <div className="space-y-1">
-            <Label className="text-xs">{form.retentionMode === "percent_of_day" ? "Percentage" : "Rupees per day"}</Label>
+            <Label htmlFor={`${instanceId}-retention-value`} className="text-xs">{form.retentionMode === "percent_of_day" ? "Percentage" : "Rupees per day"}</Label>
             <Input
+              id={`${instanceId}-retention-value`}
               inputMode="decimal"
               placeholder={form.retentionMode === "percent_of_day" ? "20" : "100"}
               value={form.retentionValue}
@@ -219,9 +223,9 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
         )}
 
         <div className="space-y-1">
-          <Label className="text-xs">Overtime</Label>
+          <Label htmlFor={`${instanceId}-overtime`} className="text-xs">Overtime</Label>
           <Select value={form.overtimeMode} onValueChange={(v) => setForm((p) => ({ ...p, overtimeMode: v as any }))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id={`${instanceId}-overtime`}><SelectValue /></SelectTrigger>
             <SelectContent>
               {OVERTIME_MODES.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
             </SelectContent>
@@ -230,10 +234,11 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
 
         {form.overtimeMode !== "none" && (
           <div className="space-y-1">
-            <Label className="text-xs">
+            <Label htmlFor={`${instanceId}-overtime-value`} className="text-xs">
               {form.overtimeMode === "explicit_hourly" ? "Rupees per hour" : "Multiplier"}
             </Label>
             <Input
+              id={`${instanceId}-overtime-value`}
               inputMode="decimal"
               placeholder={form.overtimeMode === "explicit_hourly" ? "90" : "1.2"}
               value={form.overtimeValue}
@@ -244,8 +249,9 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
 
         {form.overtimeMode === "multiplier_of_hourly" && (
           <div className="space-y-1">
-            <Label className="text-xs">Hours in a normal working day</Label>
+            <Label htmlFor={`${instanceId}-full-day-hours`} className="text-xs">Hours in a normal working day</Label>
             <Input
+              id={`${instanceId}-full-day-hours`}
               inputMode="decimal"
               value={form.fullDayHours}
               onChange={(e) => setForm((p) => ({ ...p, fullDayHours: e.target.value }))}
@@ -257,8 +263,9 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
         )}
 
         <div className="space-y-1">
-          <Label className="text-xs">In force from</Label>
+          <Label htmlFor={`${instanceId}-effective-from`} className="text-xs">In force from</Label>
           <Input
+            id={`${instanceId}-effective-from`}
             type="date"
             value={form.effectiveFrom}
             onChange={(e) => setForm((p) => ({ ...p, effectiveFrom: e.target.value }))}

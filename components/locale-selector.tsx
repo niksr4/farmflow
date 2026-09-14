@@ -26,7 +26,7 @@ export function LocaleSelector({ value, onValueChange, className, compact = fals
 
   return (
     <Select value={currentValue} onValueChange={handleChange}>
-      <SelectTrigger className={className || (compact ? "h-9 w-[170px] bg-white/80" : "w-full bg-white/90")}>
+      <SelectTrigger aria-label="Language" className={className || (compact ? "h-9 w-[170px] bg-white/80" : "w-full bg-white/90")}>
         <SelectValue placeholder="Language" />
       </SelectTrigger>
       <SelectContent>

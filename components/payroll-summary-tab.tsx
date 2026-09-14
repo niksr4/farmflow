@@ -263,12 +263,12 @@ export default function PayrollSummaryTab() {
           </div>
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
             <div className="flex items-center gap-3 sm:block sm:space-y-1.5">
-              <Label className="text-xs shrink-0">Start date</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-full sm:w-36 text-sm" />
+              <Label htmlFor="payroll-start-date" className="text-xs shrink-0">Start date</Label>
+              <Input id="payroll-start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-full sm:w-36 text-sm" />
             </div>
             <div className="flex items-center gap-3 sm:block sm:space-y-1.5">
-              <Label className="text-xs shrink-0">End date</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-full sm:w-36 text-sm" />
+              <Label htmlFor="payroll-end-date" className="text-xs shrink-0">End date</Label>
+              <Input id="payroll-end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-full sm:w-36 text-sm" />
             </div>
             <TooltipProvider>
               <Tooltip>
