@@ -73,7 +73,9 @@ export default function DataToolsPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
-          <Label className="text-xs uppercase tracking-[0.16em] text-stone-500">Operations export</Label>
+          <Label htmlFor="ops-export-dataset-select" className="text-xs uppercase tracking-[0.16em] text-stone-500">
+            Operations export
+          </Label>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-1.5">
               <Select
@@ -82,7 +84,7 @@ export default function DataToolsPanel({
                   if (isExportDatasetId(value)) onDatasetChange(value)
                 }}
               >
-                <SelectTrigger className="h-10 bg-white">
+                <SelectTrigger id="ops-export-dataset-select" className="h-10 bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
@@ -115,8 +117,10 @@ export default function DataToolsPanel({
 
         {canShowAccounts ? (
           <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
-            <Label className="text-xs uppercase tracking-[0.16em] text-stone-500">Accounts export</Label>
-            <div className="flex flex-wrap gap-2">
+            <p id="accounts-export-heading" className="text-xs uppercase tracking-[0.16em] text-stone-500">
+              Accounts export
+            </p>
+            <div role="group" aria-labelledby="accounts-export-heading" className="flex flex-wrap gap-2">
               <Button variant="outline" className="bg-white" onClick={() => onAccountsExport("csv")}>
                 <FileText className="mr-2 h-4 w-4" />
                 CSV
