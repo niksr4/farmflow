@@ -108,6 +108,16 @@ import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
 import {
+  buildLocationMap,
+  itemTypesForMovement,
+  movementUnitByItemType as deriveMovementUnits,
+  unitForItemType,
+  recentDrilldownTransactions as deriveRecentDrilldown,
+  resolveLocationLabel as deriveLocationLabel,
+  selectedLocationLabel as deriveSelectedLocationLabel,
+  summariseFilteredInventory,
+} from "@/components/inventory-system/stock-derivations"
+import {
   seasonProgress as deriveSeasonProgress,
   filterEmptyMetrics as deriveFilterEmptyMetrics,
   availableExportDatasets as deriveExportDatasets,
@@ -1522,55 +1532,43 @@ export default function InventorySystem() {
     setTransactionSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
   }
 
-  const locationMap = useMemo(() => {
-    return new Map(locations.map((loc) => [loc.id, loc]))
-  }, [locations])
+  const locationMap = useMemo(() => buildLocationMap(locations), [locations])
 
   const resolveLocationLabel = useCallback(
-    (locationId?: string | null, fallback?: string) => {
-      if (!locationId) return UNASSIGNED_LABEL
-      const location = locationMap.get(locationId)
-      if (location) {
-        return location.name || location.code || "Unknown"
-      }
-      if (fallback) return fallback
-      return "Unknown"
-    },
+    (locationId?: string | null, fallback?: string) => deriveLocationLabel(locationMap, locationId, fallback),
     [locationMap],
   )
 
-  const selectedLocationLabel = useMemo(() => {
-    if (selectedLocationId === LOCATION_ALL) return "All stores"
-    if (selectedLocationId === LOCATION_UNASSIGNED) return UNASSIGNED_LABEL
-    return resolveLocationLabel(selectedLocationId)
-  }, [selectedLocationId, resolveLocationLabel])
+  const selectedLocationLabel = useMemo(
+    () => deriveSelectedLocationLabel(locationMap, selectedLocationId),
+    [locationMap, selectedLocationId],
+  )
 
 
   // computed lists
-  const allItemTypesForDropdown = Array.from(
-    new Set(
-      [...inventory.map((i) => normalizeInventoryItemType(i.name)), ...transactions.map((t) => normalizeInventoryItemType(t.item_type))].filter(Boolean),
-    ),
-  ).sort()
+  const allItemTypesForDropdown = itemTypesForMovement(inventory, transactions)
   const hasMovementItemTypes = allItemTypesForDropdown.length > 0
-  const movementUnitByItemType = useMemo(() => {
-    const units = new Map<string, string>()
-    inventory.forEach((item) => {
-      const itemType = normalizeInventoryItemType(item.name)
-      const unit = String(item.unit || "").trim() || "kg"
-      if (itemType && !units.has(itemType)) {
-        units.set(itemType, unit)
-      }
-    })
-    return units
-  }, [inventory])
+  const movementUnitByItemType = useMemo(() => deriveMovementUnits(inventory), [inventory])
+  /**
+   * The unit for a movement, from the store it is going INTO.
+   *
+   * transactionLocationId is the shed the form has selected; LOCATION_UNASSIGNED means none was
+   * chosen, so there is no store to ask and the item's unit anywhere is the right answer. Callers
+   * that know a different destination pass it explicitly.
+   */
   const resolveInventoryUnitForItemType = useCallback(
-    (itemType: string, fallbackUnit?: string) => {
-      const normalizedItemType = normalizeInventoryItemType(itemType)
-      if (!normalizedItemType) return String(fallbackUnit || "").trim() || "kg"
-      return movementUnitByItemType.get(normalizedItemType) || String(fallbackUnit || "").trim() || "kg"
-    },
-    [movementUnitByItemType],
+    (itemType: string, fallbackUnit?: string, locationId?: string | null) =>
+      unitForItemType(
+        movementUnitByItemType,
+        itemType,
+        fallbackUnit,
+        locationId !== undefined
+          ? locationId
+          : transactionLocationId && transactionLocationId !== LOCATION_UNASSIGNED && transactionLocationId !== LOCATION_ALL
+            ? transactionLocationId
+            : null,
+      ),
+    [movementUnitByItemType, transactionLocationId],
   )
   const selectedMovementUnit = useMemo(
     () => resolveInventoryUnitForItemType(newTransaction?.item_type || "", newTransaction?.unit),
@@ -1612,20 +1610,10 @@ export default function InventorySystem() {
   const resolvedInventoryValue = inventorySummary.totalValue
   const inventoryValueCaveat = inventorySummary.caveat
 
-  const filteredInventoryTotals = useMemo(() => {
-    const totalQuantity = filteredAndSortedInventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
-    const totalValue = filteredAndSortedInventory.reduce((sum, item) => {
-      const valueInfo = resolveItemValue(item)
-      return sum + (valueInfo.totalValue || 0)
-    }, 0)
-    const units = Array.from(new Set(filteredAndSortedInventory.map((item) => item.unit || "unit")))
-    return {
-      totalQuantity,
-      totalValue,
-      itemCount: filteredAndSortedInventory.length,
-      unitLabel: units.length === 1 ? units[0] : "mixed units",
-    }
-  }, [filteredAndSortedInventory, resolveItemValue])
+  const filteredInventoryTotals = useMemo(
+    () => summariseFilteredInventory(filteredAndSortedInventory, resolveItemValue),
+    [filteredAndSortedInventory, resolveItemValue],
+  )
 
   const selectedInventoryDrilldownItem = useMemo(() => {
     if (!inventoryDrilldownItemName) return null
@@ -1656,15 +1644,10 @@ export default function InventorySystem() {
       .finally(() => setIsLoadingItemDrilldown(false))
   }, [inventoryDrilldownItemName])
 
-  const recentDrilldownTransactions = useMemo(() => {
-    if (!inventoryDrilldownItemName) return []
-    const sorted = [...itemDrilldownTransactions].sort((a, b) => {
-      const dateA = a.transaction_date ? parseCustomDateString(a.transaction_date) : null
-      const dateB = b.transaction_date ? parseCustomDateString(b.transaction_date) : null
-      return (dateB?.getTime() || 0) - (dateA?.getTime() || 0)
-    })
-    return drilldownShowAll ? sorted : sorted.slice(0, 6)
-  }, [itemDrilldownTransactions, inventoryDrilldownItemName, drilldownShowAll])
+  const recentDrilldownTransactions = useMemo(
+    () => (inventoryDrilldownItemName ? deriveRecentDrilldown(itemDrilldownTransactions, drilldownShowAll) : []),
+    [itemDrilldownTransactions, inventoryDrilldownItemName, drilldownShowAll],
+  )
 
   useEffect(() => {
     if (!inventoryDrilldownItemName) return
@@ -2104,7 +2087,7 @@ export default function InventorySystem() {
     })
   }
 
-  const handleUpdateTransaction = async () => {
+  const handleUpdateTransactionUnguarded = async () => {
     if (!editingTransaction) return
     const tx = ensureTransactionSafety(editingTransaction)
     if (!tx.item_type || !tx.transaction_type) {
@@ -2182,6 +2165,10 @@ export default function InventorySystem() {
     }
   }
 
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps
+  // both entered this handler and posted the edit twice. See lib/single-flight.ts.
+  const handleUpdateTransaction = useSingleFlight(handleUpdateTransactionUnguarded)
+
   const handleDeleteConfirm = (id?: number) => {
     if (!id) return
     setTransactionToDelete(id)
@@ -2226,7 +2213,7 @@ export default function InventorySystem() {
     setIsInventoryEditDialogOpen(true)
   }
 
-  const handleSaveInventoryEdit = async () => {
+  const handleSaveInventoryEditUnguarded = async () => {
     if (!editingInventoryItem) return
     const originalName = editingInventoryItem.name
     const originalUnit = editingInventoryItem.unit || "kg"
@@ -2341,6 +2328,12 @@ export default function InventorySystem() {
     }
   }
 
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps could
+  // both fire this handler -- and unlike a plain field edit, this one can post a deplete+restock
+  // revaluation pair AND a quantity-adjustment transaction, so a duplicate run doesn't just repeat
+  // one write, it can post several. See lib/single-flight.ts.
+  const handleSaveInventoryEdit = useSingleFlight(handleSaveInventoryEditUnguarded)
+
   const handleDeleteInventoryItem = async (itemToDelete: InventoryItem) => {
     if (!tenantId) return
     const deleteAllLocations = selectedLocationId === LOCATION_ALL
@@ -2419,7 +2412,7 @@ export default function InventorySystem() {
     })
   }
 
-  const handleCreateNewItem = async () => {
+  const handleCreateNewItemUnguarded = async () => {
     const itemName = newItemForm.name.trim()
     const unit = newItemForm.unit.trim() || "kg"
     // Bags win when filled, because someone who typed "20 x 45" meant 900 kg and would not also
@@ -2495,6 +2488,11 @@ export default function InventorySystem() {
       setIsSavingNewItem(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps both
+  // entered this handler and created the item (plus its opening transaction) twice. See
+  // lib/single-flight.ts.
+  const handleCreateNewItem = useSingleFlight(handleCreateNewItemUnguarded)
 
   // CSV export (transactions & inventory)
   const exportInventoryToCSV = () => {

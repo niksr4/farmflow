@@ -301,8 +301,9 @@ export default function ComplianceTab() {
               </div>
               <form onSubmit={handleAddCertification} className="space-y-4 pt-2">
                 <div className="space-y-1.5">
-                  <Label>Name *</Label>
+                  <Label htmlFor="compliance-cert-name">Name *</Label>
                   <Input
+                    id="compliance-cert-name"
                     value={certForm.name}
                     onChange={(e) => setCertForm((f) => ({ ...f, name: e.target.value }))}
                     placeholder="e.g. Rainforest Alliance 2024"
@@ -311,12 +312,12 @@ export default function ComplianceTab() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Type</Label>
+                    <Label htmlFor="compliance-cert-type">Type</Label>
                     <Select
                       value={certForm.certification_type}
                       onValueChange={(v) => setCertForm((f) => ({ ...f, certification_type: v }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="compliance-cert-type">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -327,12 +328,12 @@ export default function ComplianceTab() {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Status</Label>
+                    <Label htmlFor="compliance-cert-status">Status</Label>
                     <Select
                       value={certForm.status}
                       onValueChange={(v) => setCertForm((f) => ({ ...f, status: v }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="compliance-cert-status">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -346,16 +347,18 @@ export default function ComplianceTab() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Issuing Body</Label>
+                    <Label htmlFor="compliance-cert-issuer">Issuing Body</Label>
                     <Input
+                      id="compliance-cert-issuer"
                       value={certForm.issuing_body}
                       onChange={(e) => setCertForm((f) => ({ ...f, issuing_body: e.target.value }))}
                       placeholder="e.g. SAN"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Cert. Number</Label>
+                    <Label htmlFor="compliance-cert-number">Cert. Number</Label>
                     <Input
+                      id="compliance-cert-number"
                       value={certForm.certificate_number}
                       onChange={(e) => setCertForm((f) => ({ ...f, certificate_number: e.target.value }))}
                       placeholder="Optional"
@@ -364,16 +367,18 @@ export default function ComplianceTab() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Valid From</Label>
+                    <Label htmlFor="compliance-cert-valid-from">Valid From</Label>
                     <Input
+                      id="compliance-cert-valid-from"
                       type="date"
                       value={certForm.valid_from}
                       onChange={(e) => setCertForm((f) => ({ ...f, valid_from: e.target.value }))}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Valid Until</Label>
+                    <Label htmlFor="compliance-cert-valid-until">Valid Until</Label>
                     <Input
+                      id="compliance-cert-valid-until"
                       type="date"
                       value={certForm.valid_until}
                       onChange={(e) => setCertForm((f) => ({ ...f, valid_until: e.target.value }))}
@@ -381,8 +386,9 @@ export default function ComplianceTab() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Notes</Label>
+                  <Label htmlFor="compliance-cert-notes">Notes</Label>
                   <Textarea
+                    id="compliance-cert-notes"
                     value={certForm.notes}
                     onChange={(e) => setCertForm((f) => ({ ...f, notes: e.target.value }))}
                     placeholder="Audit cycle, conditions, renewal contacts…"
@@ -481,12 +487,12 @@ export default function ComplianceTab() {
               </div>
               <form onSubmit={handleAddChecklistItem} className="space-y-4 pt-2">
                 <div className="space-y-1.5">
-                  <Label>Certification</Label>
+                  <Label htmlFor="compliance-checklist-cert">Certification</Label>
                   <Select
                     value={checklistForm.certification_id}
                     onValueChange={(v) => setChecklistForm((f) => ({ ...f, certification_id: v }))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="compliance-checklist-cert">
                       <SelectValue placeholder="Link to certification (optional)" />
                     </SelectTrigger>
                     <SelectContent>
@@ -497,8 +503,9 @@ export default function ComplianceTab() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Task *</Label>
+                  <Label htmlFor="compliance-checklist-title">Task *</Label>
                   <Input
+                    id="compliance-checklist-title"
                     value={checklistForm.title}
                     onChange={(e) => setChecklistForm((f) => ({ ...f, title: e.target.value }))}
                     placeholder="e.g. Submit annual audit report"
@@ -506,8 +513,9 @@ export default function ComplianceTab() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Description</Label>
+                  <Label htmlFor="compliance-checklist-description">Description</Label>
                   <Textarea
+                    id="compliance-checklist-description"
                     value={checklistForm.description}
                     onChange={(e) => setChecklistForm((f) => ({ ...f, description: e.target.value }))}
                     placeholder="Details, requirements…"
@@ -515,8 +523,9 @@ export default function ComplianceTab() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Due Date</Label>
+                  <Label htmlFor="compliance-checklist-due-date">Due Date</Label>
                   <Input
+                    id="compliance-checklist-due-date"
                     type="date"
                     value={checklistForm.due_date}
                     onChange={(e) => setChecklistForm((f) => ({ ...f, due_date: e.target.value }))}

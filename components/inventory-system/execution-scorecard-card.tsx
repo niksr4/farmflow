@@ -46,6 +46,7 @@ export default function ExecutionScorecardCard({ checks, onAction }: Props) {
     <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
       <button
         type="button"
+        aria-expanded={isOpen}
         className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors dark:hover:bg-white/[0.02]"
         onClick={() => setExpanded(v => !v)}
       >

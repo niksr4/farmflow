@@ -160,7 +160,18 @@ describe("the inventory ledger talks about stores, not locations", () => {
     // Three labels for one concept is how "store" and "block" drifted into meaning the same thing
     // in the first place.
     expect(shell).toContain('dark:text-emerald-500">Store</p>')
-    expect(shell).toContain('if (selectedLocationId === LOCATION_ALL) return "All stores"')
+    /**
+     * The label itself moved to components/inventory-system/stock-derivations.ts in the second
+     * decomposition pass — the behaviour is identical, the string simply lives somewhere it can be
+     * tested directly (tests/stock-derivations.test.ts asserts all four of its answers).
+     *
+     * Asserted at its new home rather than deleted, because the point of this test is that ONE
+     * word is used for the concept across three surfaces. Dropping the check when the code moved
+     * would quietly retire the guard during a refactor, which is the failure mode this whole file
+     * exists to prevent.
+     */
+    const derivations = readFileSync("components/inventory-system/stock-derivations.ts", "utf8")
+    expect(derivations).toContain('if (selectedLocationId === LOCATION_ALL) return "All stores"')
   })
 
   it("its filter offers stores and says so", () => {

@@ -64,10 +64,10 @@ export default function InventorySystemAlerts({ loading, error, summary, onOpenS
           <div className="grid gap-2">
             {(summary.alerts || []).slice(0, 3).map((alert, index) => {
               const summaryLine = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
-              const tone =
-                alert.severity === "high" || alert.severity === "critical"
-                  ? "border-rose-100 bg-rose-50/70 text-rose-900"
-                  : "border-amber-100 bg-amber-50/70 text-amber-900"
+              const isSevere = alert.severity === "high" || alert.severity === "critical"
+              const tone = isSevere
+                ? "border-rose-100 bg-rose-50/70 text-rose-900"
+                : "border-amber-100 bg-amber-50/70 text-amber-900"
               return (
                 <button
                   key={`${alert.id}-${index}`}
@@ -76,7 +76,9 @@ export default function InventorySystemAlerts({ loading, error, summary, onOpenS
                   className={cn("rounded-xl border px-3 py-2 text-left transition-colors hover:bg-white", tone)}
                   onClick={() => onOpenAlert(alert)}
                 >
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-amber-700">Alert {index + 1}</p>
+                  <p className={cn("text-[10px] uppercase tracking-[0.15em]", isSevere ? "text-rose-700" : "text-amber-700")}>
+                    Alert {index + 1}
+                  </p>
                   <p className="mt-1 line-clamp-2 text-xs font-medium leading-snug">{alert.title}</p>
                   {summaryLine ? <p className="mt-1 text-[11px] text-muted-foreground">{summaryLine}</p> : null}
                 </button>

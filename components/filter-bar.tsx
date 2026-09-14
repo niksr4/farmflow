@@ -62,6 +62,7 @@ export default function FilterBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={searchPlaceholder}
+          aria-label={searchPlaceholder}
           className="h-11 w-full rounded-xl border border-stone-200 bg-white pl-9 pr-8 text-sm font-medium text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-stone-200"
         />
         {search && (

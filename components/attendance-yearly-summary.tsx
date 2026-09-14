@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Download, Loader2 } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2, Printer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import type { YearlyAttendanceRow } from "@/lib/attendance-yearly"
 import { formatHoursHm } from "@/lib/attendance-hours"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 /**
  * The yearly summary — a month per line per worker, laid out like the sheet the office files.
@@ -57,6 +58,54 @@ export default function AttendanceYearlySummary() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ran, setRan] = useState(false)
+  const [estateName, setEstateName] = useState("Estate")
+  /**
+   * The range that produced the rows CURRENTLY ON SCREEN — not the range in the date boxes.
+   *
+   * ⚠ THE EXPORTS MUST FOLLOW THE REPORT, NOT THE INPUTS. Both used to read `from`/`to` directly,
+   * so any moment the two disagreed produced a file covering a different period from the table
+   * above it — plausible, correctly formatted, and wrong. The window is real: a failed load leaves
+   * the previous rows visible while the boxes have already moved, and a `type="month"` input fires
+   * on every spin, so a mid-change click lands in the gap.
+   *
+   * Nobody would catch it from the file: an attendance sheet for the wrong months looks exactly
+   * like one for the right months. Raised by Greptile, 2026-09-13.
+   */
+  const [loadedRange, setLoadedRange] = useState<{ from: string; to: string } | null>(null)
+  const [downloading, setDownloading] = useState(false)
+
+  /**
+   * Excel, formatted — not the raw CSV.
+   *
+   * The CSV route already produces exactly the right rows, so the workbook is built FROM it rather
+   * than from a second pass over the data: two builders drift, and the file people actually file
+   * is the one that would drift unnoticed. lib/spreadsheet.ts adds the borders, the frozen white-on
+   * -emerald header and the bolded total rows, which is what makes it printable as it stands.
+   */
+  const downloadXlsx = useCallback(async () => {
+    setDownloading(true)
+    try {
+      if (!loadedRange) return
+      const { from: gotFrom, to: gotTo } = loadedRange
+      const res = await fetch(`/api/attendance/yearly?from=${gotFrom}&to=${gotTo}&format=csv`, { cache: "no-store" })
+      if (!res.ok) throw new Error("Could not build the export")
+      const csv = await res.text()
+      const bytes = await buildXlsxArrayBufferFromCsv(csv, "Yearly Summary", {
+        title: `${estateName} — Yearly Attendance Summary`,
+        subtitle: `${gotFrom} to ${gotTo}`,
+      })
+      const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME_TYPE }))
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `attendance-yearly-${gotFrom}-to-${gotTo}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError("Could not build the Excel file")
+    } finally {
+      setDownloading(false)
+    }
+  }, [loadedRange, estateName])
 
   const run = useCallback(
     async (signal?: AbortSignal) => {
@@ -69,12 +118,15 @@ export default function AttendanceYearlySummary() {
         if (!res.ok || !data?.success) throw new Error(data?.error || "Could not build the report")
         setRows(data.workers || [])
         setSummary(data.summary || null)
+        if (data.estateName) setEstateName(String(data.estateName))
+        setLoadedRange({ from, to })
         setRan(true)
       } catch (e: unknown) {
         if (signal?.aborted || (e instanceof DOMException && e.name === "AbortError")) return
         setError(e instanceof Error ? e.message : "Could not build the report")
         setRows([])
         setSummary(null)
+        setLoadedRange(null)
       } finally {
         if (!signal?.aborted) setLoading(false)
       }
@@ -112,16 +164,37 @@ export default function AttendanceYearlySummary() {
             "Show"
           )}
         </Button>
-        {rows.length > 0 && (
-          <Button variant="outline" asChild className="h-11">
-            <a href={`/api/attendance/yearly?from=${from}&to=${to}&format=csv`}>
-              <Download className="mr-1 h-4 w-4" /> CSV
-            </a>
-          </Button>
+        {rows.length > 0 && loadedRange && (
+          <>
+            <Button variant="outline" onClick={() => void downloadXlsx()} disabled={downloading} className="h-11">
+              <FileSpreadsheet className="mr-1 h-4 w-4" /> {downloading ? "Building…" : "Excel"}
+            </Button>
+            {/* Print is how a PDF gets made here. The browser's own dialogue saves to PDF on every
+                platform the estates use, it honours the print stylesheet, and it needs no server
+                renderer — the daily sheet has worked this way since it was built. */}
+            <Button variant="outline" onClick={() => window.print()} className="h-11">
+              <Printer className="mr-1 h-4 w-4" /> Print / PDF
+            </Button>
+            <Button variant="outline" asChild className="h-11">
+              <a href={`/api/attendance/yearly?from=${loadedRange.from}&to=${loadedRange.to}&format=csv`}>
+                <Download className="mr-1 h-4 w-4" /> CSV
+              </a>
+            </Button>
+          </>
         )}
       </div>
 
       {error && <p className="px-1 text-sm text-red-600">{error}</p>}
+
+      {/* The boxes and the table have drifted apart — usually a load that failed. Said plainly,
+          because the exports below deliberately follow the TABLE, and a download that covers
+          different months from the dates on screen needs explaining before it happens, not after. */}
+      {loadedRange && (loadedRange.from !== from || loadedRange.to !== to) && !loading && (
+        <p className="px-1 text-xs text-amber-700 dark:text-amber-500">
+          Showing {loadedRange.from} to {loadedRange.to}. Press Show to move to the dates above —
+          downloads cover what is on screen.
+        </p>
+      )}
 
       {summary && rows.length > 0 && (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-5 dark:border-white/[0.08] dark:bg-white/[0.08]">

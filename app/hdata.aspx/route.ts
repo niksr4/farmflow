@@ -1,5 +1,6 @@
+import { after } from "next/server"
 import { accountsSql, isDbConfigured } from "@/lib/server/db"
-import { checkRateLimit } from "@/lib/rate-limit"
+import { buildRateLimitBatch, checkRateLimit } from "@/lib/rate-limit"
 import { normalizeTenantContext } from "@/lib/server/tenant-db"
 import { extractClientIp } from "@/lib/server/request-security"
 import { logSecurityEvent } from "@/lib/server/security-events"
@@ -19,6 +20,7 @@ import {
 import {
   recordEnrollment,
   recordPunchesAndUpsertAttendance,
+  resolveHeartbeatGate,
   resolveTenantByDeviceSerial,
   touchDeviceLastSeen,
 } from "@/lib/server/biometric-attendance"
@@ -84,20 +86,47 @@ export async function POST(request: Request) {
     return new Response("", { status: 413 })
   }
 
-  // Both limits precede the body read: buffering up to MAX_HDATA_BODY_BYTES before deciding
-  // whether the caller may send it does the expensive half of the work regardless. Per-IP first,
-  // because the per-serial bucket below is keyed on attacker-supplied input.
-  const ipLimit = await checkRateLimit("biometricIp", clientIp).catch(() => null)
-  if (ipLimit && !ipLimit.success) return new Response("", { status: 429 })
+  /**
+   * RATE LIMITS AND THE DEVICE LOOKUP IN ONE ROUND TRIP.
+   *
+   * These were three sequential calls to Neon in ap-southeast-1 before any work began, on the
+   * busiest endpoint in the application: 5.4 hours of total span time in the week to 2026-09-12 at
+   * a p95 of 2,678 ms, against 303 real punches — about 96% empty heartbeats. Sentry raised the
+   * shape as "Consecutive HTTP POST".
+   *
+   * An earlier attempt cached the serial lookup for 15 seconds instead. That was a security hole:
+   * a cache hit skips the `active = TRUE` in the query, nothing downstream re-checks it, and the
+   * device route toggles `active` on a PUT — so a deactivated terminal could keep writing
+   * attendance until the entry expired, on any warm instance. Batching gets the same latency with
+   * the authorisation check live on every request.
+   *
+   * Limits are still checked BEFORE the body is read: buffering up to MAX_HDATA_BODY_BYTES before
+   * deciding whether the caller may send it does the expensive half of the work regardless. The
+   * per-IP ceiling remains load-bearing because the per-serial bucket is keyed on attacker-supplied
+   * input, and rotating a serial would otherwise mint a fresh bucket every request.
+   */
+  const gate = await resolveHeartbeatGate(
+    accountsSql,
+    buildRateLimitBatch([
+      { key: "biometricIp", identifier: clientIp },
+      { key: "biometricPunch", identifier: serialNumber || clientIp },
+    ]),
+    serialNumber,
+  ).catch(() => null)
 
-  const serialLimit = await checkRateLimit("biometricPunch", serialNumber || clientIp).catch(() => null)
-  if (serialLimit && !serialLimit.success) return new Response("", { status: 429 })
+  if (gate && [...gate.limits.values()].some((result) => !result.success)) {
+    return new Response("", { status: 429 })
+  }
 
   if (!isValidHdataSerial(serialNumber)) {
     return rejectUnrecognizedDevice(request, serialNumber, clientIp, requestCode)
   }
 
-  const resolved = await resolveTenantByDeviceSerial(accountsSql, serialNumber).catch(() => null)
+  // Null gate means the batch itself failed — fall back to the single lookup rather than refusing
+  // a device because the database hiccupped. Rate limiting fails open here exactly as before.
+  const resolved = gate
+    ? gate.device
+    : await resolveTenantByDeviceSerial(accountsSql, serialNumber).catch(() => null)
   if (!resolved) {
     return rejectUnrecognizedDevice(request, serialNumber, clientIp, requestCode)
   }
@@ -107,7 +136,18 @@ export async function POST(request: Request) {
   const tenantContext = normalizeTenantContext(resolved.tenantId, BIOMETRIC_DEVICE_ROLE)
 
   try {
-    await touchDeviceLastSeen(accountsSql, tenantContext, resolved.deviceId).catch(() => undefined)
+    /**
+     * OFF THE CRITICAL PATH. last_seen_at powers one label on the device settings screen; making
+     * every heartbeat wait for it bought nothing and cost a round trip on the busiest endpoint here.
+     *
+     * `after()` rather than a floating promise: a serverless function can freeze the moment it
+     * responds, so an un-awaited write is not merely late, it may never run. after() is the
+     * platform's contract for "finish this before you freeze".
+     */
+    // RETURNS the promise. A callback that discards it reports itself finished the moment the
+    // request starts, so the instance may freeze before the write lands — which is exactly the
+    // failure after() exists to prevent, reintroduced by a stray `void`.
+    after(() => touchDeviceLastSeen(accountsSql, tenantContext, resolved.deviceId).catch(() => undefined))
 
     // An enrolment carries the name typed on the terminal keypad -- the only place a device code
     // is ever human-readable. Recorded (not acted on) so the mapping panel can suggest it. The

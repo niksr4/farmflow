@@ -64,7 +64,7 @@ import AttendanceScannerTab from "./attendance-scanner-tab"
  * today so nothing changes underneath an estate mid-setup.
  */
 
-type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll" | "report" | "scanner"
+type AttendanceSection = "attendance" | "workers" | "payroll" | "report" | "scanner"
 
 type AttendanceWorkspaceProps = {
   showLaborManagement?: boolean
@@ -75,7 +75,6 @@ type AttendanceWorkspaceProps = {
 const SECTION_COLORS: Record<AttendanceSection, string> = {
   attendance: "bg-teal-600 border-teal-600 text-white",
   workers: "bg-cyan-600 border-cyan-600 text-white",
-  ledger: "bg-indigo-600 border-indigo-600 text-white",
   payroll: "bg-purple-600 border-purple-600 text-white",
   report: "bg-slate-700 border-slate-700 text-white",
   scanner: "bg-emerald-700 border-emerald-700 text-white",
@@ -92,7 +91,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
           { value: "payroll" as AttendanceSection, label: "Payroll", icon: IndianRupee },
           // Sits beside Payroll because it answers the same shape of question over the same
           // period -- who was here, for how long -- and is what gets checked when a wage is queried.
-          { value: "report" as AttendanceSection, label: "Attendance", icon: CalendarRange },
+          { value: "report" as AttendanceSection, label: "Attendance reports", icon: CalendarRange },
           // Sits last because it is a one-off: you commission a terminal once and then never
           // open this again, unlike everything to its left.
           { value: "scanner" as AttendanceSection, label: "Scanner", icon: Fingerprint },
