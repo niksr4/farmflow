@@ -1,5 +1,24 @@
 # Scanner policy change: branch from `main`, not from whatever is checked out
 
+> ## ⚠ IT HAPPENED AGAIN — 2026-09-14, and this is now enforced in CI
+>
+> Rule 1 below was **never applied**. PR #17 arrived based on `refactor/inventory-shell-pass-2`
+> @`64e6dfeb`, whose merge-base with `main` is `52d92d46` — **16 commits behind**, i.e. before PRs
+> #12–#16 landed. The digest reported *"verified fast-forward — same as last run, main hasn't
+> moved."* Main had moved five times.
+>
+> Rule 3 *did* land: the scanner flagged its own 446+/289− diff as over the ~400-line guideline.
+> So the half of this document that produces a number got applied and the half that changes a
+> `git switch` did not. That is the argument for not writing a fourth document.
+>
+> **`scripts/dev/check-branch-base.mjs` now runs as the FIRST step of CI**, before install, and
+> fails any `scanner/**` branch whose merge-base is not current `origin/main`. Human branches get
+> a 40-commit allowance, because being a little behind while you work is normal.
+>
+> The cost of the stale base is not the diff size — it is that **CI green meant green against the
+> tree as it was before five merged PRs**. Fix an existing branch in place with `git merge
+> origin/main`; it does not need rewriting.
+
 Paste the block below to the `farmflow-daily-code-scan` task (and to the
 `farmflow-scan-fresh-retry` duplicate, which carries the same policy).
 

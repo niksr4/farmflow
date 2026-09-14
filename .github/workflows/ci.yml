@@ -32,6 +32,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        # Full history: the base check below needs a merge-base, and the default shallow clone
+        # (fetch-depth 1) has no commits to find one in.
+        with:
+          fetch-depth: 0
+
+      # Runs FIRST, before install, because everything after it is meaningless if the answer is
+      # "this branch was cut from somewhere else". A scanner PR arrived on 2026-09-14 based on a
+      # branch 16 commits behind main, and reported itself "verified fast-forward -- main hasn't
+      # moved" while five merged PRs said otherwise. Green CI on that branch meant green against
+      # the tree as it was before those five landed.
+      - name: Branch base
+        run: node scripts/dev/check-branch-base.mjs
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
