@@ -22,7 +22,64 @@ export type ResolvedDevice = { tenantId: string; deviceId: string }
  */
 const OWNER_CONTEXT = normalizeTenantContext(undefined, "owner")
 
+/**
+ * The whole gate a heartbeat passes through, in ONE round trip.
+ *
+ * ⚠ THIS REPLACES A CACHE, AND THE CACHE WAS A SECURITY HOLE I PUT THERE. The first attempt at
+ * cutting the heartbeat's four sequential round trips kept a 15-second serial→tenant cache. A
+ * cache hit skips the `active = TRUE` in the lookup below, nothing downstream re-checks it, and
+ * the device route toggles `active` on a PUT that never invalidated anything — so DEACTIVATING A
+ * TERMINAL LEFT IT ABLE TO WRITE ATTENDANCE for up to fifteen seconds, on any warm instance that
+ * had cached it. Raised by Greptile on PR #15, 2026-09-13.
+ *
+ * Invalidating on the PUT would have narrowed it and not closed it: the cache is per-instance, so
+ * other warm instances would have kept serving the stale answer until it expired regardless.
+ *
+ * Batching removes the trade instead of managing it. Rate limiting and the serial lookup were two
+ * sequential trips at the top of every request; they are now one transaction, so the latency win
+ * is the same and the authorisation check is live on every single request. `rate_limit_counters`
+ * carries no tenant_id and has RLS off, so the two statements sit happily under one owner context.
+ *
+ * A cache in front of an authorisation decision has to be justified against the worst case, not
+ * the common one. There was a way to avoid needing one.
+ */
+export type HeartbeatGate<TLimits> = {
+  limits: TLimits
+  device: ResolvedDevice | null
+}
+
+export async function resolveHeartbeatGate<TLimits>(
+  sql: NeonSql,
+  rateLimit: { text: string; params: (string | number)[]; interpret: (rows: any[]) => TLimits },
+  serialNumber: string,
+): Promise<HeartbeatGate<TLimits>> {
+  const [, , counts, devices] = (await sql.transaction([
+    // Owner context for the device lookup; rate_limit_counters carries no tenant_id and no RLS.
+    sql`SELECT set_config('app.tenant_id', '', true)`,
+    sql`SELECT set_config('app.role', 'owner', true)`,
+    sql.query(rateLimit.text, rateLimit.params),
+    sql`
+      SELECT id, tenant_id
+      FROM biometric_devices
+      WHERE serial_number = ${serialNumber}
+        AND active = TRUE
+      LIMIT 1
+    `,
+  ])) as any[][]
+
+  const device = (devices as any[])[0]
+  return {
+    // Counting and the limit comparison stay in lib/rate-limit.ts; only the execution moved here.
+    limits: rateLimit.interpret(counts as any[]),
+    device: device ? { deviceId: String(device.id), tenantId: String(device.tenant_id) } : null,
+  }
+}
+
 export async function resolveTenantByDeviceSerial(sql: NeonSql, serialNumber: string): Promise<ResolvedDevice | null> {
+  return resolveTenantByDeviceSerialUncached(sql, serialNumber)
+}
+
+async function resolveTenantByDeviceSerialUncached(sql: NeonSql, serialNumber: string): Promise<ResolvedDevice | null> {
   const rows = await runTenantQuery(
     sql,
     OWNER_CONTEXT,
