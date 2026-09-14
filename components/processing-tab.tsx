@@ -1251,7 +1251,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 ) : (
                   <Popover>
                     <PopoverTrigger asChild>
+                      {/* Same id as the mobile input above, and safe: `isMobile` is a JS branch,
+                          so exactly one of the two is ever in the document. Without it the label
+                          names a control that does not exist on desktop — no focus on click, and
+                          nothing for a screen reader to read the field's name from. */}
                       <Button
+                        id="processing-date"
                         variant="outline"
                         className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
                       >

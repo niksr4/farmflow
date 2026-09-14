@@ -15,7 +15,7 @@ import { TrendingUp, TrendingDown, Users, Plus, Phone, Mail, IndianRupee, Bell, 
 import { formatDateOnly } from "@/lib/date-utils"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
 interface Buyer {
@@ -147,8 +147,7 @@ export default function MarketPricingTab() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const handleAddBuyerUnguarded = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAddBuyerUnguarded = async () => {
     if (!buyerForm.name.trim()) return
     setSubmitting(true)
     try {
@@ -169,8 +168,7 @@ export default function MarketPricingTab() {
     }
   }
 
-  const handleAddPriceRecordUnguarded = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAddPriceRecordUnguarded = async () => {
     if (!priceForm.price_per_kg || !priceForm.record_date) return
     setSubmitting(true)
     try {
@@ -207,8 +205,8 @@ export default function MarketPricingTab() {
 
   // Mobile double-tap guard: `disabled` only takes effect on the next render, so two fast taps
   // both enter the handler before the first one flips isSubmitting. See lib/single-flight.ts.
-  const handleAddBuyer = useSingleFlight(handleAddBuyerUnguarded)
-  const handleAddPriceRecord = useSingleFlight(handleAddPriceRecordUnguarded)
+  const handleAddBuyer = useSingleFlightSubmit(handleAddBuyerUnguarded)
+  const handleAddPriceRecord = useSingleFlightSubmit(handleAddPriceRecordUnguarded)
 
   if (loading) {
     return (

@@ -1551,7 +1551,10 @@ export default function SalesTab({
               ) : (
                 <Popover>
                   <PopoverTrigger asChild>
+                    {/* Same id as the mobile input above — `isMobile` is a JS branch, so only one
+                        of the two is ever mounted. See the matching note in processing-tab.tsx. */}
                     <Button
+                      id="sale-date"
                       variant="outline"
                       className={cn("w-full justify-start text-left font-normal bg-transparent", !date && "text-muted-foreground")}
                     >
