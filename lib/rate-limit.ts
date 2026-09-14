@@ -122,6 +122,56 @@ const LIMITS: Record<RateLimitKey, { limit: number; windowMs: number }> = {
  * Buckets may have different windows; each row carries its own window_start and window_ms, so
  * mixing a 60-second limit with a five-minute one is fine.
  */
+/**
+ * The rate-limit upsert as a STATEMENT plus a way to read its rows — for callers that need to
+ * batch it with something else.
+ *
+ * Exists so the biometric heartbeat can settle its two buckets AND resolve the device serial in
+ * one transaction, without a second copy of the window arithmetic or the limit comparison living
+ * in that file. The counting rules stay here; only the execution moves.
+ */
+export function buildRateLimitBatch(checks: readonly { key: RateLimitKey; identifier: string }[]): {
+  text: string
+  params: (string | number)[]
+  interpret: (rows: readonly { key?: unknown; count?: unknown }[]) => Map<RateLimitKey, RateLimitResult>
+} {
+  const now = Date.now()
+  const rows = checks.map(({ key, identifier }) => {
+    const { windowMs } = LIMITS[key]
+    return { key, dbKey: `${key}:${identifier}`, windowStart: Math.floor(now / windowMs) * windowMs, windowMs }
+  })
+
+  const params: (string | number)[] = []
+  const values = rows
+    .map((r) => {
+      params.push(r.dbKey, r.windowStart, r.windowMs)
+      return `($${params.length - 2}, $${params.length - 1}, $${params.length}, 1)`
+    })
+    .join(", ")
+
+  return {
+    text: `INSERT INTO rate_limit_counters (key, window_start, window_ms, count)
+           VALUES ${values}
+           ON CONFLICT (key, window_start) DO UPDATE SET count = rate_limit_counters.count + 1
+           RETURNING key, count`,
+    params,
+    interpret: (returned) => {
+      const countByKey = new Map(returned.map((r) => [String(r.key), Number(r.count ?? 1)]))
+      const out = new Map<RateLimitKey, RateLimitResult>()
+      for (const r of rows) {
+        const count = countByKey.get(r.dbKey) ?? 1
+        out.set(r.key, {
+          success: count <= LIMITS[r.key].limit,
+          limit: LIMITS[r.key].limit,
+          remaining: Math.max(0, LIMITS[r.key].limit - count),
+          reset: r.windowStart + r.windowMs,
+        })
+      }
+      return out
+    },
+  }
+}
+
 export async function checkRateLimits(
   checks: readonly { key: RateLimitKey; identifier: string }[],
 ): Promise<Map<RateLimitKey, RateLimitResult>> {

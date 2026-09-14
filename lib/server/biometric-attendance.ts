@@ -23,34 +23,59 @@ export type ResolvedDevice = { tenantId: string; deviceId: string }
 const OWNER_CONTEXT = normalizeTenantContext(undefined, "owner")
 
 /**
- * Serial → tenant, cached for a few seconds.
+ * The whole gate a heartbeat passes through, in ONE round trip.
  *
- * ⚠ WHY A CACHE AT ALL. The terminals poll every few minutes and ~96% of those requests carry no
- * punches, yet each one paid a cross-tenant lookup before anything else could happen. Devices are
- * registered once and then not touched: production has two rows in biometric_devices, and the
- * answer to "which tenant owns serial X" is the same on every heartbeat for months at a time.
+ * ⚠ THIS REPLACES A CACHE, AND THE CACHE WAS A SECURITY HOLE I PUT THERE. The first attempt at
+ * cutting the heartbeat's four sequential round trips kept a 15-second serial→tenant cache. A
+ * cache hit skips the `active = TRUE` in the lookup below, nothing downstream re-checks it, and
+ * the device route toggles `active` on a PUT that never invalidated anything — so DEACTIVATING A
+ * TERMINAL LEFT IT ABLE TO WRITE ATTENDANCE for up to fifteen seconds, on any warm instance that
+ * had cached it. Raised by Greptile on PR #15, 2026-09-13.
  *
- * ⚠ AND WHY IT IS SHORT. This is the gate that decides which tenant's data a device may write to,
- * so a stale entry is an authorisation decision made on old information. Deactivating a device has
- * to take effect promptly, which is why the window is seconds rather than minutes and why a
- * NEGATIVE result is never cached — an unknown serial must keep being asked about, or a device
- * registered a moment ago would be refused until the entry expired.
+ * Invalidating on the PUT would have narrowed it and not closed it: the cache is per-instance, so
+ * other warm instances would have kept serving the stale answer until it expired regardless.
  *
- * Per-instance and therefore best-effort: serverless instances come and go, and a cold one simply
- * does the lookup. That is the correct failure mode — it costs a round trip, never correctness.
+ * Batching removes the trade instead of managing it. Rate limiting and the serial lookup were two
+ * sequential trips at the top of every request; they are now one transaction, so the latency win
+ * is the same and the authorisation check is live on every single request. `rate_limit_counters`
+ * carries no tenant_id and has RLS off, so the two statements sit happily under one owner context.
+ *
+ * A cache in front of an authorisation decision has to be justified against the worst case, not
+ * the common one. There was a way to avoid needing one.
  */
-const DEVICE_CACHE_TTL_MS = 15_000
-const deviceCache = new Map<string, { value: ResolvedDevice; expiresAt: number }>()
+export type HeartbeatGate<TLimits> = {
+  limits: TLimits
+  device: ResolvedDevice | null
+}
 
-/** Drop a serial from the cache — call after registering, renaming or deactivating a device. */
-export function forgetDeviceSerial(serialNumber: string): void {
-  deviceCache.delete(serialNumber)
+export async function resolveHeartbeatGate<TLimits>(
+  sql: NeonSql,
+  rateLimit: { text: string; params: (string | number)[]; interpret: (rows: any[]) => TLimits },
+  serialNumber: string,
+): Promise<HeartbeatGate<TLimits>> {
+  const [, , counts, devices] = (await sql.transaction([
+    // Owner context for the device lookup; rate_limit_counters carries no tenant_id and no RLS.
+    sql`SELECT set_config('app.tenant_id', '', true)`,
+    sql`SELECT set_config('app.role', 'owner', true)`,
+    sql.query(rateLimit.text, rateLimit.params),
+    sql`
+      SELECT id, tenant_id
+      FROM biometric_devices
+      WHERE serial_number = ${serialNumber}
+        AND active = TRUE
+      LIMIT 1
+    `,
+  ])) as any[][]
+
+  const device = (devices as any[])[0]
+  return {
+    // Counting and the limit comparison stay in lib/rate-limit.ts; only the execution moved here.
+    limits: rateLimit.interpret(counts as any[]),
+    device: device ? { deviceId: String(device.id), tenantId: String(device.tenant_id) } : null,
+  }
 }
 
 export async function resolveTenantByDeviceSerial(sql: NeonSql, serialNumber: string): Promise<ResolvedDevice | null> {
-  const cached = deviceCache.get(serialNumber)
-  if (cached && cached.expiresAt > Date.now()) return cached.value
-  if (cached) deviceCache.delete(serialNumber)
   return resolveTenantByDeviceSerialUncached(sql, serialNumber)
 }
 
@@ -67,10 +92,7 @@ async function resolveTenantByDeviceSerialUncached(sql: NeonSql, serialNumber: s
     `,
   )
   if (!rows.length) return null
-  const resolved = { deviceId: String((rows[0] as any).id), tenantId: String((rows[0] as any).tenant_id) }
-  // Only a hit is cached; see the note above on why a miss must not be.
-  deviceCache.set(serialNumber, { value: resolved, expiresAt: Date.now() + DEVICE_CACHE_TTL_MS })
-  return resolved
+  return { deviceId: String((rows[0] as any).id), tenantId: String((rows[0] as any).tenant_id) }
 }
 
 export async function touchDeviceLastSeen(sql: NeonSql, tenantContext: TenantContext, deviceId: string): Promise<void> {

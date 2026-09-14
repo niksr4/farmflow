@@ -26,103 +26,118 @@ const route = readFileSync(resolve(ROOT, "app/hdata.aspx/route.ts"), "utf8")
 const lib = readFileSync(resolve(ROOT, "lib/server/biometric-attendance.ts"), "utf8")
 const rateLimit = readFileSync(resolve(ROOT, "lib/rate-limit.ts"), "utf8")
 
-describe("the two rate limits share one round trip", () => {
-  it("the hot path batches them", () => {
-    // From the POST handler to the serial validation — the work every heartbeat pays for before
-    // anything is known about it. Anchored on the function, not on a name that also appears in the
-    // import block, which is what made the first version of this slice empty and vacuously green.
+describe("the gate is one round trip, and it is live every time", () => {
+  it("settles both rate limits and the device lookup together", () => {
     const postAt = route.indexOf("export async function POST")
-    const hot = route.slice(postAt, route.indexOf("if (!isValidHdataSerial", postAt))
+    const hot = route.slice(postAt, route.indexOf("if (!resolved)", postAt))
     expect(hot.length).toBeGreaterThan(200)
-    expect(hot).toContain("checkRateLimits([")
+    expect(hot).toContain("resolveHeartbeatGate(")
     expect(hot).toMatch(/key: "biometricIp"/)
     expect(hot).toMatch(/key: "biometricPunch"/)
   })
 
-  it("and still refuses when EITHER bucket is over", () => {
-    /**
-     * The failure mode of a batch is checking one and forgetting the other. The per-IP ceiling is
-     * load-bearing precisely because the per-serial bucket is keyed on attacker-supplied input —
-     * rotating the serial mints a fresh bucket every request, so per-serial limiting alone bounds
-     * nothing.
-     */
-    expect(route).toMatch(/\[\.\.\.limits\.values\(\)\]\.some\(\(result\) => !result\.success\)/)
+  it("still refuses when EITHER bucket is over", () => {
+    // The failure mode of a batch is checking one and forgetting the other. The per-IP ceiling is
+    // load-bearing because the per-serial bucket is keyed on attacker-supplied input.
+    expect(route).toMatch(/\[\.\.\.gate\.limits\.values\(\)\]\.some\(\(result\) => !result\.success\)/)
     expect(route).toContain("status: 429")
+  })
+
+  it("THERE IS NO CACHE in front of the device lookup", () => {
+    /**
+     * ⚠ THE HOLE THIS CLOSES, and I opened it. The first attempt at cutting the heartbeat's round
+     * trips cached serial→tenant for 15 seconds. A cache hit skips the `active = TRUE` in the
+     * query, nothing downstream re-checks it, and the device route toggles `active` on a PUT that
+     * invalidated nothing — so a DEACTIVATED TERMINAL COULD KEEP WRITING ATTENDANCE until the
+     * entry expired, on any warm instance that had cached it.
+     *
+     * Invalidating on the PUT would have narrowed it, not closed it: the cache is per-instance, so
+     * other instances would have served the stale answer regardless. Batching gets the same
+     * latency with the authorisation check live on every single request.
+     *
+     * A cache in front of an authorisation decision has to be justified against the worst case.
+     * Raised by Greptile on PR #15, 2026-09-13.
+     */
+    expect(lib).not.toContain("deviceCache")
+    expect(lib).not.toContain("DEVICE_CACHE_TTL_MS")
+    const gate = lib.slice(lib.indexOf("export async function resolveHeartbeatGate"))
+    expect(gate.slice(0, 1800), "the live query must still filter on active").toContain("AND active = TRUE")
+  })
+
+  it("keeps the counting and the limit comparison in lib/rate-limit.ts", () => {
+    // Only the EXECUTION moved into the batch; a second copy of the window arithmetic living in
+    // the biometric file is how the two would drift.
+    expect(rateLimit).toContain("export function buildRateLimitBatch")
+    const gate = lib.slice(lib.indexOf("export async function resolveHeartbeatGate"))
+    expect(gate.slice(0, 1800)).toContain("rateLimit.interpret(")
+    expect(gate.slice(0, 1800)).not.toMatch(/LIMITS\[/)
   })
 
   it("builds its VALUES list from placeholders, never from interpolated text", () => {
     /**
-     * `identifier` is a device serial or a client IP — attacker-supplied, and on this path the
-     * serial has NOT been validated yet, because rate limiting deliberately runs before validation.
-     * The first version of this function hand-escaped quotes into the SQL string. The escaping may
-     * even have been correct; it is not a thing to be correct about by hand.
+     * `identifier` is a device serial or client IP — attacker-supplied, and on this path NOT YET
+     * VALIDATED, because rate limiting deliberately runs before validation. The first version
+     * hand-escaped quotes into the SQL string. The escaping may even have been right; it is not a
+     * thing to be right about by hand.
      */
-    const fn = rateLimit.slice(rateLimit.indexOf("export async function checkRateLimits"))
-    const body = fn.slice(0, fn.indexOf("export async function checkRateLimit("))
+    const fn = rateLimit.slice(rateLimit.indexOf("export function buildRateLimitBatch"))
+    const body = fn.slice(0, fn.indexOf("export async function checkRateLimits"))
     expect(body).toMatch(/params\.push\(r\.dbKey, r\.windowStart, r\.windowMs\)/)
-    expect(body).toMatch(/\$\$\{params\.length - 2\}|\$\$\{params\.length/)
     expect(body, "hand-escaped quotes are back").not.toMatch(/replace\(\/'\/g/)
   })
 
-  it("fails closed for a sensitive bucket, exactly as the single-key path does", () => {
-    // Auth buckets must not silently fail open. A batch cannot tell the caller which bucket broke,
-    // so if any of them is sensitive the strictest rule has to win.
-    const fn = rateLimit.slice(rateLimit.indexOf("export async function checkRateLimits"))
-    expect(fn.slice(0, 4000)).toContain("isSensitiveRateLimitKey")
-    expect(fn.slice(0, 4000)).toContain("RateLimitUnavailableError")
-  })
-})
-
-describe("the serial lookup is cached, briefly", () => {
-  it("caches a hit", () => {
-    expect(lib).toContain("deviceCache")
-    expect(lib).toMatch(/expiresAt: Date\.now\(\) \+ DEVICE_CACHE_TTL_MS/)
-  })
-
-  it("NEVER caches a miss", () => {
-    /**
-     * An unknown serial must keep being asked about. Caching the absence means a device registered
-     * a moment ago is refused until the entry expires — a setup step that appears to fail, then
-     * works if you wait, which is the worst kind of intermittent.
-     */
-    const fn = lib.slice(lib.indexOf("async function resolveTenantByDeviceSerialUncached"))
-    const body = fn.slice(0, fn.indexOf("export async function touchDeviceLastSeen"))
-    const nullReturn = body.indexOf("if (!rows.length) return null")
-    expect(nullReturn).toBeGreaterThan(-1)
-    // The only deviceCache.set in this function comes AFTER the null return.
-    expect(body.indexOf("deviceCache.set")).toBeGreaterThan(nullReturn)
-  })
-
-  it("keeps the window to seconds, because it gates which tenant a device may write to", () => {
-    /**
-     * This is an authorisation decision, not a data read. A stale entry means a deactivated device
-     * keeps writing for the length of the TTL, so the number is deliberately small — and there is
-     * an explicit way to drop an entry when a device changes.
-     */
-    const ttl = Number(lib.match(/const DEVICE_CACHE_TTL_MS = ([\d_]+)/)?.[1]?.replace(/_/g, ""))
-    expect(ttl).toBeGreaterThan(0)
-    expect(ttl, "a cache in front of an authorisation check must expire in seconds").toBeLessThanOrEqual(30_000)
-    expect(lib).toContain("export function forgetDeviceSerial")
+  it("falls back to a plain lookup if the batch itself fails", () => {
+    // A database hiccup must not refuse a real terminal. Rate limiting fails open here exactly as
+    // it did before the batch.
+    expect(route).toMatch(/const resolved = gate\s*\n?\s*\? gate\.device/)
+    expect(route).toContain("resolveTenantByDeviceSerial(accountsSql, serialNumber)")
   })
 })
 
 describe("last_seen_at does not hold up the response", () => {
-  it("runs after the response rather than before it", () => {
-    expect(route).toMatch(/after\(\(\) => \{[\s\S]{0,120}touchDeviceLastSeen/)
+  it("RETURNS the promise to after(), rather than discarding it", () => {
+    /**
+     * `after(() => { void p })` reports itself finished the instant the request starts, so the
+     * instance can freeze before the write lands — which is precisely the failure after() exists
+     * to prevent, reintroduced by a stray `void`. Raised by Greptile on PR #15.
+     */
+    expect(route).toMatch(/after\(\(\) => touchDeviceLastSeen\(/)
+    expect(route).not.toMatch(/after\(\(\) => \{\s*void touchDeviceLastSeen/)
   })
 
   it("uses after(), not a floating promise", () => {
-    /**
-     * A serverless function can freeze the instant it responds, so an un-awaited write is not
-     * merely late — it may never run at all, and "device last seen" would quietly stop updating.
-     * after() is the platform's contract for finishing work before the freeze.
-     */
     expect(route).toContain('import { after } from "next/server"')
   })
 
   it("still swallows its own failure, because a cosmetic write must not fail a punch", () => {
-    const block = route.slice(route.indexOf("after(() => {"))
-    expect(block.slice(0, 300)).toContain("catch(() => undefined)")
+    const block = route.slice(route.indexOf("after(() => touchDeviceLastSeen"))
+    expect(block.slice(0, 200)).toContain("catch(() => undefined)")
+  })
+})
+
+describe("the monthly grid never exports a month it is not showing", () => {
+  const monthlyGrid = readFileSync(resolve(ROOT, "components/attendance-monthly-grid.tsx"), "utf8")
+
+  it("an aborted request does not clear the loading flag", () => {
+    /**
+     * ⚠ THE WINDOW A COMMENT OF MINE DENIED EXISTED. The catch returns early for an AbortError but
+     * `finally` still runs, so changing month twice quickly went: request A aborted → finally sets
+     * loading false → request B still in flight → month A's grid under month B's heading, every
+     * control enabled. Printing there produces a correct-looking sheet for the wrong month.
+     *
+     * A superseded request has nothing to say about whether the screen is still loading.
+     */
+    expect(monthlyGrid).toMatch(/if \(!signal\?\.aborted\) setLoading\(false\)/)
+  })
+
+  it("tracks which month the rows belong to", () => {
+    expect(monthlyGrid).toContain("loadedMonth")
+    expect(monthlyGrid).toMatch(/const showsPickedMonth = rows\.length > 0 && loadedMonth === month && !loading/)
+  })
+
+  it("gates BOTH the workbook and the print button on it", () => {
+    // Either one produces a document; both have to describe the heading above them.
+    expect((monthlyGrid.match(/disabled=\{!showsPickedMonth/g) ?? []).length).toBeGreaterThanOrEqual(2)
   })
 })
 

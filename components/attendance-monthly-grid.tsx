@@ -54,6 +54,12 @@ export default function AttendanceMonthlyGrid() {
   const [month, setMonth] = useState(currentMonth())
   const [buildingXlsx, setBuildingXlsx] = useState(false)
   const [data, setData] = useState<ApiResponse | null>(null)
+  /**
+   * Which month the rows on screen belong to — not the month in the picker.
+   *
+   * The two can differ, which the comment on downloadXlsx used to deny. See the note in load().
+   */
+  const [loadedMonth, setLoadedMonth] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,12 +71,27 @@ export default function AttendanceMonthlyGrid() {
       const payload = (await res.json()) as ApiResponse
       if (!res.ok || !payload?.success) throw new Error(payload?.error || "Could not load the report")
       setData(payload)
+      setLoadedMonth(targetMonth)
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return
       setError(err instanceof Error ? err.message : "Could not load the report")
       setData(null)
+      setLoadedMonth(null)
     } finally {
-      setLoading(false)
+      /**
+       * ⚠ AN ABORTED REQUEST MUST NOT CLEAR `loading`, and this used to.
+       *
+       * The catch returns early for an AbortError but `finally` still runs, so changing the month
+       * twice quickly went: request A aborted → finally sets loading false → request B still in
+       * flight → the screen shows month A's grid under month B's heading, with every control
+       * enabled. Printing there produces a correct-looking sheet for the wrong month. Raised by
+       * Greptile on PR #15, 2026-09-13, against a comment of mine claiming there was no such
+       * window.
+       *
+       * The request that was superseded has nothing to say about whether the screen is still
+       * loading; only the one that survived does.
+       */
+      if (!signal?.aborted) setLoading(false)
     }
   }, [])
 
@@ -82,10 +103,9 @@ export default function AttendanceMonthlyGrid() {
    * about the roster that nobody would notice diverging. lib/spreadsheet.ts supplies the borders,
    * the frozen header and the bolded totals.
    *
-   * The month is read from state rather than from a loaded-range snapshot because this grid
-   * reloads on every month change and shows a spinner while it does — there is no window in which
-   * the table and the picker disagree. (The yearly report has two date boxes and does need that
-   * guard; see attendance-yearly-summary.tsx.)
+   * ⚠ THE COMMENT HERE USED TO SAY there was no window in which the table and the picker
+   * disagree. There is — see the note in load() about an aborted request clearing `loading`. Every
+   * export is now gated on showsPickedMonth, so the file always describes the heading above it.
    */
   const downloadXlsx = useCallback(async () => {
     setBuildingXlsx(true)
@@ -118,6 +138,14 @@ export default function AttendanceMonthlyGrid() {
   // `days` recompute on every render -- the dependency array was there and doing nothing.
   const days = useMemo(() => data?.days ?? [], [data])
   const rows = useMemo(() => data?.rows ?? [], [data])
+  /**
+   * Everything that turns the screen into a file is gated on this.
+   *
+   * Rows exist AND they are the picked month's AND nothing newer is in flight. Any of those being
+   * false means an export would describe a different month from the heading above it — which is
+   * not a visible error, just a wrong document.
+   */
+  const showsPickedMonth = rows.length > 0 && loadedMonth === month && !loading
 
   // Which columns are Sundays, so the header can shade them the way the printed sheet does.
   const weeklyOffColumns = useMemo(() => new Set(days.filter((d) => d.isWeeklyOff).map((d) => d.iso)), [days])
@@ -158,7 +186,7 @@ export default function AttendanceMonthlyGrid() {
             variant="outline"
             size="sm"
             className="h-10 rounded-xl"
-            disabled={rows.length === 0 || buildingXlsx}
+            disabled={!showsPickedMonth || buildingXlsx}
             onClick={() => void downloadXlsx()}
           >
             <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
@@ -169,7 +197,7 @@ export default function AttendanceMonthlyGrid() {
             variant="outline"
             size="sm"
             className="h-10 rounded-xl"
-            disabled={rows.length === 0}
+            disabled={!showsPickedMonth}
             onClick={() => window.print()}
           >
             <Printer className="mr-1.5 h-3.5 w-3.5" />
