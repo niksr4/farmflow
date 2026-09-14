@@ -19,7 +19,7 @@
  */
 
 import { expect, test, type Page } from "@playwright/test"
-import { getDashboardRouteContext, waitForDashboardReady } from "./helpers"
+import { expectOwnerUser, getDashboardRouteContext, waitForDashboardReady } from "./helpers"
 
 const openAttendance = async (page: Page) => {
   const ctx = await getDashboardRouteContext(page, "attendance")
@@ -29,6 +29,79 @@ const openAttendance = async (page: Page) => {
 
 /** The workspace's own subtab row: Muster / Workers / Payroll / Attendance reports / Scanner. */
 const section = (page: Page, label: string) => page.getByRole("button", { name: label, exact: true })
+
+/** Wider than any fiscal year the product reports on, so it keeps finding data as fixtures age. */
+const TWO_YEARS_AGO = () => new Date(Date.now() - 730 * 86_400_000).toISOString().slice(0, 10)
+
+/**
+ * Opens Payroll on a tenant that actually has wages, and generates over a range that contains them.
+ *
+ * ⚠ THIS TOOK TWO WRONG ANSWERS, and both were the same failure wearing different clothes: the
+ * three payroll assertions — the entire reason this file exists — SKIPPED on every run while the
+ * suite reported green. A test that skips is not a test, and a skip that nobody reads is
+ * indistinguishable from a pass.
+ *
+ *   1. The range. The screen defaults to the 1st of the current month, dev's newest attendance is
+ *      2026-08-24, and the run was on 2026-09-14. Genuinely empty, guard fired as written.
+ *   2. The tenant, which is the real one. getDashboardRouteContext picks the FIRST tenant the
+ *      admin API returns, and on dev that is "Kodagu Test Estate" — one worker, zero attendance
+ *      records, zero picking. No date range can make that table appear.
+ *
+ * So the tenant is chosen by what it contains rather than by what order it came back in. Walking
+ * them costs a page load each and stops at the first with wages — Medappa Dev Copy is second — and
+ * it degrades honestly: if NO tenant has payroll, it skips once with a message that says so,
+ * rather than skipping silently on the one tenant that was never going to work.
+ *
+ * Non-owner accounts have a single tenant and no admin API, so they go straight to /dashboard.
+ */
+async function generatePayrollOverEverything(page: Page) {
+  const attempt = async () => {
+    const payroll = section(page, "Payroll")
+    if ((await payroll.count()) === 0) return null
+    await payroll.click()
+    await page.locator('input[type="date"]').first().fill(TWO_YEARS_AGO())
+    await page.getByRole("button", { name: "Generate" }).click()
+
+    const table = page.locator("table").first()
+    const empty = page.getByText(/No workers with activity/i)
+    await expect(table.or(empty).first()).toBeVisible({ timeout: 30000 })
+    return (await table.count()) > 0 ? table : null
+  }
+
+  if (!expectOwnerUser) {
+    await openAttendance(page)
+    const table = await attempt()
+    if (!table) test.skip(true, "this tenant has no attendance or picking activity at all")
+    return table!
+  }
+
+  const response = await page.request.get("/api/admin/tenants")
+  expect(response.ok(), "the owner must be able to list tenants to pick one with data").toBe(true)
+  const tenants = ((await response.json())?.tenants ?? [])
+    .map((entry: { id?: string; name?: string }) => ({
+      id: String(entry?.id || "").trim(),
+      name: String(entry?.name || "").trim(),
+    }))
+    .filter((entry: { id: string }) => Boolean(entry.id))
+  expect(tenants.length, "no tenants to preview").toBeGreaterThan(0)
+
+  for (const tenant of tenants) {
+    const params = new URLSearchParams({
+      tab: "attendance",
+      previewTenantId: tenant.id,
+      previewRole: "admin",
+    })
+    if (tenant.name) params.set("previewTenantName", tenant.name)
+    await page.goto(`/dashboard?${params.toString()}`)
+    await waitForDashboardReady(page)
+
+    const table = await attempt()
+    if (table) return table
+  }
+
+  test.skip(true, `no tenant has any payroll activity (checked ${tenants.length})`)
+  throw new Error("unreachable")
+}
 
 test.describe("muster", () => {
   test("opens on the roll, with a day selected and a roster beneath it", async ({ page }) => {
@@ -80,18 +153,7 @@ test.describe("payroll", () => {
      * fixture with rules on; this proves it for whatever `usesRules` the real API decides, which
      * is the input that actually varies between tenants.
      */
-    await openAttendance(page)
-
-    const payroll = section(page, "Payroll")
-    if ((await payroll.count()) === 0) test.skip(true, "labour management not enabled for this account")
-    await payroll.click()
-
-    await page.getByRole("button", { name: "Generate" }).click()
-
-    const table = page.locator("table").first()
-    const empty = page.getByText(/No workers with activity/i)
-    await expect(table.or(empty).first()).toBeVisible({ timeout: 30000 })
-    if ((await table.count()) === 0) test.skip(true, "no payroll activity in this period")
+    const table = await generatePayrollOverEverything(page)
 
     /** Column slots, expanding colSpan — the footer's first cell legitimately covers two. */
     const widths = await table.evaluate((node) => {
@@ -107,17 +169,7 @@ test.describe("payroll", () => {
 
   test("the total is the sum of the rows above it", async ({ page }) => {
     // A footer that does not sum is the failure this screen cannot afford, whatever the columns do.
-    await openAttendance(page)
-
-    const payroll = section(page, "Payroll")
-    if ((await payroll.count()) === 0) test.skip(true, "labour management not enabled for this account")
-    await payroll.click()
-    await page.getByRole("button", { name: "Generate" }).click()
-
-    const table = page.locator("table").first()
-    const empty = page.getByText(/No workers with activity/i)
-    await expect(table.or(empty).first()).toBeVisible({ timeout: 30000 })
-    if ((await table.count()) === 0) test.skip(true, "no payroll activity in this period")
+    const table = await generatePayrollOverEverything(page)
 
     const sums = await table.evaluate((node) => {
       const t = node as HTMLTableElement
@@ -148,19 +200,14 @@ test.describe("payroll", () => {
   test("offers both exports once there is something to export", async ({ page }) => {
     // The CSV existed for months; the formatted workbook is what an estate office files.
     await openAttendance(page)
-
     const payroll = section(page, "Payroll")
     if ((await payroll.count()) === 0) test.skip(true, "labour management not enabled for this account")
     await payroll.click()
-
-    // Nothing generated yet, so nothing to hand out.
+    // Nothing generated yet, so nothing to hand out. Asserted BEFORE the helper runs, because the
+    // helper generates -- and the point is that the buttons are absent until it has.
     await expect(page.getByRole("button", { name: "CSV" })).toHaveCount(0)
 
-    await page.getByRole("button", { name: "Generate" }).click()
-    const table = page.locator("table").first()
-    const empty = page.getByText(/No workers with activity/i)
-    await expect(table.or(empty).first()).toBeVisible({ timeout: 30000 })
-    if ((await table.count()) === 0) test.skip(true, "no payroll activity in this period")
+    await generatePayrollOverEverything(page)
 
     await expect(page.getByRole("button", { name: "CSV" })).toBeVisible()
     await expect(page.getByRole("button", { name: "XLSX" })).toBeVisible()
