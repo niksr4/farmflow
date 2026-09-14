@@ -300,9 +300,9 @@ export default function QualityGradingTab() {
         <CardContent className="space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label htmlFor="quality-location">Location</Label>
               <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                <SelectTrigger>
+                <SelectTrigger id="quality-location">
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>
@@ -329,29 +329,32 @@ export default function QualityGradingTab() {
               </Popover>
             </div>
             <div className="space-y-2">
-              <Label>Coffee Type</Label>
-              <Input value={coffeeType} onChange={(event) => setCoffeeType(event.target.value)} placeholder="Arabica" />
+              <Label htmlFor="quality-coffee-type">Coffee Type</Label>
+              <Input id="quality-coffee-type" value={coffeeType} onChange={(event) => setCoffeeType(event.target.value)} placeholder="Arabica" />
             </div>
             <div className="space-y-2">
-              <Label>Process Type</Label>
-              <Input value={processType} onChange={(event) => setProcessType(event.target.value)} placeholder="Washed" />
+              <Label htmlFor="quality-process-type">Process Type</Label>
+              <Input id="quality-process-type" value={processType} onChange={(event) => setProcessType(event.target.value)} placeholder="Washed" />
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="quality-grade"
                 label="Grade"
                 tooltip="Estate grading label or screen grade (e.g., AA, AB, PB)."
               />
-              <Input value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="AA, AB, PB" />
+              <Input id="quality-grade" value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="AA, AB, PB" />
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="quality-moisture"
                 label="Moisture (%)"
                 tooltip="Moisture at grading time; keep within safe storage range."
               />
               <Input
+                id="quality-moisture"
                 value={moisture}
                 onChange={handleNonNegativeChange(setMoisture)}
                 onKeyDown={blockInvalidNumberKey}
@@ -361,15 +364,17 @@ export default function QualityGradingTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Screen Size</Label>
-              <Input value={screenSize} onChange={(event) => setScreenSize(event.target.value)} />
+              <Label htmlFor="quality-screen-size">Screen Size</Label>
+              <Input id="quality-screen-size" value={screenSize} onChange={(event) => setScreenSize(event.target.value)} />
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="quality-defects-count"
                 label="Defects Count"
                 tooltip="Number of defects found in the sample."
               />
               <Input
+                id="quality-defects-count"
                 value={defectsCount}
                 onChange={handleNonNegativeChange(setDefectsCount)}
                 onKeyDown={blockInvalidNumberKey}
@@ -380,10 +385,12 @@ export default function QualityGradingTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="quality-sample-weight"
                 label="Sample Weight (g)"
                 tooltip="Sample weight used to count defects and calculate outturn."
               />
               <Input
+                id="quality-sample-weight"
                 value={sampleWeight}
                 onChange={handleNonNegativeChange(setSampleWeight)}
                 onKeyDown={blockInvalidNumberKey}
@@ -394,10 +401,12 @@ export default function QualityGradingTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="quality-outturn"
                 label="Outturn (%)"
                 tooltip="Estimated clean coffee yield after hulling."
               />
               <Input
+                id="quality-outturn"
                 value={outturnPct}
                 onChange={handleNonNegativeChange(setOutturnPct)}
                 onKeyDown={blockInvalidNumberKey}
@@ -408,10 +417,12 @@ export default function QualityGradingTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="quality-cup-score"
                 label="Cup Score"
                 tooltip="Cupping score or internal sensory rating."
               />
               <Input
+                id="quality-cup-score"
                 value={cupScore}
                 onChange={handleNonNegativeChange(setCupScore)}
                 onKeyDown={blockInvalidNumberKey}
@@ -421,25 +432,26 @@ export default function QualityGradingTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Buyer Reference</Label>
-              <Input value={buyerReference} onChange={(event) => setBuyerReference(event.target.value)} />
+              <Label htmlFor="quality-buyer-reference">Buyer Reference</Label>
+              <Input id="quality-buyer-reference" value={buyerReference} onChange={(event) => setBuyerReference(event.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Graded By</Label>
-              <Input value={gradedBy} onChange={(event) => setGradedBy(event.target.value)} />
+              <Label htmlFor="quality-graded-by">Graded By</Label>
+              <Input id="quality-graded-by" value={gradedBy} onChange={(event) => setGradedBy(event.target.value)} />
             </div>
           </div>
 
           <div className="space-y-2">
             <FieldLabel
+              htmlFor="quality-defect-notes"
               label="Defect Notes"
               tooltip="Record defect types, cup notes, or corrective actions."
             />
-            <Textarea value={defectNotes} onChange={(event) => setDefectNotes(event.target.value)} />
+            <Textarea id="quality-defect-notes" value={defectNotes} onChange={(event) => setDefectNotes(event.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Notes</Label>
-            <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <Label htmlFor="quality-notes">Notes</Label>
+            <Textarea id="quality-notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
 
           <Button onClick={handleSave} disabled={saving}>

@@ -1539,9 +1539,10 @@ export default function SalesTab({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {/* Date */}
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label htmlFor="sale-date">Date</Label>
               {isMobile ? (
                 <input
+                  id="sale-date"
                   type="date"
                   value={format(date, "yyyy-MM-dd")}
                   onChange={e => { const d = new Date(e.target.value + "T00:00:00"); if (!isNaN(d.getTime())) setDate(d) }}
@@ -1568,10 +1569,12 @@ export default function SalesTab({
             {/* Batch Reference */}
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="sale-batch-no"
                 label="Batch Reference"
                 tooltip="Internal batch or ledger reference (optional, helps reconciliation)."
               />
               <Input
+                id="sale-batch-no"
                 type="text"
                 placeholder="Optional batch or ledger reference"
                 value={batchNo}
@@ -1582,9 +1585,10 @@ export default function SalesTab({
 
             {/* Location */}
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label htmlFor="sale-location">Location</Label>
               {isMobile ? (
                 <select
+                  id="sale-location"
                   value={selectedLocationId}
                   onChange={e => setSelectedLocationId(e.target.value)}
                   disabled={!locations.length}
@@ -1597,7 +1601,7 @@ export default function SalesTab({
                 </select>
               ) : (
                 <Select value={selectedLocationId} onValueChange={setSelectedLocationId} disabled={!locations.length}>
-                  <SelectTrigger>
+                  <SelectTrigger id="sale-location">
                     <SelectValue placeholder={locations.length ? "Select location" : "Add a location first"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -1618,9 +1622,10 @@ export default function SalesTab({
 
             {/* Coffee Type */}
             <div className="space-y-2">
-              <Label>Coffee Type</Label>
+              <Label htmlFor="sale-coffee-type">Coffee Type</Label>
               {isMobile ? (
                 <select
+                  id="sale-coffee-type"
                   value={coffeeType}
                   onChange={e => setCoffeeType(e.target.value)}
                   className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1631,7 +1636,7 @@ export default function SalesTab({
                 </select>
               ) : (
                 <Select value={coffeeType} onValueChange={setCoffeeType}>
-                  <SelectTrigger>
+                  <SelectTrigger id="sale-coffee-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1648,11 +1653,13 @@ export default function SalesTab({
             {/* Bag Type */}
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="sale-bag-type"
                 label="Bag Type"
                 tooltip="Select dry parchment or dry cherry to match dispatch."
               />
               {isMobile ? (
                 <select
+                  id="sale-bag-type"
                   value={bagType}
                   onChange={e => setBagType(e.target.value)}
                   className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1663,7 +1670,7 @@ export default function SalesTab({
                 </select>
               ) : (
                 <Select value={bagType} onValueChange={setBagType}>
-                  <SelectTrigger>
+                  <SelectTrigger id="sale-bag-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1680,10 +1687,12 @@ export default function SalesTab({
             {/* KGs Sold */}
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="sale-kgs-sold"
                 label="KGs Sold"
                 tooltip={`Enter kilograms sold. We'll convert to bags using ${bagWeightKg} kg per bag.`}
               />
               <Input
+                id="sale-kgs-sold"
                 type="number" inputMode="decimal"
                 step="0.01"
                 min={0}
@@ -1727,10 +1736,12 @@ export default function SalesTab({
             {/* Price per Bag */}
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="sale-price-per-bag"
                 label="Price per bag (Rs)"
                 tooltip="Selling price per bag; revenue auto-calculates."
               />
               <Input
+                id="sale-price-per-bag"
                 type="number" inputMode="decimal"
                 step="0.01"
                 min={0}
@@ -1755,10 +1766,12 @@ export default function SalesTab({
             {/* Bank Account */}
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="sale-bank-account"
                 label="Bank Account"
                 tooltip="Account reference used for settlement or audit trail."
               />
               <Input
+                id="sale-bank-account"
                 type="text"
                 placeholder="Optional bank or settlement reference"
                 value={bankAccount}
@@ -1769,10 +1782,12 @@ export default function SalesTab({
             {/* Buyer */}
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="sale-buyer-name"
                 label="Buyer"
                 tooltip="Buyer name for receipts, reconciliation, and aging."
               />
               <Input
+                id="sale-buyer-name"
                 type="text"
                 list="buyer-suggestions"
                 placeholder="Buyer name"
@@ -1788,8 +1803,9 @@ export default function SalesTab({
 
             {/* Notes */}
             <div className="space-y-2 md:col-span-2 xl:col-span-2">
-              <Label>Sale notes</Label>
+              <Label htmlFor="sale-notes">Sale notes</Label>
               <Input
+                id="sale-notes"
                 type="text"
                 placeholder="Transport note, payment note, sample note, or anything worth remembering..."
                 value={notes}

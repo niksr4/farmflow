@@ -144,7 +144,7 @@ export default function YieldForecastTab() {
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coffee Scope</p>
               <Select value={coffeeScope} onValueChange={(value) => setCoffeeScope(value as CoffeeScope)}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Coffee scope">
                   <SelectValue placeholder="Select coffee scope" />
                 </SelectTrigger>
                 <SelectContent>

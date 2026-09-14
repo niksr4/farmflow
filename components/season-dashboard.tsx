@@ -18,6 +18,7 @@ import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { useRouter, useSearchParams } from "next/navigation"
 import WorkspacePageShell from "@/components/workspace-page-shell"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 type SeasonBreakdown = {
   coffeeType: string
@@ -971,7 +972,7 @@ export default function SeasonDashboard() {
     }
   }
 
-  const handleSaveBagWeight = async () => {
+  const handleSaveBagWeightUnguarded = async () => {
     const nextValue = Number(bagWeightInput)
     if (!Number.isFinite(nextValue)) {
       toast({ title: "Invalid value", description: "Bag weight must be a number", variant: "destructive" })
@@ -988,6 +989,9 @@ export default function SeasonDashboard() {
       setIsSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only takes effect on the next render. See lib/single-flight.ts.
+  const handleSaveBagWeight = useSingleFlight(handleSaveBagWeightUnguarded)
 
   const seasonShellStats = [
     {
@@ -1059,9 +1063,10 @@ export default function SeasonDashboard() {
           </div>
           {isAdminOrOwner && (
             <div className="rounded-2xl border border-sky-100/90 bg-white/85 p-3 shadow-sm">
-              <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bag Weight (KG)</Label>
+              <Label htmlFor="season-bag-weight" className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bag Weight (KG)</Label>
               <div className="mt-2 flex items-end gap-2">
                 <Input
+                  id="season-bag-weight"
                   value={bagWeightInput}
                   onChange={(event) => setBagWeightInput(event.target.value)}
                   type="number" inputMode="decimal"

@@ -1091,6 +1091,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                       <button
                         type="button"
                         onClick={() => handleEditRecord(record)}
+                        aria-label="Edit record"
                         className="text-stone-300 p-1.5 rounded-xl hover:bg-sky-50 hover:text-sky-500 transition-colors touch-manipulation"
                       >
                         <Pencil className="h-4 w-4" />
@@ -1100,6 +1101,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                       <button
                         type="button"
                         onClick={() => handleDeleteRecord(record.id)}
+                        aria-label="Delete record"
                         className="text-stone-300 p-1.5 rounded-xl hover:bg-red-50 hover:text-red-400 transition-colors touch-manipulation"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -1388,11 +1390,11 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                   <div className="flex items-center justify-between border-b px-3 py-2">
                     <span className="text-xs text-muted-foreground">Year</span>
                     <div className="flex items-center gap-1">
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => subYears(m, 1))} disabled={calendarMonth.getFullYear() <= 2015}>
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => subYears(m, 1))} disabled={calendarMonth.getFullYear() <= 2015} aria-label="Previous year">
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
                       <span className="w-10 text-center text-sm font-semibold tabular-nums">{calendarMonth.getFullYear()}</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => addYears(m, 1))} disabled={calendarMonth.getFullYear() >= currentYear}>
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => addYears(m, 1))} disabled={calendarMonth.getFullYear() >= currentYear} aria-label="Next year">
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1420,8 +1422,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               </div>
             )}
             <div>
-              <label className="mb-2 block text-sm font-medium">Notes (optional)</label>
-              <Input placeholder="e.g., Heavy rain in afternoon" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <label htmlFor="rainfall-notes-top" className="mb-2 block text-sm font-medium">Notes (optional)</label>
+              <Input id="rainfall-notes-top" placeholder="e.g., Heavy rain in afternoon" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
           </div>
           <div className="flex gap-1 rounded-full bg-stone-100 p-1 w-fit">
@@ -1610,10 +1612,10 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                   </div>
                   {canDelete && (
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => handleEditRecord(record)} className="h-8 w-8 p-0 hover:bg-sky-50 dark:hover:bg-sky-900/20">
+                      <Button variant="ghost" size="sm" onClick={() => handleEditRecord(record)} aria-label="Edit record" className="h-8 w-8 p-0 hover:bg-sky-50 dark:hover:bg-sky-900/20">
                         <Pencil className="h-4 w-4 text-sky-600" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteRecord(record.id)} className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteRecord(record.id)} aria-label="Delete record" className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20">
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     </div>

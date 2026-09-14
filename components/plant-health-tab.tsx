@@ -153,9 +153,9 @@ export default function PlantHealthTab() {
             </div>
 
             <div className="space-y-2">
-              <Label>Crop type</Label>
+              <Label htmlFor="plant-health-crop">Crop type</Label>
               <Select value={cropType} onValueChange={setCropType}>
-                <SelectTrigger>
+                <SelectTrigger id="plant-health-crop">
                   <SelectValue placeholder="Select crop type" />
                 </SelectTrigger>
                 <SelectContent>

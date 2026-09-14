@@ -364,7 +364,7 @@ export function LocationsSection({
             <TableBody>
               {locations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     No locations found.
                   </TableCell>
                 </TableRow>
@@ -373,7 +373,7 @@ export function LocationsSection({
                   <Fragment key={`group-${group.estate || "__ungrouped__"}`}>
                     {showLocationGroupLabels && (
                       <TableRow key={`group-${group.estate || "__ungrouped__"}`} className="bg-muted/40 hover:bg-muted/40">
-                        <TableCell colSpan={4} className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <TableCell colSpan={6} className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {group.estate || "No estate set"}
                         </TableCell>
                       </TableRow>
@@ -690,9 +690,9 @@ export function TenantUsersSection({
                 />
               </div>
               <div className="space-y-2">
-                <Label>Role</Label>
+                <Label htmlFor="new-user-role">Role</Label>
                 <Select value={newRole} onValueChange={(value) => onNewRoleChange(value as RoleOption)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="new-user-role">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -870,9 +870,9 @@ export function UserModuleOverridesSection({
           </p>
         </div>
         <div className="space-y-2">
-          <Label>Select User</Label>
+          <Label htmlFor="user-module-overrides-select-user">Select User</Label>
           <Select value={selectedUserId} onValueChange={onSelectedUserIdChange} disabled={!tenantId || users.length === 0}>
-            <SelectTrigger>
+            <SelectTrigger id="user-module-overrides-select-user">
               <SelectValue placeholder={users.length ? "Choose a user" : "No users available"} />
             </SelectTrigger>
             <SelectContent>
@@ -995,9 +995,9 @@ export function UserLocationOverridesSection({
           </p>
         </div>
         <div className="space-y-2">
-          <Label>Select User</Label>
+          <Label htmlFor="user-location-overrides-select-user">Select User</Label>
           <Select value={selectedUserId} onValueChange={onSelectedUserIdChange} disabled={!tenantId || users.length === 0}>
-            <SelectTrigger>
+            <SelectTrigger id="user-location-overrides-select-user">
               <SelectValue placeholder={users.length ? "Choose a user" : "No users available"} />
             </SelectTrigger>
             <SelectContent>

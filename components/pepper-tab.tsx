@@ -499,13 +499,13 @@ export function PepperTab() {
 
             {/* Location Selector */}
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label htmlFor="pepper-location">Location</Label>
               <Select
                 value={selectedLocationId}
                 onValueChange={(value) => setSelectedLocationId(value)}
                 disabled={locations.length === 0}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="pepper-location" className="w-full">
                   <SelectValue placeholder={locations.length ? "Select location" : "No locations"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -565,8 +565,8 @@ export function PepperTab() {
             </div>
 
             <div className="space-y-2">
-              <Label>Green Pepper %</Label>
-              <Input value={greenPepperPercent} disabled className="bg-muted" />
+              <Label htmlFor="pepper-green-percent">Green Pepper %</Label>
+              <Input id="pepper-green-percent" value={greenPepperPercent} disabled className="bg-muted" />
             </div>
 
             <div className="space-y-2">
@@ -582,8 +582,8 @@ export function PepperTab() {
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label>Dry Pepper %</Label>
-              <Input value={dryPepperPercent} disabled className="bg-muted" />
+              <Label htmlFor="pepper-dry-percent">Dry Pepper %</Label>
+              <Input id="pepper-dry-percent" value={dryPepperPercent} disabled className="bg-muted" />
             </div>
 
             <div className="space-y-2 md:col-span-2">

@@ -1259,7 +1259,7 @@ export default function LaborDeploymentTab({
                           <div className="flex gap-2">
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
+                                <Button variant="ghost" size="icon" aria-label="Edit entry" onClick={() => startEdit(deployment)}>
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
@@ -1270,6 +1270,7 @@ export default function LaborDeploymentTab({
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  aria-label="Delete entry"
                                   onClick={() => handleDeleteWithUndo(deployment)}
                                 >
                                   <Trash2 className="h-4 w-4" />

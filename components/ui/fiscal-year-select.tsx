@@ -31,9 +31,9 @@ export function FiscalYearSelect({
   if (variant === "full") {
     return (
       <div className={className}>
-        <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</Label>
+        <Label htmlFor="fiscal-year-select" className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</Label>
         <Select value={value.label} onValueChange={handleChange}>
-          <SelectTrigger className="mt-2 w-full min-w-[220px] bg-white sm:min-w-[240px]">
+          <SelectTrigger id="fiscal-year-select" className="mt-2 w-full min-w-[220px] bg-white sm:min-w-[240px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

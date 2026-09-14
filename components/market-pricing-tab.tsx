@@ -15,6 +15,7 @@ import { TrendingUp, TrendingDown, Users, Plus, Phone, Mail, IndianRupee, Bell, 
 import { formatDateOnly } from "@/lib/date-utils"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
 interface Buyer {
@@ -146,7 +147,7 @@ export default function MarketPricingTab() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const handleAddBuyer = async (e: React.FormEvent) => {
+  const handleAddBuyerUnguarded = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!buyerForm.name.trim()) return
     setSubmitting(true)
@@ -168,7 +169,7 @@ export default function MarketPricingTab() {
     }
   }
 
-  const handleAddPriceRecord = async (e: React.FormEvent) => {
+  const handleAddPriceRecordUnguarded = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!priceForm.price_per_kg || !priceForm.record_date) return
     setSubmitting(true)
@@ -204,6 +205,11 @@ export default function MarketPricingTab() {
     }
   }
 
+  // Mobile double-tap guard: `disabled` only takes effect on the next render, so two fast taps
+  // both enter the handler before the first one flips isSubmitting. See lib/single-flight.ts.
+  const handleAddBuyer = useSingleFlight(handleAddBuyerUnguarded)
+  const handleAddPriceRecord = useSingleFlight(handleAddPriceRecordUnguarded)
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -214,7 +220,6 @@ export default function MarketPricingTab() {
   }
 
   const activeBuyers = buyers.filter((b) => b.active)
-  const recentPrices = priceRecords.slice(0, 5)
   const avgPrice =
     priceRecords.length > 0
       ? priceRecords.reduce((sum, r) => sum + parseFloat(r.price_per_kg), 0) / priceRecords.length
@@ -344,9 +349,9 @@ export default function MarketPricingTab() {
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Trigger when price is</Label>
+              <Label htmlFor="market-alert-direction" className="text-xs">Trigger when price is</Label>
               <Select value={alertAbove ? "above" : "below"} onValueChange={(v) => setAlertAbove(v === "above")}>
-                <SelectTrigger className="h-8 w-24 text-xs">
+                <SelectTrigger id="market-alert-direction" className="h-8 w-24 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -356,8 +361,9 @@ export default function MarketPricingTab() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">₹/kg threshold</Label>
+              <Label htmlFor="market-alert-threshold" className="text-xs">₹/kg threshold</Label>
               <Input
+                id="market-alert-threshold"
                 type="number" inputMode="decimal"
                 className="h-8 w-32 text-sm font-mono"
                 placeholder="e.g. 12000"
@@ -444,8 +450,9 @@ export default function MarketPricingTab() {
               </div>
               <form onSubmit={handleAddBuyer} className="space-y-4 pt-2">
                 <div className="space-y-1.5">
-                  <Label>Name *</Label>
+                  <Label htmlFor="market-buyer-name">Name *</Label>
                   <Input
+                    id="market-buyer-name"
                     value={buyerForm.name}
                     onChange={(e) => setBuyerForm((f) => ({ ...f, name: e.target.value }))}
                     placeholder="e.g. Coorg Coffee Coop"
@@ -453,12 +460,12 @@ export default function MarketPricingTab() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Type</Label>
+                  <Label htmlFor="market-buyer-type">Type</Label>
                   <Select
                     value={buyerForm.buyerType}
                     onValueChange={(v) => setBuyerForm((f) => ({ ...f, buyerType: v }))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="market-buyer-type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -471,16 +478,18 @@ export default function MarketPricingTab() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Contact Name</Label>
+                    <Label htmlFor="market-buyer-contact-name">Contact Name</Label>
                     <Input
+                      id="market-buyer-contact-name"
                       value={buyerForm.contact_name}
                       onChange={(e) => setBuyerForm((f) => ({ ...f, contact_name: e.target.value }))}
                       placeholder="Optional"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Phone</Label>
+                    <Label htmlFor="market-buyer-phone">Phone</Label>
                     <Input
+                      id="market-buyer-phone"
                       value={buyerForm.phone}
                       onChange={(e) => setBuyerForm((f) => ({ ...f, phone: e.target.value }))}
                       placeholder="Optional"
@@ -488,8 +497,9 @@ export default function MarketPricingTab() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Notes</Label>
+                  <Label htmlFor="market-buyer-notes">Notes</Label>
                   <Textarea
+                    id="market-buyer-notes"
                     value={buyerForm.notes}
                     onChange={(e) => setBuyerForm((f) => ({ ...f, notes: e.target.value }))}
                     placeholder="Payment history, reliability, preferences…"
@@ -570,12 +580,12 @@ export default function MarketPricingTab() {
               </div>
               <form onSubmit={handleAddPriceRecord} className="space-y-4 pt-2">
                 <div className="space-y-1.5">
-                  <Label>Buyer</Label>
+                  <Label htmlFor="market-price-buyer">Buyer</Label>
                   <Select
                     value={priceForm.buyer_id}
                     onValueChange={(v) => setPriceForm((f) => ({ ...f, buyer_id: v }))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="market-price-buyer">
                       <SelectValue placeholder="Select buyer (optional)" />
                     </SelectTrigger>
                     <SelectContent>
@@ -589,16 +599,18 @@ export default function MarketPricingTab() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Grade</Label>
+                    <Label htmlFor="market-price-grade">Grade</Label>
                     <Input
+                      id="market-price-grade"
                       value={priceForm.grade}
                       onChange={(e) => setPriceForm((f) => ({ ...f, grade: e.target.value }))}
                       placeholder="e.g. AB, PB, AA"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Variety</Label>
+                    <Label htmlFor="market-price-variety">Variety</Label>
                     <Input
+                      id="market-price-variety"
                       value={priceForm.variety}
                       onChange={(e) => setPriceForm((f) => ({ ...f, variety: e.target.value }))}
                       placeholder="e.g. Arabica"
@@ -607,8 +619,9 @@ export default function MarketPricingTab() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Price / kg (₹) *</Label>
+                    <Label htmlFor="market-price-per-kg">Price / kg (₹) *</Label>
                     <Input
+                      id="market-price-per-kg"
                       type="number" inputMode="decimal"
                       step="0.01"
                       min="0"
@@ -619,8 +632,9 @@ export default function MarketPricingTab() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Quantity (kg)</Label>
+                    <Label htmlFor="market-price-quantity">Quantity (kg)</Label>
                     <Input
+                      id="market-price-quantity"
                       type="number" inputMode="decimal"
                       step="0.01"
                       min="0"
@@ -631,8 +645,9 @@ export default function MarketPricingTab() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Date *</Label>
+                  <Label htmlFor="market-price-date">Date *</Label>
                   <Input
+                    id="market-price-date"
                     type="date"
                     value={priceForm.record_date}
                     onChange={(e) => setPriceForm((f) => ({ ...f, record_date: e.target.value }))}
@@ -640,8 +655,9 @@ export default function MarketPricingTab() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Notes</Label>
+                  <Label htmlFor="market-price-notes">Notes</Label>
                   <Textarea
+                    id="market-price-notes"
                     value={priceForm.notes}
                     onChange={(e) => setPriceForm((f) => ({ ...f, notes: e.target.value }))}
                     placeholder="Negotiation notes, conditions…"

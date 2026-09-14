@@ -1367,7 +1367,7 @@ export default function InventorySystem() {
   }, [])
 
 
-  const handleCreateLocation = async () => {
+  const handleCreateLocationUnguarded = async () => {
     if (!newLocationName.trim()) {
       toast({
         title: "Location name required",
@@ -1413,7 +1413,7 @@ export default function InventorySystem() {
     }
   }
 
-  const handleAddStarterCodes = async () => {
+  const handleAddStarterCodesUnguarded = async () => {
     const starterCodes = [
       { code: "LABOR", reference: "Wages and picker payments" },
       { code: "SUPPLIES", reference: "Materials and farm inputs" },
@@ -1447,7 +1447,7 @@ export default function InventorySystem() {
     }
   }
 
-  const handleSaveOnboardingDefaults = async () => {
+  const handleSaveOnboardingDefaultsUnguarded = async () => {
     const nextEstateName = onboardingEstateName.trim()
     const nextBagWeightKg = Number(onboardingBagWeightKg)
 
@@ -1491,6 +1491,13 @@ export default function InventorySystem() {
       setIsSavingOnboardingDefaults(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only takes effect on the next render, so two fast taps
+  // both enter the handler before the first one flips isCreating/isAdding/isSaving. See
+  // lib/single-flight.ts (same pattern already used for handleRecordTransaction below).
+  const handleCreateLocation = useSingleFlight(handleCreateLocationUnguarded)
+  const handleAddStarterCodes = useSingleFlight(handleAddStarterCodesUnguarded)
+  const handleSaveOnboardingDefaults = useSingleFlight(handleSaveOnboardingDefaultsUnguarded)
 
   const handleLogout = async () => {
     posthog.capture("user_signed_out", {

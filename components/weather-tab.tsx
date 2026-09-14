@@ -435,7 +435,7 @@ export default function WeatherTab() {
             </div>
             <div className="w-full sm:w-[220px]">
               <Select value={selectedRegionId} onValueChange={setSelectedRegionId}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Select weather region">
                 <SelectValue placeholder="Select region" />
                 </SelectTrigger>
                 <SelectContent>

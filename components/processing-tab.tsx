@@ -1181,9 +1181,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             isMobile && "sticky top-0 z-10 -mx-5 px-5 pt-1 pb-3 bg-white/95 backdrop-blur-sm border-b border-stone-100",
           )}>
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label htmlFor="processing-location">Location</Label>
               {isMobile ? (
                 <select
+                  id="processing-location"
                   value={selectedLocationId}
                   onChange={e => setSelectedLocationId(e.target.value)}
                   className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1195,7 +1196,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </select>
               ) : (
                 <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="processing-location">
                     <SelectValue placeholder="Select location" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1209,9 +1210,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               )}
             </div>
             <div className="space-y-2">
-              <Label>Coffee Type</Label>
+              <Label htmlFor="processing-coffee-type">Coffee Type</Label>
               {isMobile ? (
                 <select
+                  id="processing-coffee-type"
                   value={coffeeType}
                   onChange={e => setCoffeeType(e.target.value)}
                   className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1222,7 +1224,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </select>
               ) : (
                 <Select value={coffeeType} onValueChange={setCoffeeType}>
-                  <SelectTrigger>
+                  <SelectTrigger id="processing-coffee-type">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1236,10 +1238,11 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               )}
             </div>
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label htmlFor="processing-date">Date</Label>
               <div className="flex items-center gap-2">
                 {isMobile ? (
                   <input
+                    id="processing-date"
                     type="date"
                     value={format(date, "yyyy-MM-dd")}
                     onChange={e => { const d = new Date(e.target.value + "T00:00:00"); if (!isNaN(d.getTime())) setDate(d) }}
@@ -1307,10 +1310,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-2")}>
                   <div>
                     <FieldLabel
+                      htmlFor="processing-crop-today"
                       label="Intake today (kg)"
                       tooltip="Total cherry received today before sorting."
                     />
                     <Input
+                      id="processing-crop-today"
                       type="number" inputMode="decimal"
                       step="0.01"
                       min={0}
@@ -1326,8 +1331,9 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                     />
                   </div>
                   {showAutoCalc && <div>
-                    <Label>Intake to date (kg)</Label>
+                    <Label htmlFor="processing-crop-todate">Intake to date (kg)</Label>
                     <Input
+                      id="processing-crop-todate"
                       type="number" inputMode="decimal"
                       step="0.01"
                       value={record.crop_todate}
@@ -1347,10 +1353,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
                     <FieldLabel
+                      htmlFor="processing-ripe-today"
                       label="Ripe today (kg)"
                       tooltip="Ripe cherry selected for washed processing."
                     />
                     <Input
+                      id="processing-ripe-today"
                       type="number" inputMode="decimal"
                       step="0.01"
                       min={0}
@@ -1361,13 +1369,13 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                     />
                   </div>
                   {showAutoCalc && <div>
-                    <Label>Ripe To Date (kg)</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.ripe_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-ripe-todate">Ripe To Date (kg)</Label>
+                    <Input id="processing-ripe-todate" type="number" inputMode="decimal" step="0.01" value={record.ripe_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
-                    <Label>Ripe %</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.ripe_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-ripe-percent">Ripe %</Label>
+                    <Input id="processing-ripe-percent" type="number" inputMode="decimal" step="0.01" value={record.ripe_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1379,17 +1387,17 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardHeader>
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
-                    <FieldLabel label="Green today (kg)" tooltip="Under-ripe cherry separated from ripe intake." />
-                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.green_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("green_today")} placeholder="Enter green today" />
+                    <FieldLabel htmlFor="processing-green-today" label="Green today (kg)" tooltip="Under-ripe cherry separated from ripe intake." />
+                    <Input id="processing-green-today" type="number" inputMode="decimal" step="0.01" min={0} value={record.green_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("green_today")} placeholder="Enter green today" />
                   </div>
                   {showAutoCalc && <div>
-                    <Label>Green To Date (kg)</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.green_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-green-todate">Green To Date (kg)</Label>
+                    <Input id="processing-green-todate" type="number" inputMode="decimal" step="0.01" value={record.green_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
-                    <Label>Green %</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.green_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-green-percent">Green %</Label>
+                    <Input id="processing-green-percent" type="number" inputMode="decimal" step="0.01" value={record.green_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1401,17 +1409,17 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardHeader>
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
-                    <FieldLabel label="Floaters today (kg)" tooltip="Low-density floaters removed during water sorting." />
-                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.float_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("float_today")} placeholder="Enter float today" />
+                    <FieldLabel htmlFor="processing-float-today" label="Floaters today (kg)" tooltip="Low-density floaters removed during water sorting." />
+                    <Input id="processing-float-today" type="number" inputMode="decimal" step="0.01" min={0} value={record.float_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("float_today")} placeholder="Enter float today" />
                   </div>
                   {showAutoCalc && <div>
-                    <Label>Float To Date (kg)</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.float_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-float-todate">Float To Date (kg)</Label>
+                    <Input id="processing-float-todate" type="number" inputMode="decimal" step="0.01" value={record.float_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
-                    <Label>Float %</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.float_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-float-percent">Float %</Label>
+                    <Input id="processing-float-percent" type="number" inputMode="decimal" step="0.01" value={record.float_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1423,13 +1431,13 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardHeader>
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-2")}>
                   <div>
-                    <FieldLabel label="Wet Parchment (kg)" tooltip="Weight after pulping, fermentation, and washing." />
-                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.wet_parchment ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("wet_parchment")} placeholder="Enter wet parchment" />
+                    <FieldLabel htmlFor="processing-wet-parchment" label="Wet Parchment (kg)" tooltip="Weight after pulping, fermentation, and washing." />
+                    <Input id="processing-wet-parchment" type="number" inputMode="decimal" step="0.01" min={0} value={record.wet_parchment ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("wet_parchment")} placeholder="Enter wet parchment" />
                     <AiValidationHint warning={wetParchValidation?.warning ?? null} severity={wetParchValidation?.severity ?? null} validating={wetParchValidating} />
                   </div>
                   {showAutoCalc && <div>
-                    <Label>FR-WP %</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.fr_wp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-fr-wp-percent">FR-WP %</Label>
+                    <Input id="processing-fr-wp-percent" type="number" inputMode="decimal" step="0.01" value={record.fr_wp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (WP/Ripe Today)</p>
                   </div>}
                 </CardContent>
@@ -1441,17 +1449,17 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardHeader>
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
-                    <FieldLabel label="Dry Parchment (kg)" tooltip="Weight after drying to storage moisture." />
-                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_parch ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_parch")} placeholder="Enter dry parch" />
+                    <FieldLabel htmlFor="processing-dry-parch" label="Dry Parchment (kg)" tooltip="Weight after drying to storage moisture." />
+                    <Input id="processing-dry-parch" type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_parch ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_parch")} placeholder="Enter dry parch" />
                   </div>
                   {showAutoCalc && <div>
-                    <Label>Dry Parchment To Date (kg)</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_p_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-dry-p-todate">Dry Parchment To Date (kg)</Label>
+                    <Input id="processing-dry-p-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_p_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
-                    <Label>WP-DP %</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.wp_dp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-wp-dp-percent">WP-DP %</Label>
+                    <Input id="processing-wp-dp-percent" type="number" inputMode="decimal" step="0.01" value={record.wp_dp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (DP/WP)</p>
                   </div>}
                 </CardContent>
@@ -1463,17 +1471,17 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardHeader>
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
-                    <FieldLabel label="Dry Cherry (kg)" tooltip="Natural-process dried cherry weight." />
-                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_cherry ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_cherry")} placeholder="Enter dry cherry" />
+                    <FieldLabel htmlFor="processing-dry-cherry" label="Dry Cherry (kg)" tooltip="Natural-process dried cherry weight." />
+                    <Input id="processing-dry-cherry" type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_cherry ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_cherry")} placeholder="Enter dry cherry" />
                   </div>
                   {showAutoCalc && <div>
-                    <Label>Dry Cherry To Date (kg)</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-dry-cherry-todate">Dry Cherry To Date (kg)</Label>
+                    <Input id="processing-dry-cherry-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
-                    <Label>Dry Cherry %</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-dry-cherry-percent">Dry Cherry %</Label>
+                    <Input id="processing-dry-cherry-percent" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1485,23 +1493,23 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Dry Parchment Bags</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-dry-p-bags">Dry Parchment Bags</Label>
+                    <Input id="processing-dry-p-bags" type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
                   </div>
                   <div>
-                    <Label>Dry Parchment Bags To Date</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-dry-p-bags-todate">Dry Parchment Bags To Date</Label>
+                    <Input id="processing-dry-p-bags-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                   <div>
-                    <Label>Dry Cherry Bags</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-dry-cherry-bags">Dry Cherry Bags</Label>
+                    <Input id="processing-dry-cherry-bags" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
                   </div>
                   <div>
-                    <Label>Dry Cherry Bags To Date</Label>
-                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Label htmlFor="processing-dry-cherry-bags-todate">Dry Cherry Bags To Date</Label>
+                    <Input id="processing-dry-cherry-bags-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                 </CardContent>
@@ -1509,8 +1517,9 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               </div>
 
               <div>
-                <Label>Notes for the day</Label>
+                <Label htmlFor="processing-notes">Notes for the day</Label>
                 <Textarea
+                  id="processing-notes"
                   value={record.notes}
                   onChange={(e) => updateField("notes", e.target.value)}
                   placeholder="Anything the owner or manager should know about this day..."
