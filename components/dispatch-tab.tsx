@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import InPageNav from "@/components/in-page-nav"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
@@ -529,7 +530,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     return () => window.clearTimeout(timeoutId)
   }, [editingRecord])
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     trackClick(editingRecord ? "dispatch_update" : "dispatch_save")
     if (!selectedLocationId) {
       toast({
@@ -634,6 +635,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       setIsSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps
+  // both entered this handler and saved the dispatch record twice. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const resetForm = () => {
     setBagsDispatched("")
@@ -1131,9 +1136,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Date */}
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label htmlFor="dispatch-date">Date</Label>
               {isMobile ? (
                 <input
+                  id="dispatch-date"
                   type="date"
                   value={format(date, "yyyy-MM-dd")}
                   onChange={e => { const d = new Date(e.target.value + "T00:00:00"); if (!isNaN(d.getTime())) setDate(d) }}
@@ -1143,6 +1149,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
+                      id="dispatch-date"
                       variant="outline"
                       className={cn("w-full justify-start text-left font-normal bg-transparent", !date && "text-muted-foreground")}
                     >
@@ -1159,9 +1166,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
             {/* Location */}
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label htmlFor="dispatch-location">Location</Label>
               {isMobile ? (
                 <select
+                  id="dispatch-location"
                   value={selectedLocationId}
                   onChange={e => setSelectedLocationId(e.target.value)}
                   disabled={!locations.length}
@@ -1174,7 +1182,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 </select>
               ) : (
                 <Select value={selectedLocationId} onValueChange={setSelectedLocationId} disabled={!locations.length}>
-                  <SelectTrigger>
+                  <SelectTrigger id="dispatch-location">
                     <SelectValue placeholder={locations.length ? "Select location" : "Add a location first"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -1195,9 +1203,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
             {/* Coffee Type */}
             <div className="space-y-2">
-              <Label>Coffee Type</Label>
+              <Label htmlFor="dispatch-coffee-type">Coffee Type</Label>
               {isMobile ? (
                 <select
+                  id="dispatch-coffee-type"
                   value={coffeeType}
                   onChange={e => setCoffeeType(e.target.value)}
                   className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1208,7 +1217,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 </select>
               ) : (
                 <Select value={coffeeType} onValueChange={setCoffeeType}>
-                  <SelectTrigger>
+                  <SelectTrigger id="dispatch-coffee-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1225,11 +1234,13 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             {/* Bag Type */}
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="dispatch-bag-type"
                 label="Bag Type"
                 tooltip="Select dry parchment or dry cherry to match processing output."
               />
               {isMobile ? (
                 <select
+                  id="dispatch-bag-type"
                   value={bagType}
                   onChange={e => setBagType(e.target.value)}
                   className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -1240,7 +1251,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 </select>
               ) : (
                 <Select value={bagType} onValueChange={setBagType}>
-                  <SelectTrigger>
+                  <SelectTrigger id="dispatch-bag-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1315,8 +1326,9 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
             {/* Notes */}
             <div className="space-y-2 md:col-span-2">
-              <Label>Trip notes</Label>
+              <Label htmlFor="dispatch-notes">Trip notes</Label>
               <Textarea
+                id="dispatch-notes"
                 placeholder="Vehicle, buyer pickup note, warehouse reference, or anything worth remembering..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

@@ -257,21 +257,21 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
         <CardContent className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Bill-to name</Label>
-              <Input value={billToName} onChange={(event) => setBillToName(event.target.value)} />
+              <Label htmlFor="billing-bill-to-name">Bill-to name</Label>
+              <Input id="billing-bill-to-name" value={billToName} onChange={(event) => setBillToName(event.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Bill-to GSTIN (optional)</Label>
-              <Input value={billToGstin} onChange={(event) => setBillToGstin(event.target.value)} />
+              <Label htmlFor="billing-bill-to-gstin">Bill-to GSTIN (optional)</Label>
+              <Input id="billing-bill-to-gstin" value={billToGstin} onChange={(event) => setBillToGstin(event.target.value)} />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Bill-to address</Label>
-              <Input value={billToAddress} onChange={(event) => setBillToAddress(event.target.value)} />
+              <Label htmlFor="billing-bill-to-address">Bill-to address</Label>
+              <Input id="billing-bill-to-address" value={billToAddress} onChange={(event) => setBillToAddress(event.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Bill-to state</Label>
+              <Label htmlFor="billing-bill-to-state">Bill-to state</Label>
               <Select value={billToState} onValueChange={setBillToState}>
-                <SelectTrigger>
+                <SelectTrigger id="billing-bill-to-state">
                   <SelectValue placeholder="Select state" />
                 </SelectTrigger>
                 <SelectContent>
@@ -284,9 +284,9 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Place of supply</Label>
+              <Label htmlFor="billing-place-of-supply">Place of supply</Label>
               <Select value={placeOfSupply} onValueChange={setPlaceOfSupply}>
-                <SelectTrigger>
+                <SelectTrigger id="billing-place-of-supply">
                   <SelectValue placeholder="Select state" />
                 </SelectTrigger>
                 <SelectContent>
@@ -299,9 +299,9 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Supply state (your GST state)</Label>
+              <Label htmlFor="billing-supply-state">Supply state (your GST state)</Label>
               <Select value={supplyState} onValueChange={setSupplyState}>
-                <SelectTrigger>
+                <SelectTrigger id="billing-supply-state">
                   <SelectValue placeholder="Select state" />
                 </SelectTrigger>
                 <SelectContent>
@@ -314,12 +314,12 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Invoice date</Label>
-              <Input type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+              <Label htmlFor="billing-invoice-date">Invoice date</Label>
+              <Input id="billing-invoice-date" type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Due date (optional)</Label>
-              <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+              <Label htmlFor="billing-due-date">Due date (optional)</Label>
+              <Input id="billing-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
             </div>
           </div>
 
@@ -424,11 +424,11 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
             </Card>
             <Card className="md:col-span-2 border-slate-200 bg-white/80">
               <CardHeader>
-                <CardTitle className="text-lg">Notes</CardTitle>
+                <CardTitle className="text-lg" id="billing-notes-label">Notes</CardTitle>
                 <CardDescription>Include payment or delivery terms.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Input value={notes} onChange={(event) => setNotes(event.target.value)} />
+                <Input aria-labelledby="billing-notes-label" value={notes} onChange={(event) => setNotes(event.target.value)} />
               </CardContent>
             </Card>
           </div>

@@ -64,7 +64,7 @@ import AttendanceScannerTab from "./attendance-scanner-tab"
  * today so nothing changes underneath an estate mid-setup.
  */
 
-type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll" | "report" | "scanner"
+type AttendanceSection = "attendance" | "workers" | "payroll" | "report" | "scanner"
 
 type AttendanceWorkspaceProps = {
   showLaborManagement?: boolean
@@ -75,7 +75,6 @@ type AttendanceWorkspaceProps = {
 const SECTION_COLORS: Record<AttendanceSection, string> = {
   attendance: "bg-teal-600 border-teal-600 text-white",
   workers: "bg-cyan-600 border-cyan-600 text-white",
-  ledger: "bg-indigo-600 border-indigo-600 text-white",
   payroll: "bg-purple-600 border-purple-600 text-white",
   report: "bg-slate-700 border-slate-700 text-white",
   scanner: "bg-emerald-700 border-emerald-700 text-white",

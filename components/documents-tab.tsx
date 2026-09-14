@@ -231,9 +231,9 @@ export default function DocumentsTab() {
             </div>
 
             <div className="space-y-2">
-              <Label>Document type</Label>
+              <Label htmlFor="doc-type">Document type</Label>
               <Select value={documentType} onValueChange={setDocumentType}>
-                <SelectTrigger>
+                <SelectTrigger id="doc-type">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -257,9 +257,9 @@ export default function DocumentsTab() {
             </div>
 
             <div className="space-y-2">
-              <Label>Location (optional)</Label>
+              <Label htmlFor="doc-upload-location">Location (optional)</Label>
               <Select value={uploadLocationId} onValueChange={setUploadLocationId}>
-                <SelectTrigger>
+                <SelectTrigger id="doc-upload-location">
                   <SelectValue placeholder="All locations" />
                 </SelectTrigger>
                 <SelectContent>
@@ -364,10 +364,11 @@ export default function DocumentsTab() {
                 onChange={(event) => setQuery(event.target.value)}
                 className="pl-9"
                 placeholder="Search by file, buyer, or notes"
+                aria-label="Search by file, buyer, or notes"
               />
             </div>
             <Select value={listTypeFilter} onValueChange={setListTypeFilter}>
-              <SelectTrigger>
+              <SelectTrigger aria-label="Filter by document type">
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
@@ -380,7 +381,7 @@ export default function DocumentsTab() {
               </SelectContent>
             </Select>
             <Select value={listLocationFilter} onValueChange={setListLocationFilter}>
-              <SelectTrigger>
+              <SelectTrigger aria-label="Filter by location">
                 <SelectValue placeholder="All locations" />
               </SelectTrigger>
               <SelectContent>

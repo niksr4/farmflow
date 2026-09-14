@@ -311,9 +311,9 @@ export default function CuringTab() {
         <CardContent className="space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label htmlFor="curing-location">Location</Label>
               <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                <SelectTrigger>
+                <SelectTrigger id="curing-location">
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>
@@ -326,10 +326,10 @@ export default function CuringTab() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label htmlFor="curing-date">Date</Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between">
+                  <Button id="curing-date" variant="outline" className="w-full justify-between">
                     {format(selectedDate, "yyyy-MM-dd")}
                     <CalendarIcon className="h-4 w-4" />
                   </Button>
@@ -340,29 +340,32 @@ export default function CuringTab() {
               </Popover>
             </div>
             <div className="space-y-2">
-              <Label>Coffee Type</Label>
-              <Input value={coffeeType} onChange={(event) => setCoffeeType(event.target.value)} placeholder="Arabica" />
+              <Label htmlFor="curing-coffee-type">Coffee Type</Label>
+              <Input id="curing-coffee-type" value={coffeeType} onChange={(event) => setCoffeeType(event.target.value)} placeholder="Arabica" />
             </div>
             <div className="space-y-2">
-              <Label>Process Type</Label>
-              <Input value={processType} onChange={(event) => setProcessType(event.target.value)} placeholder="Washed" />
+              <Label htmlFor="curing-process-type">Process Type</Label>
+              <Input id="curing-process-type" value={processType} onChange={(event) => setProcessType(event.target.value)} placeholder="Washed" />
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="curing-storage-bin"
                 label="Storage Bin"
                 tooltip="Warehouse bin or drying bay where this coffee is cured."
               />
-              <Input value={storageBin} onChange={(event) => setStorageBin(event.target.value)} placeholder="Drying Bay A" />
+              <Input id="curing-storage-bin" value={storageBin} onChange={(event) => setStorageBin(event.target.value)} placeholder="Drying Bay A" />
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="curing-intake-kg"
                 label="Input (KG)"
                 tooltip="Weight entering curing or drying stage."
               />
               <Input
+                id="curing-intake-kg"
                 value={intakeKg}
                 onChange={handleNonNegativeChange(setIntakeKg)}
                 onKeyDown={blockInvalidNumberKey}
@@ -372,8 +375,9 @@ export default function CuringTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Input (Bags)</Label>
+              <Label htmlFor="curing-intake-bags">Input (Bags)</Label>
               <Input
+                id="curing-intake-bags"
                 value={intakeBags}
                 onChange={handleNonNegativeChange(setIntakeBags)}
                 onKeyDown={blockInvalidNumberKey}
@@ -384,10 +388,12 @@ export default function CuringTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="curing-moisture-start"
                 label="Moisture Start (%)"
                 tooltip="Moisture at the beginning of drying."
               />
               <Input
+                id="curing-moisture-start"
                 value={moistureStart}
                 onChange={handleNonNegativeChange(setMoistureStart)}
                 onKeyDown={blockInvalidNumberKey}
@@ -398,10 +404,12 @@ export default function CuringTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="curing-moisture-end"
                 label="Moisture End (%)"
                 tooltip="Moisture at the end of drying or before storage."
               />
               <Input
+                id="curing-moisture-end"
                 value={moistureEnd}
                 onChange={handleNonNegativeChange(setMoistureEnd)}
                 onKeyDown={blockInvalidNumberKey}
@@ -412,10 +420,12 @@ export default function CuringTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="curing-drying-days"
                 label="Drying Days"
                 tooltip="Total drying days for this record."
               />
               <Input
+                id="curing-drying-days"
                 value={dryingDays}
                 onChange={handleNonNegativeChange(setDryingDays)}
                 onKeyDown={blockInvalidNumberKey}
@@ -426,10 +436,12 @@ export default function CuringTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="curing-output-kg"
                 label="Output (KG)"
                 tooltip="Final weight after drying or curing."
               />
               <Input
+                id="curing-output-kg"
                 value={outputKg}
                 onChange={handleNonNegativeChange(setOutputKg)}
                 onKeyDown={blockInvalidNumberKey}
@@ -439,8 +451,9 @@ export default function CuringTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Output (Bags)</Label>
+              <Label htmlFor="curing-output-bags">Output (Bags)</Label>
               <Input
+                id="curing-output-bags"
                 value={outputBags}
                 onChange={handleNonNegativeChange(setOutputBags)}
                 onKeyDown={blockInvalidNumberKey}
@@ -451,10 +464,12 @@ export default function CuringTab() {
             </div>
             <div className="space-y-2">
               <FieldLabel
+                htmlFor="curing-loss-kg"
                 label="Loss (KG)"
                 tooltip="Difference between input and output weight."
               />
               <Input
+                id="curing-loss-kg"
                 value={lossKg || calculatedLoss}
                 onChange={handleNonNegativeChange(setLossKg)}
                 onKeyDown={blockInvalidNumberKey}
@@ -466,8 +481,8 @@ export default function CuringTab() {
           </div>
 
           <div className="space-y-2">
-            <Label>Notes</Label>
-            <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <Label htmlFor="curing-notes">Notes</Label>
+            <Textarea id="curing-notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
 
           <Button onClick={handleSave} disabled={saving}>

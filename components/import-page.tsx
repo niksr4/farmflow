@@ -206,7 +206,7 @@ export default function ImportPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-[1fr_auto]">
             <div className="space-y-2">
-              <Label>Dataset</Label>
+              <Label htmlFor="import-dataset">Dataset</Label>
               <Select
                 value={dataset}
                 onValueChange={(value) => {
@@ -216,7 +216,7 @@ export default function ImportPage() {
                   }
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger id="import-dataset">
                   <SelectValue placeholder="Choose dataset" />
                 </SelectTrigger>
                 <SelectContent>

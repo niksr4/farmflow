@@ -2080,7 +2080,7 @@ export default function InventorySystem() {
     })
   }
 
-  const handleUpdateTransaction = async () => {
+  const handleUpdateTransactionUnguarded = async () => {
     if (!editingTransaction) return
     const tx = ensureTransactionSafety(editingTransaction)
     if (!tx.item_type || !tx.transaction_type) {
@@ -2158,6 +2158,10 @@ export default function InventorySystem() {
     }
   }
 
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps
+  // both entered this handler and posted the edit twice. See lib/single-flight.ts.
+  const handleUpdateTransaction = useSingleFlight(handleUpdateTransactionUnguarded)
+
   const handleDeleteConfirm = (id?: number) => {
     if (!id) return
     setTransactionToDelete(id)
@@ -2202,7 +2206,7 @@ export default function InventorySystem() {
     setIsInventoryEditDialogOpen(true)
   }
 
-  const handleSaveInventoryEdit = async () => {
+  const handleSaveInventoryEditUnguarded = async () => {
     if (!editingInventoryItem) return
     const originalName = editingInventoryItem.name
     const originalUnit = editingInventoryItem.unit || "kg"
@@ -2317,6 +2321,12 @@ export default function InventorySystem() {
     }
   }
 
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps could
+  // both fire this handler -- and unlike a plain field edit, this one can post a deplete+restock
+  // revaluation pair AND a quantity-adjustment transaction, so a duplicate run doesn't just repeat
+  // one write, it can post several. See lib/single-flight.ts.
+  const handleSaveInventoryEdit = useSingleFlight(handleSaveInventoryEditUnguarded)
+
   const handleDeleteInventoryItem = async (itemToDelete: InventoryItem) => {
     if (!tenantId) return
     const deleteAllLocations = selectedLocationId === LOCATION_ALL
@@ -2395,7 +2405,7 @@ export default function InventorySystem() {
     })
   }
 
-  const handleCreateNewItem = async () => {
+  const handleCreateNewItemUnguarded = async () => {
     const itemName = newItemForm.name.trim()
     const unit = newItemForm.unit.trim() || "kg"
     // Bags win when filled, because someone who typed "20 x 45" meant 900 kg and would not also
@@ -2471,6 +2481,11 @@ export default function InventorySystem() {
       setIsSavingNewItem(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps both
+  // entered this handler and created the item (plus its opening transaction) twice. See
+  // lib/single-flight.ts.
+  const handleCreateNewItem = useSingleFlight(handleCreateNewItemUnguarded)
 
   // CSV export (transactions & inventory)
   const exportInventoryToCSV = () => {
