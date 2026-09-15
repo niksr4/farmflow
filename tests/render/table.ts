@@ -1,0 +1,85 @@
+/**
+ * Reading a rendered table the way a person reads one: by the heading above the figure.
+ *
+ * THE DEFECT THIS IS SHAPED AROUND. Payroll's header grew three columns and its body did not, so
+ * every worker row was nine cells long against a twelve-cell header. HTML has no opinion about
+ * that — a short row packs its cells left and leaves the remainder blank — so NET PAYABLE rendered
+ * underneath the word "Overtime" and the screen looked entirely normal. Nothing threw, nothing
+ * logged, and the figure was the one an estate reads off the page to count out cash.
+ *
+ * An assertion like `expect(screen.getByText("₹4,280")).toBeInTheDocument()` passes happily
+ * through that bug: the text IS in the document, just not in the column that explains it. So the
+ * unit of assertion here is the pair — a value AND the heading it sits under.
+ */
+
+/** Marks the continuation slots of a cell with colSpan > 1. */
+export const SPANNED = "<spanned>"
+
+/**
+ * A row expanded into one entry per COLUMN, not per cell.
+ *
+ * The payroll footer opens with `colSpan={2}`, so its cell list is one shorter than the header's
+ * while describing the same number of columns. Comparing cell counts would report that as a
+ * mismatch and comparing nothing would miss the real one; expanding spans is what makes both
+ * questions answerable with the same array.
+ */
+export function columnSlots(row: HTMLTableRowElement): string[] {
+  const slots: string[] = []
+  for (const cell of Array.from(row.cells)) {
+    slots.push(cell.textContent?.replace(/\s+/g, " ").trim() ?? "")
+    for (let i = 1; i < (cell.colSpan || 1); i += 1) slots.push(SPANNED)
+  }
+  return slots
+}
+
+export type TableShape = {
+  headers: string[]
+  /** thead, tbody and tfoot rows, each already expanded to column slots. */
+  rows: { section: "head" | "body" | "foot"; slots: string[] }[]
+  /** Column index by heading text. Throws on a heading that is not there. */
+  columnOf: (heading: string) => number
+  /** The figure under `heading` on body row `index`. */
+  cell: (index: number, heading: string) => string
+  /** The figure under `heading` on the footer row. */
+  footerCell: (heading: string) => string
+  bodyRowCount: number
+}
+
+export function readTable(table: HTMLTableElement): TableShape {
+  const headRows = Array.from(table.tHead?.rows ?? [])
+  const bodyRows = Array.from(table.tBodies).flatMap((body) => Array.from(body.rows))
+  const footRows = Array.from(table.tFoot?.rows ?? [])
+
+  const headers = headRows.length ? columnSlots(headRows[0]) : []
+
+  const columnOf = (heading: string) => {
+    const at = headers.indexOf(heading)
+    if (at === -1) {
+      throw new Error(`No column headed "${heading}". Headings are: ${headers.map((h) => `"${h}"`).join(", ")}`)
+    }
+    return at
+  }
+
+  return {
+    headers,
+    rows: [
+      ...headRows.map((row) => ({ section: "head" as const, slots: columnSlots(row) })),
+      ...bodyRows.map((row) => ({ section: "body" as const, slots: columnSlots(row) })),
+      ...footRows.map((row) => ({ section: "foot" as const, slots: columnSlots(row) })),
+    ],
+    columnOf,
+    cell: (index, heading) => columnSlots(bodyRows[index]).at(columnOf(heading)) ?? "",
+    footerCell: (heading) => columnSlots(footRows[0]).at(columnOf(heading)) ?? "",
+    bodyRowCount: bodyRows.length,
+  }
+}
+
+/**
+ * Every row describes exactly as many columns as the header does.
+ *
+ * Returned rather than thrown so the caller can assert on it and get vitest's diff, which names
+ * the offending section and width instead of just failing.
+ */
+export function rowWidths(table: HTMLTableElement): { section: string; width: number }[] {
+  return readTable(table).rows.map((row) => ({ section: row.section, width: row.slots.length }))
+}

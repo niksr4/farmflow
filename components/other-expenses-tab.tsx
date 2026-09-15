@@ -35,7 +35,7 @@ import { resolveActivityFromQuery } from "@/lib/activity-code-match"
 import ActivitySuggestList, { filterActivitySuggestions } from "@/components/activity-suggest-list"
 import { formatLocationLabel } from "@/lib/location-label"
 import { numericInputValue } from "@/lib/number-input"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
 
 /**
  * Chosen when a cost belongs to the estate rather than to any one block. Stored as NULL, which is
@@ -267,8 +267,7 @@ export default function OtherExpensesTab({
     clearDraft()
   }
 
-  const handleSubmitUnguarded = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmitUnguarded = async () => {
     if (isSubmitting) return
     if (locations.length > 0 && !formLocationId) {
       toast.error("Say where this cost belongs — a block, or the whole estate.")
@@ -334,7 +333,7 @@ export default function OtherExpensesTab({
 
   // Mobile double-tap guard: `disabled` only takes effect on the next render, so two
   // fast taps both entered this handler and saved the entry twice. lib/single-flight.ts.
-  const handleSubmit = useSingleFlight(handleSubmitUnguarded)
+  const handleSubmit = useSingleFlightSubmit(handleSubmitUnguarded)
 
   const startEdit = (deployment: any) => {
     trackClick("expense_edit", { id: deployment.id })

@@ -14,6 +14,7 @@ import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 interface JournalEntry {
   id: string
@@ -177,7 +178,7 @@ export default function JournalTab() {
     setEditingEntry(null)
   }
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     if (!form.entryDate) {
       toast({ title: "Missing date", description: "Select a date before saving.", variant: "destructive" })
       return
@@ -216,6 +217,10 @@ export default function JournalTab() {
       setIsSaving(false)
     }
   }
+
+  // Guards against a mobile double-tap firing two POSTs before the first render with
+  // disabled={isSaving} lands — see lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const handleEdit = (entry: JournalEntry) => {
     setEditingEntry(entry)
@@ -267,9 +272,9 @@ export default function JournalTab() {
             modifiersClassNames={{ hasEntry: "bg-emerald-100 text-emerald-800" }}
           />
           <div className="space-y-2">
-            <Label>Location</Label>
+            <Label htmlFor="journal-filter-location">Location</Label>
             <Select value={filterLocationId} onValueChange={setFilterLocationId}>
-              <SelectTrigger>
+              <SelectTrigger id="journal-filter-location">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -297,20 +302,21 @@ export default function JournalTab() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Date</Label>
+                <Label htmlFor="journal-entry-date">Date</Label>
                 <Input
+                  id="journal-entry-date"
                   type="date"
                   value={form.entryDate}
                   onChange={(event) => setForm((prev) => ({ ...prev, entryDate: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Location</Label>
+                <Label htmlFor="journal-entry-location">Location</Label>
                 <Select
                   value={form.locationId}
                   onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="journal-entry-location">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -324,40 +330,45 @@ export default function JournalTab() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Plot / Block</Label>
+                <Label htmlFor="journal-plot">Plot / Block</Label>
                 <Input
+                  id="journal-plot"
                   placeholder="e.g., Block A"
                   value={form.plot}
                   onChange={(event) => setForm((prev) => ({ ...prev, plot: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Title</Label>
+                <Label htmlFor="journal-title">Title</Label>
                 <Input
+                  id="journal-title"
                   placeholder="Daily summary"
                   value={form.title}
                   onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Fertilizer</Label>
+                <Label htmlFor="journal-fertilizer-name">Fertilizer</Label>
                 <Input
+                  id="journal-fertilizer-name"
                   placeholder="e.g., 19-19-19"
                   value={form.fertilizerName}
                   onChange={(event) => setForm((prev) => ({ ...prev, fertilizerName: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Fertilizer Composition</Label>
+                <Label htmlFor="journal-fertilizer-composition">Fertilizer Composition</Label>
                 <Input
+                  id="journal-fertilizer-composition"
                   placeholder="Ratio / mix details"
                   value={form.fertilizerComposition}
                   onChange={(event) => setForm((prev) => ({ ...prev, fertilizerComposition: event.target.value }))}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Spray Composition</Label>
+                <Label htmlFor="journal-spray-composition">Spray Composition</Label>
                 <Input
+                  id="journal-spray-composition"
                   placeholder="Spray mix details"
                   value={form.sprayComposition}
                   onChange={(event) => setForm((prev) => ({ ...prev, sprayComposition: event.target.value }))}
@@ -376,16 +387,18 @@ export default function JournalTab() {
                 <Label htmlFor="irrigation">Irrigation done</Label>
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Irrigation notes</Label>
+                <Label htmlFor="journal-irrigation-notes">Irrigation notes</Label>
                 <Input
+                  id="journal-irrigation-notes"
                   placeholder="Hours, method, or plot coverage"
                   value={form.irrigationNotes}
                   onChange={(event) => setForm((prev) => ({ ...prev, irrigationNotes: event.target.value }))}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Daily Notes</Label>
+                <Label htmlFor="journal-notes">Daily Notes</Label>
                 <Textarea
+                  id="journal-notes"
                   rows={4}
                   placeholder="Any daily observations or work completed..."
                   value={form.notes}

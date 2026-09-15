@@ -11,6 +11,7 @@ import { formatCurrency, formatUnitPrice } from "@/lib/format"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { format, subDays } from "date-fns"
 import { toast } from "sonner"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 type ActivityCode = { code: string; reference: string }
 type RecentCode = ActivityCode & { useCount: number; lastUsedDate: string }
@@ -140,7 +141,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
     setSearch("")
   }
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     if (!activeCode || workers <= 0) { toast.error("Enter at least 1 worker"); return }
     setSaving(true)
     try {
@@ -169,6 +170,11 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
       setSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only takes effect on the next render, so two fast taps
+  // both enter the handler before the first one flips saving -- and this panel is the mobile
+  // quick-entry surface where a double-tap is most likely. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const filteredActivities = search.trim()
     ? allActivities.filter((a) =>

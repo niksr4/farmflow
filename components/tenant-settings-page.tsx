@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useLocale } from "@/components/locale-provider"
@@ -629,7 +630,7 @@ export default function TenantSettingsPage() {
     setUserLocationSource("default")
   }, [selectedUserId, loadUserLocations, isAdminOrOwner])
 
-  const handleCreateUser = async () => {
+  const handleCreateUserUnguarded = async () => {
     if (!tenantId) {
       toast({ title: "Tenant missing", description: "Tenant context not available." })
       return
@@ -663,6 +664,8 @@ export default function TenantSettingsPage() {
       toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" })
     }
   }
+
+  const handleCreateUser = useSingleFlight(handleCreateUserUnguarded)
 
   const handleRoleDraftChange = (userId: string, role: string) => {
     setUserRoleDrafts((prev) => ({ ...prev, [userId]: role }))
@@ -928,7 +931,7 @@ export default function TenantSettingsPage() {
     }
   }
 
-  const handleCreateLocation = async () => {
+  const handleCreateLocationUnguarded = async () => {
     if (!tenantId) return
     if (!newLocationName.trim()) {
       toast({ title: "Missing name", description: "Location name is required." })
@@ -969,6 +972,8 @@ export default function TenantSettingsPage() {
       setIsCreatingLocation(false)
     }
   }
+
+  const handleCreateLocation = useSingleFlight(handleCreateLocationUnguarded)
 
   const startEditLocation = (location: LocationRow) => {
     setEditingLocationId(location.id)
@@ -1287,6 +1292,7 @@ export default function TenantSettingsPage() {
                 <div className="flex max-w-sm gap-2">
                   <Input
                     type="email"
+                    aria-label="Digest email address"
                     value={digestEmail}
                     onChange={(e) => setDigestEmail(e.target.value)}
                     placeholder="admin@yourestate.com"

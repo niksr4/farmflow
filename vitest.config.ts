@@ -11,6 +11,16 @@ export default defineConfig({
     },
   },
   test: {
+    /**
+     * One of two projects — see vitest.workspace.ts. This one is the suite as it has always been:
+     * `environment: "node"`, 210 files, most of which assert by reading source text. The second
+     * ("render") mounts components in jsdom and lives in tests/render/.
+     *
+     * The split is the point. A jsdom setup file loaded into these 210 would cost every one of
+     * them a DOM they do not use, and `include` here deliberately stays `.test.ts` so a render
+     * test can never be picked up by the environment that cannot run it.
+     */
+    name: "unit",
     environment: "node",
     include: ["tests/**/*.test.ts"],
     coverage: {

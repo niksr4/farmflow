@@ -465,9 +465,9 @@ export function TenantExperienceSection({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>UI variant</Label>
+          <Label htmlFor="tenant-ui-variant">UI variant</Label>
           <Select value={uiVariantDraft} onValueChange={(value) => onUiVariantChange(value as TenantUiVariant)}>
-            <SelectTrigger className="w-full md:w-[320px]">
+            <SelectTrigger id="tenant-ui-variant" className="w-full md:w-[320px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

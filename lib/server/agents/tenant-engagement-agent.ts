@@ -72,6 +72,14 @@ const toRows = <T = any>(value: unknown): T[] => {
 async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>> {
   if (!sql) return new Map()
   try {
+    // Every "yesterday" boundary below is anchored to (NOW() AT TIME ZONE 'Asia/Kolkata')::date,
+    // not CURRENT_DATE -- the same UTC-vs-IST trap lib/server/agents/biometric-health-agent.ts
+    // documents (its cron running at 02:00 UTC / 07:30 Kodagu). CURRENT_DATE reflects the
+    // session's UTC date; naively subtracting a day and reinterpreting via
+    // "AT TIME ZONE 'Asia/Kolkata'" treats a UTC calendar date as if it were already an IST one.
+    // For the ~5.5h/day IST has already rolled to a new date while UTC hasn't (18:30-23:59 UTC),
+    // that silently reported activity from TWO days ago as "yesterday". Converting NOW() to IST
+    // first, then taking ::date, gets the actual IST calendar day before doing the subtraction.
     const result = await sql.query(`
       SELECT
         t.id AS tenant_id,
@@ -79,32 +87,32 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
           WHERE tenant_id = t.id AND event_type = 'auth_login_success'
             AND actor_username NOT LIKE 'tenantsmoke_%'
             AND source IS DISTINCT FROM 'tenant-smoke-agent'
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata')  AS logins_yesterday,
+            AND created_at >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata')  AS logins_yesterday,
         (SELECT COUNT(*) FROM labour_cost
           WHERE tenant_id = t.id
-            AND work_date >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND work_date <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS labor_yesterday,
+            AND work_date >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND work_date <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata') AS labor_yesterday,
         (SELECT COUNT(*) FROM processing_records
           WHERE tenant_id = t.id
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS processing_yesterday,
+            AND created_at >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata') AS processing_yesterday,
         (SELECT COUNT(*) FROM dispatch_records
           WHERE tenant_id = t.id
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS dispatch_yesterday,
+            AND created_at >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata') AS dispatch_yesterday,
         (SELECT COUNT(*) FROM sales_records
           WHERE tenant_id = t.id
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS sales_yesterday,
+            AND created_at >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata') AS sales_yesterday,
         (SELECT COUNT(*) FROM expense_transactions
           WHERE tenant_id = t.id
-            AND entry_date >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND entry_date <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS expenses_yesterday,
+            AND entry_date >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND entry_date <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata') AS expenses_yesterday,
         (SELECT COUNT(*) FROM picking_records
           WHERE tenant_id = t.id
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS picking_yesterday,
+            AND created_at >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata') AS picking_yesterday,
         (SELECT COUNT(DISTINCT d) FROM (
             SELECT work_date AS d FROM labour_cost
               WHERE tenant_id = t.id AND work_date > CURRENT_DATE - 7
@@ -120,8 +128,8 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
           ) days)                                    AS active_days_last_7,
         (SELECT COUNT(*) FROM attendance_records
           WHERE tenant_id = t.id
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS attendance_yesterday
+            AND created_at >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata') AS attendance_yesterday
       FROM tenants t
       WHERE t.parent_tenant_id IS NULL
     `)

@@ -18,6 +18,7 @@ import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { numericInputValue } from "@/lib/number-input"
 
 const STATUS_OPTIONS = [
@@ -262,7 +263,7 @@ export default function ReceivablesTab() {
     setForm((prev) => ({ ...prev, [field]: event.target.value }))
   }
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     if (!canEdit) {
       toast({ title: "Read-only mode", description: "Receivables are read-only while preview mode is active." })
       return
@@ -311,6 +312,10 @@ export default function ReceivablesTab() {
       setIsSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only takes effect on the next render, so two fast taps
+  // both enter the handler before the first one flips isSaving. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const handleEdit = (record: ReceivableRecord) => {
     setEditingRecord(record)
@@ -441,29 +446,29 @@ export default function ReceivablesTab() {
         <CardContent className="grid gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Buyer <span className="text-rose-500">*</span></Label>
-              <Input value={form.buyer_name} onChange={handleChange("buyer_name")} placeholder="Buyer name" />
+              <Label htmlFor="receivable-buyer-name">Buyer <span className="text-rose-500">*</span></Label>
+              <Input id="receivable-buyer-name" value={form.buyer_name} onChange={handleChange("buyer_name")} placeholder="Buyer name" />
             </div>
             <div className="space-y-2">
-              <Label>Invoice No</Label>
-              <Input value={form.invoice_no} onChange={handleChange("invoice_no")} placeholder="INV-2026-001" />
+              <Label htmlFor="receivable-invoice-no">Invoice No</Label>
+              <Input id="receivable-invoice-no" value={form.invoice_no} onChange={handleChange("invoice_no")} placeholder="INV-2026-001" />
             </div>
             <div className="space-y-2">
-              <Label>Invoice Date <span className="text-rose-500">*</span></Label>
-              <Input type="date" value={form.invoice_date} onChange={handleChange("invoice_date")} />
+              <Label htmlFor="receivable-invoice-date">Invoice Date <span className="text-rose-500">*</span></Label>
+              <Input id="receivable-invoice-date" type="date" value={form.invoice_date} onChange={handleChange("invoice_date")} />
             </div>
             <div className="space-y-2">
-              <Label>Due Date</Label>
-              <Input type="date" value={form.due_date} onChange={handleChange("due_date")} />
+              <Label htmlFor="receivable-due-date">Due Date</Label>
+              <Input id="receivable-due-date" type="date" value={form.due_date} onChange={handleChange("due_date")} />
             </div>
             <div className="space-y-2">
-              <Label>Amount</Label>
-              <Input type="number" inputMode="decimal" min="0" value={numericInputValue(form.amount)} onChange={handleChange("amount")} placeholder="0" />
+              <Label htmlFor="receivable-amount">Amount</Label>
+              <Input id="receivable-amount" type="number" inputMode="decimal" min="0" value={numericInputValue(form.amount)} onChange={handleChange("amount")} placeholder="0" />
             </div>
             <div className="space-y-2">
-              <Label>Status</Label>
+              <Label htmlFor="receivable-status">Status</Label>
               <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value }))}>
-                <SelectTrigger>
+                <SelectTrigger id="receivable-status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -476,14 +481,14 @@ export default function ReceivablesTab() {
               </Select>
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Location (optional)</Label>
+              <Label htmlFor="receivable-location">Location (optional)</Label>
               <Select
                 value={form.location_id || LOCATION_UNASSIGNED_VALUE}
                 onValueChange={(value) =>
                   setForm((prev) => ({ ...prev, location_id: value === LOCATION_UNASSIGNED_VALUE ? "" : value }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger id="receivable-location">
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>
@@ -497,8 +502,8 @@ export default function ReceivablesTab() {
               </Select>
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Notes</Label>
-              <Input value={form.notes} onChange={handleChange("notes")} placeholder="Notes or payment terms" />
+              <Label htmlFor="receivable-notes">Notes</Label>
+              <Input id="receivable-notes" value={form.notes} onChange={handleChange("notes")} placeholder="Notes or payment terms" />
             </div>
           </div>
           <div className="flex flex-wrap gap-2">

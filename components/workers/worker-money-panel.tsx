@@ -372,9 +372,9 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
           <div className="mb-3 space-y-3 rounded-lg border bg-muted/30 p-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label className="text-xs">Type</Label>
+                <Label htmlFor={`worker-money-${workerId}-type`} className="text-xs">Type</Label>
                 <Select value={form.entryType} onValueChange={(v) => setForm((p) => ({ ...p, entryType: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id={`worker-money-${workerId}-type`}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="advance">Advance</SelectItem>
                     <SelectItem value="repayment">Repayment</SelectItem>
@@ -384,17 +384,18 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Date</Label>
-                <Input type="date" value={form.entryDate} onChange={(e) => setForm((p) => ({ ...p, entryDate: e.target.value }))} />
+                <Label htmlFor={`worker-money-${workerId}-date`} className="text-xs">Date</Label>
+                <Input id={`worker-money-${workerId}-date`} type="date" value={form.entryDate} onChange={(e) => setForm((p) => ({ ...p, entryDate: e.target.value }))} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Amount</Label>
-                <Input inputMode="decimal" placeholder="0" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} />
+                <Label htmlFor={`worker-money-${workerId}-amount`} className="text-xs">Amount</Label>
+                <Input id={`worker-money-${workerId}-amount`} inputMode="decimal" placeholder="0" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} />
               </div>
               {form.entryType === "advance" && (
                 <div className="space-y-1">
-                  <Label className="text-xs">Recover over (payroll runs)</Label>
+                  <Label htmlFor={`worker-money-${workerId}-recover-over`} className="text-xs">Recover over (payroll runs)</Label>
                   <Input
+                    id={`worker-money-${workerId}-recover-over`}
                     inputMode="numeric"
                     value={form.recoverOverPeriods}
                     onChange={(e) => setForm((p) => ({ ...p, recoverOverPeriods: e.target.value }))}
@@ -404,8 +405,8 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Note (optional)</Label>
-              <Input value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+              <Label htmlFor={`worker-money-${workerId}-note`} className="text-xs">Note (optional)</Label>
+              <Input id={`worker-money-${workerId}-note`} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
             </div>
 
             {instalment != null && (

@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { EmptyState } from "@/components/ui/empty-state"
 import { StatTile } from "@/components/ui/stat-tile"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
 
 // Two screens now show the relay address. One definition, in lib/scanner-setup.ts, so they cannot
 // drift -- a relay that is right on the muster panel and stale on the scanner tab is worse than
@@ -78,8 +78,7 @@ export default function AttendanceDeviceSettings({ workers }: { workers: WorkerO
     void loadAll()
   }, [loadAll])
 
-  const handleAddDeviceUnguarded = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAddDeviceUnguarded = async () => {
     if (!newLabel.trim() || !newSerial.trim()) return
     setIsAddingDevice(true)
     try {
@@ -104,7 +103,7 @@ export default function AttendanceDeviceSettings({ workers }: { workers: WorkerO
 
   // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps both
   // entered this handler. See lib/single-flight.ts.
-  const handleAddDevice = useSingleFlight(handleAddDeviceUnguarded)
+  const handleAddDevice = useSingleFlightSubmit(handleAddDeviceUnguarded)
 
   const handleRemoveDevice = async (id: string, label: string) => {
     if (!window.confirm(`Remove "${label}"? Future punches from this device will be rejected until re-registered.`)) return

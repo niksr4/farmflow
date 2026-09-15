@@ -248,7 +248,16 @@ export async function GET(request: Request) {
             -- against the ledger exactly, so recomputing them would break a working stock count
             -- to tidy a display.
             -- Both note spellings; lib/revaluation-notes.ts holds the list and the reasoning.
-            ${EXCLUDE_REVALUATION_SQL}
+            --
+            -- MUST be sql.unsafe(...): this is a plain JS string (built via .join(), not a
+            -- nested sql-tagged-template fragment), and neon's tagged-template function
+            -- parameterizes any plain-string interpolation as a bound value, not spliced SQL text.
+            -- Un-wrapped, this sent "WHERE tenant_id = $1 $2" to Postgres with the whole clause
+            -- as $2's value -- a syntax error on every single call, which this catch block does
+            -- NOT treat as a missing-relation and therefore always rethrows, so the balance sheet
+            -- endpoint 500'd for every tenant on every request. Confirmed by intercepting the
+            -- Neon HTTP driver's outgoing request body before and after this fix.
+            ${sql.unsafe(EXCLUDE_REVALUATION_SQL)}
             ${inventoryDateClause}
             ${estateClause}
         `,
