@@ -412,24 +412,50 @@ Key env vars:
 
 ### Release process
 
-**Current state:** every push to `main` auto-deploys straight to production — no staging environment,
-no manual promotion gate. The only check is CI (lint → typecheck → unit tests → build → public e2e).
-This is fine for pre-revenue validation but has zero buffer between "pushed" and "live for every tenant."
+**Current state:** merging to `main` auto-deploys straight to production — no staging environment,
+no manual promotion gate. **`main` itself is gated** (below), so nothing arrives unreviewed or
+untested, but the moment it arrives it is live for every tenant.
 
 **A gate AT VERCEL is not available on this plan. A gate AT GITHUB is — see
 [docs/RELEASE-FLOW.md](docs/RELEASE-FLOW.md).**
 
-⚠ **Written 2026-09-11, NOT YET APPLIED.** `scripts/dev/setup-main-ruleset.mjs` is ready and
-dry-runs clean. Until somebody runs it with `--apply`, `main` is still wide open and every word of
-"Current state" above is still true. Check with `node scripts/dev/setup-main-ruleset.mjs` rather
-than trusting this paragraph.
+✅ **APPLIED AND ENFORCING — verified 2026-09-15.** Ruleset `"main is production"` (id 23031114),
+`enforcement: active`, on `refs/heads/main`:
 
-⚠ **The local `gh` is a DIFFERENT GITHUB ACCOUNT and cannot write here.** `origin` is SSH
-(`git@github.com:niksr4/farmflow.git`) so `git push` uses niksr4's key and works; `gh` is logged in
-as **NikKaoss** with `{"admin":false,"pull":true,"push":false}`, so `gh pr create` returns "must be
-a collaborator" and ruleset writes 403. The same split as the Vercel CLI. Opening a PR or applying
-the ruleset needs a niksr4 token — pass it as `--token=` or `GITHUB_ADMIN_TOKEN`. Discovered
-2026-09-12 after both failures were first mis-attributed to a permission prompt.
+| Rule | Setting |
+|---|---|
+| `pull_request` | required, 0 approvals (solo maintainer) |
+| `required_status_checks` | `quality` must be green |
+| `non_fast_forward` | force-push blocked |
+| `deletion` | branch deletion blocked |
+
+⚠ **This paragraph said "NOT YET APPLIED" from 2026-09-11 to 2026-09-15, and it was wrong for at
+least part of that.** It also told you to check with `node scripts/dev/setup-main-ruleset.mjs`
+rather than trusting it — which is the right instruction, and the reason it was caught. Keep doing
+that; also `gh api repos/niksr4/farmflow/rulesets --jq '.[] | {name, enforcement}'`. A prose claim
+about infrastructure state is a snapshot, and this file has now been wrong about two of them in
+one section.
+
+✅ **`gh` writes here now — RESOLVED 2026-09-15.** The active account is **niksr4** with
+`{"admin":true,"maintain":true,"push":true,"triage":true,"pull":true}`. `gh pr create` works
+(PRs #19 and #20 were opened with it) and **ruleset writes are no longer 403**, which unblocks
+`pnpm release:gate --apply`. `origin` is SSH (`git@github.com:niksr4/farmflow.git`), so `git push`
+was always fine. NikKaoss is still present in the keyring as an **inactive** second account —
+harmless, but `gh auth switch` would re-break everything, so check the active one before concluding
+a write is blocked.
+
+⚠ **Read that as a lesson about this file, not just about `gh`.** From 2026-09-12 to 2026-09-15
+this paragraph said the opposite, in bold, and it was believed over the tool: two PRs were handed
+to the user to open by hand on 2026-09-15 because *this line* was quoted instead of
+`gh auth status` being run. It costs one second to check:
+
+```
+gh api user --jq .login
+gh api repos/niksr4/farmflow --jq .permissions
+```
+
+A capability claim in a doc is a snapshot of one afternoon. Verify before reporting something as
+blocked — the same discipline as `feedback_verify_via_vercel` and `project_migration_ledger_lies`.
 
 This section used to open by saying a structural gate was not available at all, and that reading
 stood for seven weeks. It is wrong in a way worth spelling out: *reaching `main`* and *reaching
