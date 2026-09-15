@@ -103,11 +103,33 @@ function main() {
     return 0
   }
 
+  /**
+   * ⚠ FAILS CLOSED. The first version returned 0 here "rather than failing on a network problem",
+   * which handed a green required check to any branch on the one occasion the gate could not do
+   * its job. Raised by Greptile on PR #20.
+   *
+   * The reasoning behind the original was borrowed from the digest dormancy gate, which genuinely
+   * does fail open (lib/server/agents/tenant-dormancy.ts) — and that is a policy copied without
+   * its justification. There, failing open sends an email nobody needed. **Here, failing open ships
+   * an unverified branch**, and the whole subject of this check is whether a piece of information
+   * is current. You cannot detect staleness using possibly-stale data: a local `origin/main` left
+   * over from an earlier run is exactly the input that makes a behind-branch look up to date, so
+   * "carry on with whatever ref we already have" is not a safer middle path, it is the bug.
+   *
+   * A red run from a transient fetch failure is re-runnable in one click. A false green is not
+   * detectable at all.
+   */
   try {
     git("fetch", "origin", BASE, "--quiet")
-  } catch {
-    console.log(`base check: could not fetch ${remoteBase}; skipping rather than failing on a network problem.`)
-    return 0
+  } catch (error) {
+    console.error(`\n✗ base check: could not fetch ${remoteBase}.\n`)
+    console.error(
+      "  Refusing to pass. This check exists to decide whether a branch is current, so it cannot\n" +
+        "  answer using a base ref it was unable to refresh. Re-run the job; if it keeps failing,\n" +
+        "  the clone or the network is the problem and that is worth knowing.\n",
+    )
+    console.error(`  ${String(error instanceof Error ? error.message : error).slice(0, 300)}\n`)
+    return 1
   }
 
   const { rev: head, label: headLabel } = commitUnderTest()
