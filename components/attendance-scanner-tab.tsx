@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { EmptyState } from "@/components/ui/empty-state"
 import { StatTile } from "@/components/ui/stat-tile"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
 import { todayIso } from "@/lib/date-utils"
 import {
   BIOMETRIC_RELAY_HOST,
@@ -245,8 +245,7 @@ export default function AttendanceScannerTab() {
   const steps = scannerSetupState(signals)
   const workersWithoutId = useMemo(() => workers.filter((w) => !w.deviceUserCode), [workers])
 
-  const handleAddDeviceUnguarded = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleAddDeviceUnguarded = async () => {
     if (!newLabel.trim() || !newSerial.trim()) return
     setIsAddingDevice(true)
     busyRef.current = true
@@ -273,7 +272,7 @@ export default function AttendanceScannerTab() {
 
   // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast taps both
   // entered this handler. See lib/single-flight.ts.
-  const handleAddDevice = useSingleFlight(handleAddDeviceUnguarded)
+  const handleAddDevice = useSingleFlightSubmit(handleAddDeviceUnguarded)
 
   /**
    * Move a terminal to a different estate after it is registered.

@@ -261,15 +261,15 @@ const ALL_WORKERS = "all"
           {/* Filters */}
           <div className="flex flex-wrap gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
-              <Label className="shrink-0 text-xs">From</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-32 sm:w-36 text-sm" />
+              <Label htmlFor="picking-filter-from" className="shrink-0 text-xs">From</Label>
+              <Input id="picking-filter-from" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-32 sm:w-36 text-sm" />
             </div>
             <div className="flex items-center gap-2">
-              <Label className="shrink-0 text-xs">To</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-32 sm:w-36 text-sm" />
+              <Label htmlFor="picking-filter-to" className="shrink-0 text-xs">To</Label>
+              <Input id="picking-filter-to" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-32 sm:w-36 text-sm" />
             </div>
             <Select value={filterWorker} onValueChange={setFilterWorker}>
-              <SelectTrigger className="h-8 w-40 sm:w-44 text-sm"><SelectValue placeholder="All workers" /></SelectTrigger>
+              <SelectTrigger aria-label="Filter by worker" className="h-8 w-40 sm:w-44 text-sm"><SelectValue placeholder="All workers" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_WORKERS}>All workers</SelectItem>
                 {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
@@ -282,23 +282,23 @@ const ALL_WORKERS = "all"
             <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-1.5">
-                  <Label>Worker *</Label>
+                  <Label htmlFor="picking-worker">Worker *</Label>
                   <Select value={form.workerId} onValueChange={(v) => setForm((f) => ({ ...f, workerId: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select worker" /></SelectTrigger>
+                    <SelectTrigger id="picking-worker"><SelectValue placeholder="Select worker" /></SelectTrigger>
                     <SelectContent>
                       {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Date *</Label>
-                  <Input type="date" value={form.pickDate} onChange={(e) => setForm((f) => ({ ...f, pickDate: e.target.value }))} />
+                  <Label htmlFor="picking-date">Date *</Label>
+                  <Input id="picking-date" type="date" value={form.pickDate} onChange={(e) => setForm((f) => ({ ...f, pickDate: e.target.value }))} />
                 </div>
                 {locations.length > 0 && (
                   <div className="space-y-1.5">
-                    <Label>Location *</Label>
+                    <Label htmlFor="picking-location">Location *</Label>
                     <Select value={form.locationId} onValueChange={(v) => setForm((f) => ({ ...f, locationId: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+                      <SelectTrigger id="picking-location"><SelectValue placeholder="Select location" /></SelectTrigger>
                       <SelectContent>
                         {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                       </SelectContent>
@@ -416,10 +416,10 @@ const ALL_WORKERS = "all"
                         <TableCell className="hidden md:table-cell"><Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="h-8 w-40" placeholder="Notes" /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(r.id)}>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Save edit" disabled={saving} onClick={() => handleSaveEdit(r.id)}>
                               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 text-emerald-500" />}
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Cancel edit" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -447,7 +447,7 @@ const ALL_WORKERS = "all"
                                 {canWrite && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(r)}>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Edit record" onClick={() => startEdit(r)}>
                                         <Pencil className="h-3.5 w-3.5" />
                                       </Button>
                                     </TooltipTrigger>
@@ -457,7 +457,7 @@ const ALL_WORKERS = "all"
                                 {canDelete && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(r.id)}>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" aria-label="Delete record" onClick={() => handleDelete(r.id)}>
                                         <Trash2 className="h-3.5 w-3.5" />
                                       </Button>
                                     </TooltipTrigger>

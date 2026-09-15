@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { todayIso } from "@/lib/date-utils"
 import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -261,7 +262,7 @@ export default function WorkerProfilesTab() {
     loadEstateRule()
   }, [fetchWorkers, fetchLocations, loadEstateRule])
 
-  const handleAdd = async () => {
+  const handleAddUnguarded = async () => {
     if (!form.name.trim()) return
     setSaving(true)
     try {
@@ -296,6 +297,8 @@ export default function WorkerProfilesTab() {
       setSaving(false)
     }
   }
+
+  const handleAdd = useSingleFlight(handleAddUnguarded)
 
   const startEdit = (worker: Worker) => {
     setEditingId(worker.id)
@@ -564,8 +567,9 @@ export default function WorkerProfilesTab() {
             </div>
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
               <div className="space-y-1.5">
-                <FieldLabel label={form.kind === "gang" ? "Crew name *" : "Full name *"} />
+                <FieldLabel htmlFor="worker-add-name" label={form.kind === "gang" ? "Crew name *" : "Full name *"} />
                 <Input
+                  id="worker-add-name"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder={form.kind === "gang" ? "Rathi & Team" : "Ravi Kumar"}
@@ -575,10 +579,12 @@ export default function WorkerProfilesTab() {
               {form.kind === "gang" && (
                 <div className="space-y-1.5">
                   <FieldLabel
+                    htmlFor="worker-add-headcount"
                     label="Headcount *"
                     tooltip="How many people the crew normally brings. It can be changed on any given day from the muster, so this is the usual number, not a promise."
                   />
                   <Input
+                    id="worker-add-headcount"
                     value={form.headcount}
                     onChange={(e) => setForm((f) => ({ ...f, headcount: e.target.value }))}
                     placeholder="e.g. 10"
@@ -588,6 +594,7 @@ export default function WorkerProfilesTab() {
               )}
               <div className="space-y-1.5">
                 <FieldLabel
+                  htmlFor="worker-add-type"
                   label="Type"
                   tooltip="Permanent: on the estate year-round. Seasonal: hired for harvest season only. Contractor: paid by task or through a labour contractor, not tracked individually."
                 />
@@ -595,7 +602,7 @@ export default function WorkerProfilesTab() {
                   value={form.workerType}
                   onValueChange={(v) => setForm((f) => ({ ...f, workerType: v as WorkerType | "" }))}
                 >
-                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectTrigger id="worker-add-type"><SelectValue placeholder="Select type" /></SelectTrigger>
                   <SelectContent>
                     {WORKER_TYPES.map((t) => (
                       <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
@@ -607,6 +614,7 @@ export default function WorkerProfilesTab() {
                   doing the same work is paid the same rate. */}
               <div className="space-y-1.5">
                 <FieldLabel
+                  htmlFor="worker-add-gender"
                   label="Gender"
                   tooltip="Reported in INDICOFS workforce returns. It has no effect on pay: the rate belongs to the work, and everyone doing that work is paid the same."
                 />
@@ -614,7 +622,7 @@ export default function WorkerProfilesTab() {
                   value={form.gender || "unset"}
                   onValueChange={(v) => setForm((f) => ({ ...f, gender: v === "unset" ? "" : v }))}
                 >
-                  <SelectTrigger><SelectValue placeholder="Not recorded" /></SelectTrigger>
+                  <SelectTrigger id="worker-add-gender"><SelectValue placeholder="Not recorded" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unset">Not recorded</SelectItem>
                     <SelectItem value="female">Female</SelectItem>
@@ -643,10 +651,12 @@ export default function WorkerProfilesTab() {
               {isPaidDaily(form.workerType) ? (
                 <div className="space-y-1.5">
                   <FieldLabel
+                    htmlFor="worker-add-daily-rate"
                     label="Daily wage (₹)"
                     tooltip="What this worker normally earns for a day. For a contract crew this is the rate PER PERSON — the day's cost is this times the headcount. Work that pays differently can carry its own rate under Costs, and a one-off amount can be typed on the deployment itself; both override this."
                   />
                   <Input
+                    id="worker-add-daily-rate"
                     type="number" inputMode="decimal"
                     min={0}
                     value={numericInputValue(form.dailyRate)}
@@ -657,10 +667,12 @@ export default function WorkerProfilesTab() {
               ) : (
                 <div className="space-y-1.5">
                   <FieldLabel
+                    htmlFor="worker-add-monthly-wage"
                     label="Monthly salary (₹)"
                     tooltip="What this worker is paid each month, regardless of days worked. Staff are paid the same whether they work eighteen days or twenty-four, so they have no daily rate and the muster does not cost their day — marking them present is still worth doing, it just records attendance rather than a wage."
                   />
                   <Input
+                    id="worker-add-monthly-wage"
                     type="number" inputMode="decimal"
                     min={0}
                     value={numericInputValue(form.monthlyWage)}
@@ -672,6 +684,7 @@ export default function WorkerProfilesTab() {
               {showEstateField && (
                 <div className="space-y-1.5">
                   <FieldLabel
+                    htmlFor="worker-add-estate"
                     label="Estate"
                     tooltip="Which estate this worker belongs to. Leave unassigned to have them show up under every estate until you assign one."
                   />
@@ -679,7 +692,7 @@ export default function WorkerProfilesTab() {
                     value={form.estate}
                     onValueChange={(v) => setForm((f) => ({ ...f, estate: v }))}
                   >
-                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                    <SelectTrigger id="worker-add-estate"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_ESTATE}>Unassigned</SelectItem>
                                 {estates.map((name) => (
@@ -693,8 +706,9 @@ export default function WorkerProfilesTab() {
                   add form never collected them — so adding a worker meant saving, then immediately
                   reopening them to enter details the form had already implied it wanted. */}
               <div className="space-y-1.5">
-                <FieldLabel label="Phone" tooltip="Contact number for this worker. Optional." />
+                <FieldLabel htmlFor="worker-add-phone" label="Phone" tooltip="Contact number for this worker. Optional." />
                 <Input
+                  id="worker-add-phone"
                   value={form.phone}
                   onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
                   placeholder="9876543210"
@@ -702,24 +716,27 @@ export default function WorkerProfilesTab() {
                 />
               </div>
               <div className="space-y-1.5">
-                <FieldLabel label="Bank name" tooltip="Used for payroll payouts. Optional." />
+                <FieldLabel htmlFor="worker-add-bank-name" label="Bank name" tooltip="Used for payroll payouts. Optional." />
                 <Input
+                  id="worker-add-bank-name"
                   value={form.bankName}
                   onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
                   placeholder="Canara Bank"
                 />
               </div>
               <div className="space-y-1.5">
-                <FieldLabel label="Account number" tooltip="Bank account for payroll payouts. Optional." />
+                <FieldLabel htmlFor="worker-add-bank-account" label="Account number" tooltip="Bank account for payroll payouts. Optional." />
                 <Input
+                  id="worker-add-bank-account"
                   value={form.bankAccount}
                   onChange={(e) => setForm((f) => ({ ...f, bankAccount: e.target.value }))}
                   placeholder="123456789012"
                 />
               </div>
               <div className="space-y-1.5">
-                <FieldLabel label="IFSC" tooltip="Bank branch IFSC code for payroll payouts. Optional." />
+                <FieldLabel htmlFor="worker-add-bank-ifsc" label="IFSC" tooltip="Bank branch IFSC code for payroll payouts. Optional." />
                 <Input
+                  id="worker-add-bank-ifsc"
                   value={form.bankIfsc}
                   onChange={(e) => setForm((f) => ({ ...f, bankIfsc: e.target.value }))}
                   placeholder="CNRB0001234"
@@ -730,10 +747,12 @@ export default function WorkerProfilesTab() {
               {showFingerIds && (
                 <div className="space-y-1.5">
                   <FieldLabel
+                    htmlFor="worker-add-finger-id"
                     label="Finger ID"
                     tooltip="The enrol ID shown on the fingerprint terminal for this worker. Punches from that ID are attributed to them. Can also be assigned later from the unmapped-codes panel."
                   />
                   <Input
+                    id="worker-add-finger-id"
                     value={form.deviceUserCode}
                     onChange={(e) => setForm((f) => ({ ...f, deviceUserCode: e.target.value }))}
                     placeholder="1"
@@ -867,7 +886,7 @@ export default function WorkerProfilesTab() {
                             value={editForm.workerType}
                             onValueChange={(v) => setEditForm((f) => ({ ...f, workerType: v as WorkerType | "" }))}
                           >
-                            <SelectTrigger className="h-10"><SelectValue placeholder="Worker type" /></SelectTrigger>
+                            <SelectTrigger className="h-10" aria-label={`Worker type for ${w.name}`}><SelectValue placeholder="Worker type" /></SelectTrigger>
                             <SelectContent>
                               {WORKER_TYPES.map((t) => (
                                 <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
@@ -879,7 +898,7 @@ export default function WorkerProfilesTab() {
                               value={editForm.estate}
                               onValueChange={(v) => setEditForm((f) => ({ ...f, estate: v }))}
                             >
-                              <SelectTrigger className="h-10"><SelectValue placeholder="Estate / block" /></SelectTrigger>
+                              <SelectTrigger className="h-10" aria-label={`Estate for ${w.name}`}><SelectValue placeholder="Estate / block" /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value={UNASSIGNED_ESTATE}>Unassigned</SelectItem>
                                 {estates.map((name) => (
@@ -927,7 +946,7 @@ export default function WorkerProfilesTab() {
                             value={editForm.gender || "unset"}
                             onValueChange={(v) => setEditForm((f) => ({ ...f, gender: v === "unset" ? "" : v }))}
                           >
-                            <SelectTrigger className="h-10"><SelectValue placeholder="Gender" /></SelectTrigger>
+                            <SelectTrigger className="h-10" aria-label={`Gender for ${w.name}`}><SelectValue placeholder="Gender" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="unset">Gender not recorded</SelectItem>
                               <SelectItem value="female">Female</SelectItem>
@@ -1136,7 +1155,7 @@ export default function WorkerProfilesTab() {
                             value={editForm.workerType}
                             onValueChange={(v) => setEditForm((f) => ({ ...f, workerType: v as WorkerType | "" }))}
                           >
-                            <SelectTrigger className="h-8 w-32"><SelectValue placeholder="Type" /></SelectTrigger>
+                            <SelectTrigger className="h-8 w-32" aria-label={`Worker type for ${w.name}`}><SelectValue placeholder="Type" /></SelectTrigger>
                             <SelectContent>
                               {WORKER_TYPES.map((t) => (
                                 <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
@@ -1150,7 +1169,7 @@ export default function WorkerProfilesTab() {
                               value={editForm.estate}
                               onValueChange={(v) => setEditForm((f) => ({ ...f, estate: v }))}
                             >
-                              <SelectTrigger className="h-8 w-32"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                              <SelectTrigger className="h-8 w-32" aria-label={`Estate for ${w.name}`}><SelectValue placeholder="Unassigned" /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value={UNASSIGNED_ESTATE}>Unassigned</SelectItem>
                                 {estates.map((name) => (
@@ -1192,7 +1211,7 @@ export default function WorkerProfilesTab() {
                             value={editForm.gender || "unset"}
                             onValueChange={(v) => setEditForm((f) => ({ ...f, gender: v === "unset" ? "" : v }))}
                           >
-                            <SelectTrigger className="h-8 w-28"><SelectValue placeholder="—" /></SelectTrigger>
+                            <SelectTrigger className="h-8 w-28" aria-label={`Gender for ${w.name}`}><SelectValue placeholder="—" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="unset">Not recorded</SelectItem>
                               <SelectItem value="female">Female</SelectItem>
@@ -1325,7 +1344,7 @@ export default function WorkerProfilesTab() {
                               <div className="flex gap-1">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(w)}>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(w)} aria-label={`Edit ${w.name}`}>
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
                                   </TooltipTrigger>
@@ -1333,7 +1352,7 @@ export default function WorkerProfilesTab() {
                                 </Tooltip>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeactivate(w.id, w.name)}>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeactivate(w.id, w.name)} aria-label={`Deactivate ${w.name}`}>
                                       <UserX className="h-3.5 w-3.5" />
                                     </Button>
                                   </TooltipTrigger>

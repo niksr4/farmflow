@@ -388,6 +388,7 @@ export function TransactionHistoryPanel({
                               <Button
                                 size="sm"
                                 variant="ghost"
+                                aria-label="Edit transaction"
                                 onClick={() => handleEditTransaction(transaction)}
                                 className="text-amber-600 p-2 h-auto"
                               >
@@ -402,6 +403,7 @@ export function TransactionHistoryPanel({
                                 <Button
                                   size="sm"
                                   variant="ghost"
+                                  aria-label="Delete transaction"
                                   onClick={() => handleDeleteConfirm(transaction.id)}
                                   className="text-red-600 p-2 h-auto"
                                 >

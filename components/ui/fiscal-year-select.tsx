@@ -1,5 +1,6 @@
 "use client"
 
+import { useId } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
@@ -23,6 +24,16 @@ export function FiscalYearSelect({
   label = "Fiscal Year",
   className,
 }: FiscalYearSelectProps) {
+  /**
+   * Per instance, not per component. This is a shared primitive, and the dashboard keeps every tab
+   * it has visited MOUNTED — so once somebody has opened both Accounts and Season, two of these
+   * exist at once. With a literal id they shared one, and `htmlFor` resolves to the FIRST match in
+   * the document: clicking Season's label focused the Accounts control, off-screen on another tab.
+   *
+   * Duplicate ids are also invalid HTML that nothing reports. Raised by Greptile on PR #17.
+   */
+  const selectId = useId()
+
   const handleChange = (selectedLabel: string) => {
     const fy = options.find((f) => f.label === selectedLabel)
     if (fy) onChange(fy)
@@ -31,9 +42,9 @@ export function FiscalYearSelect({
   if (variant === "full") {
     return (
       <div className={className}>
-        <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</Label>
+        <Label htmlFor={selectId} className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</Label>
         <Select value={value.label} onValueChange={handleChange}>
-          <SelectTrigger className="mt-2 w-full min-w-[220px] bg-white sm:min-w-[240px]">
+          <SelectTrigger id={selectId} className="mt-2 w-full min-w-[220px] bg-white sm:min-w-[240px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

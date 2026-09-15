@@ -123,7 +123,7 @@ export default function MobileSidebarDrawer({
                     type="button"
                     onClick={() => { onTabChange(tab.value); onClose() }}
                     className={cn(
-                      "flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium transition-colors touch-manipulation",
+                      "relative flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium transition-colors touch-manipulation",
                       isActive
                         ? "bg-emerald-50 text-emerald-700 font-semibold"
                         : "text-neutral-600 hover:bg-stone-50 hover:text-neutral-900",
