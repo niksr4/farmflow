@@ -122,3 +122,43 @@ describe("the placeholder left behind cannot be used to log in", () => {
     expect(verifyPassword("password", sha256OfSecret).matches).toBe(true)
   })
 })
+
+describe("the remediation path cannot activate the placeholder", () => {
+  /**
+   * ⚠ MY OWN FIX POINTED AT A SCRIPT THAT WOULD HAVE UNDONE IT. Migration 17's new comment said
+   * the first owner's password could be set "via scripts/64-password-hardening.mjs". That script's
+   * `--apply-plaintext` mode runs `hashPassword(row.password_hash)` — it scrypt-hashes the value
+   * ALREADY IN THE COLUMN.
+   *
+   * For a genuine legacy plaintext password that is correct: the user knows it, and hashing it in
+   * place preserves their login while removing the plaintext. For the placeholder it is
+   * catastrophic — it would mint a valid owner credential whose plaintext is printed in a public
+   * repository. Strictly worse than the SHA-256 hash the migration was fixed to remove, because a
+   * published plaintext needs no cracking at all.
+   *
+   * Raised by Greptile on PR #23, against the remediation advice rather than the code. A fix's
+   * instructions are part of the fix.
+   */
+  const hardening = readFileSync("scripts/64-password-hardening.mjs", "utf8")
+  const migration = readFileSync("scripts/17-add-owner-role-and-user.sql", "utf8")
+
+  it("the hardening script knows about the sentinel and skips it", () => {
+    expect(hardening).toContain("NON_CREDENTIAL_SENTINELS")
+    expect(hardening).toContain("NO-LOGIN-set-a-password-through-the-app")
+    // The filter must be applied to the rows it re-hashes, not merely declared.
+    expect(hardening).toMatch(/plaintextRows\.filter\(\(row\) => !isNonCredentialSentinel/)
+  })
+
+  it("the sentinel the script guards is the one the migration actually writes", () => {
+    // Two copies of a string in two languages; if they drift the guard silently stops matching.
+    const seeded = migration.match(/'(NO-LOGIN-[^']+)'/)?.[1]
+    expect(seeded, "migration 17 no longer seeds the expected placeholder").toBeTruthy()
+    expect(hardening).toContain(seeded!)
+  })
+
+  it("and the migration no longer sends operators to that script", () => {
+    const guidance = migration.slice(migration.indexOf("TO CREATE THE FIRST OWNER"))
+    expect(guidance).not.toMatch(/via scripts\/64-password-hardening\.mjs/)
+    expect(guidance).toMatch(/ACCEPTS A NEW SECRET/)
+  })
+})

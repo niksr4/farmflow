@@ -36,8 +36,21 @@ ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user
 -- back" rather than "delete it and move on". tests/no-credentials-in-migrations.test.ts enforces
 -- both halves across every script in the repo.
 --
--- To create the first owner on a fresh database, set the password through the app (which writes
--- scrypt) or via scripts/64-password-hardening.mjs. Deliberately not automated here.
+-- TO CREATE THE FIRST OWNER on a fresh database, use a flow that ACCEPTS A NEW SECRET: the app's
+-- own password reset, or the admin console. Never anything that re-hashes what is already stored.
+--
+-- ⚠ THIS LINE ORIGINALLY POINTED AT scripts/64-password-hardening.mjs, WHICH WOULD HAVE
+-- RECREATED THE EXACT VULNERABILITY THIS FILE FIXES. That script's `--apply-plaintext` mode runs
+-- `hashPassword(row.password_hash)` -- it scrypt-hashes the value ALREADY IN THE COLUMN. The
+-- placeholder below classifies as `legacy_plaintext`, so following that advice would have turned
+-- a string printed in a public repository into a valid scrypt owner credential: strictly worse
+-- than the hash it replaced, because a published plaintext needs no cracking at all.
+--
+-- Raised by Greptile on PR #23 -- against the remediation advice, not the code. A fix's
+-- instructions are part of the fix.
+--
+-- The script now refuses to re-hash this sentinel (NON_CREDENTIAL_SENTINELS there), so the
+-- mistake is blocked at both ends rather than only warned about here.
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
 WITH default_tenant AS (
   SELECT id
