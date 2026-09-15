@@ -283,12 +283,25 @@ export async function exportPersonalData(sessionUser: SessionUser) {
     [],
   )
 
+  /**
+   * ⚠ user_id ONLY — this is the clause that turned the username ambiguity into an actual
+   * disclosure, and it is one line further in than the updates Greptile flagged.
+   *
+   * Matching `username = ${sessionUser.username} OR user_id = ${sessionUser.id}` means a personal
+   * data export is authorised by a MUTABLE, REUSABLE string. Anonymization frees a username; a
+   * later person registering under it would have been handed the earlier person's deletion
+   * request -- its type, its details, its dates -- in their own DPDP export. Fixing only the two
+   * UPDATEs would have left this reachable by any stale row already in the table.
+   *
+   * A row with user_id NULL belongs to somebody anonymized and is nobody's personal data to
+   * export any more, which is precisely what anonymizing them was for.
+   */
   const privacyRequests = await safeQuery(
     db`
       SELECT id, request_type, request_details, status, created_at, resolved_at
       FROM privacy_requests
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND (username = ${sessionUser.username} OR user_id = ${sessionUser.id})
+        AND user_id = ${sessionUser.id}
       ORDER BY created_at DESC
     `,
     tenantContext,
@@ -416,15 +429,25 @@ export async function updateUsername(sessionUser: SessionUser, newUsername: stri
       WHERE tenant_id = ${tenantContext.tenantId}
         AND username = ${currentUsername}
     `,
-    // privacy_requests.username is a denormalized copy (see requestDeletion below) -- left out of
-    // this rename list, it would keep showing a renamed user's old username indefinitely. The
-    // row's user_id stays correct regardless (untouched here), but exportPersonalData and any
-    // future admin view over this table should see the current username, not a stale one.
+    /**
+     * privacy_requests.username is a denormalized copy (see requestDeletion below) -- left out of
+     * this rename list it would keep showing a renamed user's old username indefinitely.
+     *
+     * ⚠ MATCHED ON user_id, NOT ON USERNAME, and the difference is a privacy leak rather than a
+     * tidiness question. Usernames are mutable AND reusable: once a user is anonymized their old
+     * name is freed, and a later person can take it. Matching `username = ${currentUsername}`
+     * would then let this rename rewrite a DIFFERENT person's historical deletion request --
+     * relabelling a stranger's row with the current user's new name while leaving its original
+     * user_id intact. Raised by Greptile on PR #22.
+     *
+     * Every row this should touch belongs to this user and carries their id. A row whose user_id
+     * is NULL belongs to somebody already anonymized and must never be re-attached to anyone.
+     */
     db`
       UPDATE privacy_requests
       SET username = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND username = ${currentUsername}
+        AND user_id = ${sessionUser.id}
     `,
   ]
 
@@ -517,12 +540,23 @@ const anonymizeReferences = async (
     // way audit_logs' is (the column is nullable, ON DELETE SET NULL, per
     // scripts/40-dpdp-privacy.sql), since after anonymization there's no live user to still be
     // "the requester" of this row.
+    /**
+     * ⚠ user_id ONLY. The audit_logs sweep above matches `username OR user_id` because an audit
+     * row can predate the user_id column and is append-only evidence; a privacy request is the
+     * opposite -- it is the record of someone asking to be forgotten, and mis-attributing one is
+     * the exact harm this module exists to prevent.
+     *
+     * Usernames are freed on anonymization and can be taken by someone else. `username =
+     * ${oldUsername}` therefore also matches the stale rows of a PREVIOUSLY anonymized person who
+     * once held this name, and would overwrite their request with this user's anonymized handle.
+     * Raised by Greptile on PR #22.
+     */
     ensureSql()`
       UPDATE privacy_requests
       SET username = ${anonymizedUsername},
           user_id = NULL
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND (username = ${oldUsername} OR user_id = ${userId})
+        AND user_id = ${userId}
     `,
   ]
 
