@@ -37,9 +37,18 @@ export const escapeHtml = (value: unknown): string =>
  * Percent-encoding first stops the value being read as URL syntax (a `?` would start a
  * header block — `mailto:x@y?bcc=attacker@evil` — and `javascript:` style payloads rely on
  * the browser parsing the scheme), then HTML-escaping makes it safe inside the attribute.
+ *
+ * MUST be `encodeURIComponent`, not `encodeURI`. `encodeURI` deliberately leaves `?`, `&`,
+ * `=`, and `@` unescaped (it's meant for encoding an already-complete URL, not a value being
+ * embedded inside one) — so `x@y.com?bcc=attacker@evil.com` passed straight through
+ * unescaped, which is precisely the header-injection this comment says is prevented.
+ * `encodeURIComponent` percent-encodes those characters; a compliant `mailto:` parser
+ * percent-decodes them back to a normal address (`nik%40example.com` still opens a compose
+ * window addressed to nik@example.com), so this doesn't break a legitimate address, only an
+ * injected one.
  */
 export const escapeHtmlAttributeUrl = (value: unknown): string =>
-  escapeHtml(encodeURI(String(value ?? "")))
+  escapeHtml(encodeURIComponent(String(value ?? "")))
 
 /**
  * Strip CR/LF from a value used in an email subject. Newlines in a header are the classic

@@ -4,6 +4,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { CROP_LABEL, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { isRevaluationNote } from "@/lib/revaluation-notes"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
 
@@ -356,7 +357,7 @@ async function fetchSalesData(startDate: string, endDate: string, tenantContext:
 async function fetchTransactionHistory(startDate: string, endDate: string, tenantContext: TenantContext): Promise<TransactionHistoryRow[]> {
   try {
     const tenantId = tenantContext.tenantId
-    return await runTenantQuery(
+    const rows = (await runTenantQuery(
       sql,
       tenantContext,
       sql`
@@ -365,14 +366,24 @@ async function fetchTransactionHistory(startDate: string, endDate: string, tenan
           quantity,
           transaction_type,
           transaction_date,
-          total_cost
+          total_cost,
+          notes
         FROM transaction_history
         WHERE transaction_date >= ${startDate} AND transaction_date <= ${endDate}
           AND tenant_id = ${tenantId}
         ORDER BY transaction_date DESC
         LIMIT 500
       `,
-    )
+    )) as Array<TransactionHistoryRow & { notes?: string | null }>
+
+    // A price correction writes a full deplete-and-restock pair valued at the entire holding --
+    // real money, but not a trade (see lib/revaluation-notes.ts: Rs 105.78 crore of phantom
+    // depletion and Rs 64.42 crore of phantom purchases on one tenant, from exactly this kind of
+    // total counting these rows as real activity). buildDataSummary below sums these rows into
+    // "Total restocking transactions" / "Top restocking spend" / "Top depletion volume" for the
+    // AI insights tab, AI assistant, proactive insights, and the weekly digest narrative -- the
+    // same class of money total the balance sheet and season summary already exclude these from.
+    return rows.filter((row) => !isRevaluationNote(row.notes))
   } catch (error) {
     logServerError("Error fetching transaction history", error)
     return []

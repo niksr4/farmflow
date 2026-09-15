@@ -34,7 +34,17 @@ describe("reports exclude both spellings of a revaluation", () => {
     it(`${f} never excludes one spelling without the other`, () => {
       const src = readFileSync(resolve(__dirname, "..", f), "utf8")
 
-      const shared = (src.match(/\$\{EXCLUDE_REVALUATION_SQL\}/g) ?? []).length
+      // Either interpolation form counts: `${EXCLUDE_REVALUATION_SQL}` inside a raw
+      // sql.query(`...`, [...]) string (season-summary/route.ts), or
+      // `${sql.unsafe(EXCLUDE_REVALUATION_SQL)}` inside a neon tagged-template sql`...` query
+      // (finance-balance-sheet/route.ts). The two files use different query styles for reasons
+      // unrelated to this rule, and neon's tagged-template function parameterizes a bare
+      // `${EXCLUDE_REVALUATION_SQL}` as a bound string value instead of splicing it in as SQL
+      // text -- sql.unsafe(...) is the only correct way to use the shared constant there. See
+      // tests/revaluation-notes-sql-composition.test.ts for the reproduction of that failure
+      // mode and lib/revaluation-notes.ts's docstring for why EXCLUDE_REVALUATION_SQL is a plain
+      // string rather than a nested sql-tagged-template fragment in the first place.
+      const shared = (src.match(/\$\{(?:sql\.unsafe\()?EXCLUDE_REVALUATION_SQL\)?\}/g) ?? []).length
       const updated = (src.match(/NOT ILIKE 'Price updated%'/g) ?? []).length
       const correction = (src.match(/NOT ILIKE 'Price correction%'/g) ?? []).length
 
