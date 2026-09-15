@@ -51,6 +51,50 @@ function currentBranch() {
   return git("rev-parse", "--abbrev-ref", "HEAD")
 }
 
+/**
+ * The commit to actually test — which on a pull request is NOT `HEAD`.
+ *
+ * ⚠ THIS BUG DEFEATED THE ENTIRE CHECK, and defeated it silently, in the affirmative direction.
+ * On a `pull_request` event `actions/checkout` checks out `refs/pull/N/merge`: a SYNTHETIC MERGE
+ * of the branch into the current base. That commit contains `origin/main` by construction, so
+ * `merge-base HEAD origin/main` equals `origin/main` **no matter how stale the source branch is**,
+ * and the guard printed a green tick.
+ *
+ * Demonstrated against the branch this whole check exists for. Merging `origin/main` into the real
+ * stale scanner tip `de238a5` and running the old code on the result:
+ *
+ *     ✓ base check: scanner/2026-09-14 contains origin/main (8ebacd18).   exit=0
+ *
+ * while `de238a5` itself was sixteen commits behind. A guard that passes on the one input it was
+ * written to reject is worse than no guard, because it also reports that it ran. Raised by
+ * Greptile on PR #20.
+ *
+ * `github.event.pull_request.head.sha` is the real tip, passed in as PR_HEAD_SHA by the workflow.
+ * It is always present in the object store: it is the first parent of the synthetic merge, and the
+ * workflow clones with `fetch-depth: 0`. Fetched explicitly anyway if it somehow is not, because
+ * failing to find it must not silently fall back to the commit that hides the problem.
+ */
+function commitUnderTest() {
+  const prHead = (process.env.PR_HEAD_SHA || "").trim()
+  if (!prHead) return { rev: "HEAD", label: "HEAD" }
+
+  try {
+    git("cat-file", "-e", `${prHead}^{commit}`)
+  } catch {
+    try {
+      git("fetch", "origin", prHead, "--quiet", "--depth=100")
+    } catch {
+      console.error(
+        `✗ base check: PR head ${prHead.slice(0, 8)} is not in this clone and could not be fetched.\n` +
+          "  Refusing to fall back to HEAD — on a pull request HEAD is a synthetic merge that\n" +
+          "  already contains the base, so checking it would pass unconditionally.",
+      )
+      process.exit(1)
+    }
+  }
+  return { rev: prHead, label: `${prHead.slice(0, 8)} (pull request head)` }
+}
+
 function main() {
   const branch = currentBranch()
 
@@ -66,20 +110,23 @@ function main() {
     return 0
   }
 
-  const mergeBase = git("merge-base", "HEAD", remoteBase)
+  const { rev: head, label: headLabel } = commitUnderTest()
+  const mergeBase = git("merge-base", head, remoteBase)
   const baseHead = git("rev-parse", remoteBase)
 
   if (mergeBase === baseHead) {
     console.log(`✓ base check: ${branch} contains ${remoteBase} (${baseHead.slice(0, 8)}).`)
+    console.log(`  checked ${headLabel}`)
     return 0
   }
 
-  const behind = Number(git("rev-list", "--count", `HEAD..${remoteBase}`))
+  const behind = Number(git("rev-list", "--count", `${head}..${remoteBase}`))
   const isScanner = branch.startsWith("scanner/")
   const allowance = isScanner ? SCANNER_ALLOWANCE : HUMAN_ALLOWANCE
 
   const detail = [
     `branch        ${branch}`,
+    `checked       ${headLabel}`,
     `merge-base    ${mergeBase.slice(0, 8)}`,
     `${remoteBase.padEnd(13)} ${baseHead.slice(0, 8)}`,
     `behind by     ${behind} commit${behind === 1 ? "" : "s"}`,

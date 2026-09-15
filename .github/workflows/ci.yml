@@ -42,7 +42,16 @@ jobs:
       # branch 16 commits behind main, and reported itself "verified fast-forward -- main hasn't
       # moved" while five merged PRs said otherwise. Green CI on that branch meant green against
       # the tree as it was before those five landed.
+      # ⚠ PR_HEAD_SHA is load-bearing, not decoration. On a pull_request event the checkout above
+      # is refs/pull/N/merge — a synthetic merge of the branch INTO the current base — so its HEAD
+      # contains origin/main by construction and a merge-base check against HEAD passes for any
+      # branch, however stale. That is not a theory: the first version of this gate printed
+      # "✓ contains origin/main" for the sixteen-commits-behind branch it was written to reject.
+      # The head sha is the real branch tip, and it is the merge commit's first parent, so
+      # fetch-depth: 0 guarantees it is present.
       - name: Branch base
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/dev/check-branch-base.mjs
 
       - name: Setup pnpm
