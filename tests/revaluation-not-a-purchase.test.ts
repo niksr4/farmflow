@@ -27,24 +27,82 @@ import { EXCLUDE_REVALUATION_SQL, REVALUATION_NOTE_PREFIXES, isRevaluationNote }
  * transaction_history either uses the shared constant, or carries both spellings itself.
  */
 
-const files = ["app/api/season-summary/route.ts", "app/api/finance-balance-sheet/route.ts"]
+/**
+ * Which interpolation form each file MUST use, and why they differ.
+ *
+ * ⚠ THIS TABLE IS THE POINT, and the reason a plain "either form counts" regex was wrong.
+ *
+ * `EXCLUDE_REVALUATION_SQL` is a plain JS string. Neon's tagged-template function binds a bare
+ * `${...}` interpolation as a PARAMETER, not as spliced SQL text — so inside a `sql\`...\`` query
+ * the constant arrives at Postgres as `$2`'s *value* and the statement is a syntax error. That is
+ * not hypothetical: it 500'd `/api/finance-balance-sheet` for every tenant on every request from
+ * 2026-09-11 until 2026-09-15, and nothing reported it because the route catches its own error.
+ *
+ * Inside `sql.query(\`...\`, [params])` the template is an ordinary JS string that neon never
+ * inspects, so the bare form is correct there and `sql.unsafe()` would be wrong.
+ *
+ * The first attempt at this test broadened the regex to accept BOTH forms in BOTH files. That
+ * makes the assertion vacuous exactly where it matters: reverting the balance sheet to the bare
+ * form — reintroducing a total outage — would have kept it green. Raised by Greptile on PR #18.
+ *
+ * A new file goes in this table when it is added, which is deliberate friction: choosing a form
+ * is a decision about how that file builds queries, and it should be made once, in writing.
+ */
+const REQUIRED_FORM: Record<string, { form: "unsafe" | "bare"; because: string }> = {
+  "app/api/season-summary/route.ts": {
+    form: "bare",
+    because: "builds with sql.query(`...`, [params]) — a raw string neon never parameterizes",
+  },
+  "app/api/finance-balance-sheet/route.ts": {
+    form: "unsafe",
+    because: "builds with the sql`...` tagged template, which binds a bare interpolation as a value",
+  },
+  "lib/server/ai-analysis.ts": {
+    form: "unsafe",
+    because: "same tagged template; excluded in SQL so the LIMIT 500 cannot be filled by revaluations",
+  },
+}
+
+const files = Object.keys(REQUIRED_FORM)
+
+const BARE = /\$\{EXCLUDE_REVALUATION_SQL\}/g
+const UNSAFE = /\$\{sql\.unsafe\(EXCLUDE_REVALUATION_SQL\)\}/g
+
+describe("the shared predicate is spliced as SQL, not bound as a value", () => {
+  for (const [file, { form, because }] of Object.entries(REQUIRED_FORM)) {
+    it(`${file} uses the ${form} form — ${because}`, () => {
+      const src = readFileSync(resolve(__dirname, "..", file), "utf8")
+      const bare = (src.match(BARE) ?? []).length
+      const unsafe = (src.match(UNSAFE) ?? []).length
+
+      expect(bare + unsafe, `${file} no longer interpolates the shared predicate at all`).toBeGreaterThan(0)
+
+      if (form === "unsafe") {
+        expect(
+          bare,
+          `${file} interpolates EXCLUDE_REVALUATION_SQL bare inside a neon tagged template. ` +
+            "Neon binds that as a parameter, so Postgres receives a syntax error and the route " +
+            "500s on every request. Wrap it in sql.unsafe(...).",
+        ).toBe(0)
+      } else {
+        expect(
+          unsafe,
+          `${file} wraps EXCLUDE_REVALUATION_SQL in sql.unsafe() inside a raw sql.query() string, ` +
+            "where the template is never parameterized and the wrapper does not belong.",
+        ).toBe(0)
+      }
+    })
+  }
+})
 
 describe("reports exclude both spellings of a revaluation", () => {
   for (const f of files) {
     it(`${f} never excludes one spelling without the other`, () => {
       const src = readFileSync(resolve(__dirname, "..", f), "utf8")
 
-      // Either interpolation form counts: `${EXCLUDE_REVALUATION_SQL}` inside a raw
-      // sql.query(`...`, [...]) string (season-summary/route.ts), or
-      // `${sql.unsafe(EXCLUDE_REVALUATION_SQL)}` inside a neon tagged-template sql`...` query
-      // (finance-balance-sheet/route.ts). The two files use different query styles for reasons
-      // unrelated to this rule, and neon's tagged-template function parameterizes a bare
-      // `${EXCLUDE_REVALUATION_SQL}` as a bound string value instead of splicing it in as SQL
-      // text -- sql.unsafe(...) is the only correct way to use the shared constant there. See
-      // tests/revaluation-notes-sql-composition.test.ts for the reproduction of that failure
-      // mode and lib/revaluation-notes.ts's docstring for why EXCLUDE_REVALUATION_SQL is a plain
-      // string rather than a nested sql-tagged-template fragment in the first place.
-      const shared = (src.match(/\$\{(?:sql\.unsafe\()?EXCLUDE_REVALUATION_SQL\)?\}/g) ?? []).length
+      // Either form counts HERE, because this describe block is about the two note SPELLINGS
+      // rather than about how the fragment is spliced. The block above is what polices the form.
+      const shared = (src.match(BARE) ?? []).length + (src.match(UNSAFE) ?? []).length
       const updated = (src.match(/NOT ILIKE 'Price updated%'/g) ?? []).length
       const correction = (src.match(/NOT ILIKE 'Price correction%'/g) ?? []).length
 
