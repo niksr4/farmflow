@@ -48,8 +48,11 @@ describe("escapeHtml", () => {
 })
 
 describe("escapeHtmlAttributeUrl", () => {
-  it("keeps a normal mailto address usable", () => {
-    expect(escapeHtmlAttributeUrl("nik@example.com")).toBe("nik@example.com")
+  it("keeps a normal mailto address usable (percent-encoded, still opens the right address)", () => {
+    // encodeURIComponent turns "@" into "%40" -- a compliant mailto: parser percent-decodes
+    // this back to a normal address, so the link still works even though the literal string
+    // changes. See the regression test below for why this can't be "@" left untouched.
+    expect(escapeHtmlAttributeUrl("nik@example.com")).toBe("nik%40example.com")
   })
 
   it("stops an injected attribute breaking out of href", () => {
@@ -61,6 +64,26 @@ describe("escapeHtmlAttributeUrl", () => {
     // mailto:x@y?bcc=... would otherwise let a submitted address add mail headers.
     const escaped = escapeHtmlAttributeUrl("x@y.com<script>")
     expect(escaped).not.toContain("<")
+  })
+
+  // Regression test for a real gap: this function used to call `encodeURI`, which
+  // deliberately leaves "?", "&", "=" and "@" unescaped (it's meant for encoding a
+  // already-complete URL, not a value embedded inside one). That meant the exact
+  // attack this file's own docstring describes -- mailto:x@y?bcc=attacker@evil.com --
+  // passed straight through untouched. Found 2026-09-15; fixed by switching to
+  // `encodeURIComponent`. This function has no call sites in the app today, so nothing
+  // was actually exploitable yet, but it's an exported security helper and the gap
+  // should be closed before something wires it up.
+  it("neutralises a mailto header-injection payload (?bcc=...)", () => {
+    const escaped = escapeHtmlAttributeUrl("x@y.com?bcc=attacker@evil.com")
+    expect(escaped).not.toContain("?")
+    expect(escaped).not.toContain("=")
+    expect(`mailto:${escaped}`).toBe("mailto:x%40y.com%3Fbcc%3Dattacker%40evil.com")
+  })
+
+  it("neutralises an injected '&' that could chain a second mail header", () => {
+    const escaped = escapeHtmlAttributeUrl("x@y.com&bcc=attacker@evil.com")
+    expect(escaped).not.toContain("&")
   })
 })
 

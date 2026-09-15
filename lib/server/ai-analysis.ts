@@ -4,6 +4,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { CROP_LABEL, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { EXCLUDE_REVALUATION_SQL } from "@/lib/revaluation-notes"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
 
@@ -369,6 +370,33 @@ async function fetchTransactionHistory(startDate: string, endDate: string, tenan
         FROM transaction_history
         WHERE transaction_date >= ${startDate} AND transaction_date <= ${endDate}
           AND tenant_id = ${tenantId}
+          -- A price correction writes a full deplete-and-restock pair valued at the entire
+          -- holding -- real money, but not a trade (lib/revaluation-notes.ts: Rs 105.78 crore of
+          -- phantom depletion and Rs 64.42 crore of phantom purchases on one tenant, from exactly
+          -- this kind of total counting these rows as activity). buildDataSummary sums these into
+          -- "Total restocking transactions" / "Top restocking spend" / "Top depletion volume" for
+          -- the AI insights tab, the assistant, proactive insights and the weekly digest.
+          --
+          -- ⚠ EXCLUDED HERE, BEFORE THE LIMIT, NOT AFTER IT IN JS. Filtering the returned array
+          -- was the first fix and it is wrong in a way that is invisible: the 500 newest rows are
+          -- chosen first, so every revaluation row consumes a slot and the query never refills it
+          -- with the older genuine trade it displaced. HoneyFarm carries 77 revaluations, so a
+          -- range crossing the limit would silently drop up to 77 real transactions out of every
+          -- total the AI then narrates. Raised by Greptile on PR #18.
+          --
+          -- Not reachable today: HoneyFarm has 426 transactions in ALL of history and 278 in its
+          -- busiest year, so no range any tenant can ask for reaches 500. It becomes reachable
+          -- some time in 2027 at their current rate, and the failure would be a quiet wrong
+          -- number rather than an error.
+          --
+          -- MUST be sql.unsafe(): EXCLUDE_REVALUATION_SQL is a plain string, and neon's
+          -- tagged-template binds a bare interpolation as a PARAMETER rather than splicing it as
+          -- SQL text. That exact mistake 500'd the balance sheet endpoint for every tenant on
+          -- every request from 2026-09-11. season-summary/route.ts uses the bare form correctly,
+          -- because there it sits inside sql.query(...) with a raw string neon never inspects.
+          -- (No backticks in this comment on purpose: it lives inside a template literal, and a
+          -- stray one closes the query. That is how this very edit first failed to compile.)
+          ${sql.unsafe(EXCLUDE_REVALUATION_SQL)}
         ORDER BY transaction_date DESC
         LIMIT 500
       `,
