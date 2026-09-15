@@ -188,13 +188,34 @@ test.describe("payroll", () => {
       const body = Array.from(t.tBodies)
         .flatMap((b) => Array.from(b.rows))
         .map((row) => money(slots(row)[at] ?? ""))
-      return { rows: body.reduce((a, b) => a + b, 0), footer: money(slots(t.tFoot.rows[0])[at] ?? "") }
+      return {
+        rows: body.reduce((a, b) => a + b, 0),
+        footer: money(slots(t.tFoot.rows[0])[at] ?? ""),
+        rowCount: body.length,
+      }
     })
 
     if (!sums) test.skip(true, "no Net Payable column or no footer in this table")
-    // Rounded to the rupee per row, so allow one rupee of drift per row rather than demanding
-    // an exact match the formatting itself makes impossible.
-    expect(Math.abs(sums!.rows - sums!.footer)).toBeLessThanOrEqual(2)
+
+    /**
+     * The tolerance has to SCALE WITH THE NUMBER OF ROWS, and the first version did not.
+     *
+     * formatCurrency rounds to the rupee (nobody on an estate settles in paise), so each of the N
+     * worker rows is displayed up to ₹0.50 away from its true value and the footer is rounded once
+     * more. Reading them back off the screen, the worst honest disagreement is therefore
+     * N × 0.5 + 0.5 — about ₹12 for a 24-worker week, and growing with the roster.
+     *
+     * A fixed allowance of 2 was not a looser assertion, it was a WRONG one: correct arithmetic
+     * would start failing CI somewhere around five workers, and the failure would look like a
+     * money bug. The comment beside it already said "one rupee of drift per row" — it described
+     * the right rule while the code implemented a constant, which is the same defect this whole
+     * suite exists to catch, committed in the test that catches it. Raised by Greptile on PR #19.
+     */
+    const tolerance = sums!.rowCount * 0.5 + 0.5
+    expect(
+      Math.abs(sums!.rows - sums!.footer),
+      `footer does not sum the ${sums!.rowCount} rows above it, beyond rounding (±₹${tolerance})`,
+    ).toBeLessThanOrEqual(tolerance)
   })
 
   test("offers both exports once there is something to export", async ({ page }) => {
