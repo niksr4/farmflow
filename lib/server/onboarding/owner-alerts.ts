@@ -51,6 +51,7 @@ const buildTenantCreatedAlertText = (input: TenantCreatedOwnerAlertInput) =>
 const logOwnerAlertFailure = async (input: {
   errorCode: string
   message: string
+  endpoint: string
   metadata?: Record<string, unknown>
 }) => {
   logServerWarning("Owner alert email failed", {
@@ -61,7 +62,7 @@ const logOwnerAlertFailure = async (input: {
 
   await logAppErrorEvent({
     source: "owner-alert-email",
-    endpoint: "/api/auth/signup",
+    endpoint: input.endpoint,
     errorCode: input.errorCode,
     severity: "warning",
     message: input.message,
@@ -79,6 +80,7 @@ export async function sendOwnerSignupRequestedAlert(input: SignupRequestedOwnerA
     await logOwnerAlertFailure({
       errorCode: "signup_requested_email_failed",
       message: emailResult.reason || "Owner signup request alert failed",
+      endpoint: "/api/auth/signup",
       metadata: {
         signupRequestId: input.signupRequestId,
         email: input.email,
@@ -95,9 +97,14 @@ export async function sendOwnerTenantCreatedAlert(input: TenantCreatedOwnerAlert
   })
 
   if (!emailResult.sent) {
+    // The endpoint this alert failed from depends on how the tenant was created -- hardcoding
+    // "/api/auth/signup" here made every owner-console-created tenant's failure log look like a
+    // signup-flow failure (this fires from both app/api/admin/tenants/route.ts and
+    // lib/server/onboarding/provision-tenant.ts, which have different actual endpoints).
     await logOwnerAlertFailure({
       errorCode: "tenant_created_email_failed",
       message: emailResult.reason || "Owner tenant created alert failed",
+      endpoint: input.origin === "owner-console" ? "/api/admin/tenants" : "/api/auth/signup",
       metadata: {
         tenantId: input.tenantId,
         tenantName: input.tenantName,

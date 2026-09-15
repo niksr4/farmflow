@@ -416,6 +416,16 @@ export async function updateUsername(sessionUser: SessionUser, newUsername: stri
       WHERE tenant_id = ${tenantContext.tenantId}
         AND username = ${currentUsername}
     `,
+    // privacy_requests.username is a denormalized copy (see requestDeletion below) -- left out of
+    // this rename list, it would keep showing a renamed user's old username indefinitely. The
+    // row's user_id stays correct regardless (untouched here), but exportPersonalData and any
+    // future admin view over this table should see the current username, not a stale one.
+    db`
+      UPDATE privacy_requests
+      SET username = ${trimmed}
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND username = ${currentUsername}
+    `,
   ]
 
   for (const query of updates) {
@@ -495,6 +505,20 @@ const anonymizeReferences = async (
     `,
     ensureSql()`
       UPDATE audit_logs
+      SET username = ${anonymizedUsername},
+          user_id = NULL
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND (username = ${oldUsername} OR user_id = ${userId})
+    `,
+    // Same reasoning as audit_logs immediately above: privacy_requests.username is a denormalized
+    // copy (see requestDeletion) that this sweep previously left untouched, so a "deletion"
+    // request's own row kept showing the anonymized user's real original username forever --
+    // undermining the point of anonymizing them in the first place. user_id is nulled the same
+    // way audit_logs' is (the column is nullable, ON DELETE SET NULL, per
+    // scripts/40-dpdp-privacy.sql), since after anonymization there's no live user to still be
+    // "the requester" of this row.
+    ensureSql()`
+      UPDATE privacy_requests
       SET username = ${anonymizedUsername},
           user_id = NULL
       WHERE tenant_id = ${tenantContext.tenantId}
