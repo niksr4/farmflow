@@ -97,14 +97,27 @@ export async function sendOwnerTenantCreatedAlert(input: TenantCreatedOwnerAlert
   })
 
   if (!emailResult.sent) {
-    // The endpoint this alert failed from depends on how the tenant was created -- hardcoding
-    // "/api/auth/signup" here made every owner-console-created tenant's failure log look like a
-    // signup-flow failure (this fires from both app/api/admin/tenants/route.ts and
-    // lib/server/onboarding/provision-tenant.ts, which have different actual endpoints).
+    /**
+     * The endpoint this alert failed from depends on how the tenant was created. Hardcoding
+     * "/api/auth/signup" made every owner-console-created tenant's failure look like a
+     * signup-flow failure.
+     *
+     * ⚠ AND THE SELF-SERVE BRANCH WAS STILL WRONG after that fix. A tenant is not provisioned at
+     * signup: POST /api/auth/signup only creates or refreshes a pending request. Provisioning --
+     * and therefore this alert -- happens when the emailed token is redeemed, in
+     * verifySignupToken, which app/api/auth/verify-email/route.ts is the only caller of. So the
+     * normal path's failures were filed against a route that had already returned successfully
+     * minutes or hours earlier.
+     *
+     * That matters beyond tidiness: `endpoint` feeds monitoring and error fingerprints, so
+     * searching /api/auth/verify-email for provisioning failures returned nothing while
+     * /api/auth/signup accumulated failures that never happened there. Raised by Greptile on
+     * PR #22.
+     */
     await logOwnerAlertFailure({
       errorCode: "tenant_created_email_failed",
       message: emailResult.reason || "Owner tenant created alert failed",
-      endpoint: input.origin === "owner-console" ? "/api/admin/tenants" : "/api/auth/signup",
+      endpoint: input.origin === "owner-console" ? "/api/admin/tenants" : "/api/auth/verify-email",
       metadata: {
         tenantId: input.tenantId,
         tenantName: input.tenantName,

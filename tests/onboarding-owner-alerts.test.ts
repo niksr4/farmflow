@@ -96,12 +96,21 @@ describe("sendOwnerTenantCreatedAlert", () => {
     expect(logAppErrorEvent).toHaveBeenCalledTimes(1)
     const errorEvent = logAppErrorEvent.mock.calls[0][0]
     expect(errorEvent.errorCode).toBe("tenant_created_email_failed")
-    // `input.origin` here is "self-serve-signup" -- the failure genuinely happened mid-signup.
-    expect(errorEvent.endpoint).toBe("/api/auth/signup")
+    /**
+     * ⚠ THIS ASSERTION USED TO SAY "/api/auth/signup", with a comment claiming "the failure
+     * genuinely happened mid-signup". It did not, and the comment is what made the wrong value
+     * look considered.
+     *
+     * `origin: "self-serve-signup"` names the FLOW, not the route. POST /api/auth/signup only
+     * creates or refreshes a pending request; the tenant is provisioned when the emailed token is
+     * redeemed, in verifySignupToken, whose only caller is app/api/auth/verify-email/route.ts --
+     * minutes or hours later. Raised by Greptile on PR #22.
+     */
+    expect(errorEvent.endpoint).toBe("/api/auth/verify-email")
     expect(errorEvent.metadata).toMatchObject({ tenantId: "tenant-1", tenantName: "Tirtha Estate" })
   })
 
-  it("attributes the failure to /api/admin/tenants, not /api/auth/signup, when the tenant was created from the owner console", async () => {
+  it("attributes the failure to /api/admin/tenants, not the verify-email route, when the tenant was created from the owner console", async () => {
     // Regression test: this previously hardcoded endpoint: "/api/auth/signup" for every call,
     // regardless of origin, mislabeling every owner-console-created tenant's alert failure as a
     // signup-flow failure in app_error_events.
