@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs"
 import { execSync } from "node:child_process"
 import { describe, expect, it } from "vitest"
 import { classifyStoredPasswordHash, verifyPassword } from "@/lib/passwords"
+// .mjs helper shared with the migration runner; allowJs resolves it without a declaration file.
+import { splitSqlStatements } from "../scripts/migrate-utils.mjs"
 
 /**
  * No migration, seed or script may contain a value that could function as a password.
@@ -40,6 +42,20 @@ const files = execSync("git ls-files scripts/", { encoding: "utf8" })
   .split("\n")
   .filter((f) => /\.(sql|mjs|js|cjs|ts)$/.test(f))
 
+/**
+ * SQL with comments removed — for checks about what a statement DOES.
+ *
+ * ⚠ Needed the moment the checks became statement-scoped: migration 17's own explanatory comment
+ * quotes the dangerous line it replaced (`SET password_hash = EXCLUDED.password_hash`), and the
+ * conflict check duly flagged the fixed file for describing the bug it fixes. A comment is not
+ * executable and must not be read as though it were.
+ *
+ * Deliberately NOT used by the 64-hex check: a published hash sitting in a comment is still
+ * published, so that one keeps comments in scope.
+ */
+const stripSqlComments = (sql: string) =>
+  sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ")
+
 /** 64 hex characters — exactly what classifyStoredPasswordHash accepts as a usable login. */
 const SHA256_LITERAL = /['"`]([a-f0-9]{64})['"`]/gi
 
@@ -54,21 +70,36 @@ describe("scripts carry no usable credential", () => {
     expect(files.filter((f) => f.endsWith(".sql")).length).toBeGreaterThan(100)
   })
 
-  it("no script contains a 64-hex literal near a password column", () => {
+  it("no script puts a 64-hex literal in the same statement as a password column", () => {
+    /**
+     * ⚠ SCOPED TO THE STATEMENT, NOT TO A CHARACTER WINDOW. The first version asked whether
+     * `password_hash` appeared within 400 characters before the literal — so a migration that
+     * carried a long comment, a CTE, or simply more columns between the two would have slipped
+     * past a check whose entire job is catching a published credential. Raised by Greptile on
+     * PR #23 as "bounded matching windows that future SQL formatting can bypass".
+     *
+     * splitSqlStatements is the repo's own parser (scripts/migrate-utils.mjs, used by the
+     * migration runner and dollar-quote aware), so this agrees with how the SQL is actually
+     * executed instead of approximating it with a number nobody can justify.
+     */
     const offenders: string[] = []
     for (const file of files) {
       const src = readFileSync(file, "utf8")
-      if (!/password_hash|password/i.test(src)) continue
-      for (const m of src.matchAll(SHA256_LITERAL)) {
-        // A 64-hex literal is only dangerous where it can reach a password column. Elsewhere in a
-        // migration it is a checksum or an id and has nothing to do with logging in.
-        const around = src.slice(Math.max(0, m.index! - 400), m.index! + 200)
-        if (/password_hash/i.test(around)) offenders.push(`${file}: ${m[1].slice(0, 12)}…`)
+      if (!/password_hash/i.test(src)) continue
+
+      const units: string[] = file.endsWith(".sql")
+        ? (splitSqlStatements(src) as string[])
+        : [src] // a JS/TS file has no statements to split; the whole file is the unit
+      for (const unit of units) {
+        if (!/password_hash/i.test(unit)) continue
+        for (const m of unit.matchAll(SHA256_LITERAL)) {
+          offenders.push(`${file}: ${m[1].slice(0, 12)}…`)
+        }
       }
     }
     expect(
       offenders,
-      "a 64-hex literal next to password_hash is a WORKING legacy_sha256 login, and this repo is public",
+      "a 64-hex literal in a statement touching password_hash is a WORKING legacy_sha256 login, and this repo is public",
     ).toEqual([])
   })
 
@@ -80,9 +111,14 @@ describe("scripts carry no usable credential", () => {
      */
     const offenders: string[] = []
     for (const file of files.filter((f) => f.endsWith(".sql"))) {
-      const src = readFileSync(file, "utf8")
-      for (const m of src.matchAll(/ON CONFLICT[\s\S]{0,200}?DO UPDATE\s+SET([\s\S]{0,400}?);/gi)) {
-        if (/password_hash\s*=/i.test(m[1])) offenders.push(file)
+      for (const raw of splitSqlStatements(readFileSync(file, "utf8")) as string[]) {
+        const statement = stripSqlComments(raw)
+        // Statement-scoped for the same reason as above: the previous {0,200}/{0,400} bounds
+        // meant a long SET clause or a comment between ON CONFLICT and DO UPDATE walked through.
+        if (!/ON CONFLICT/i.test(statement)) continue
+        const at = statement.search(/DO\s+UPDATE/i)
+        if (at === -1) continue
+        if (/password_hash\s*=/i.test(statement.slice(at))) offenders.push(file)
       }
     }
     expect(
