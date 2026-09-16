@@ -24,6 +24,24 @@ const classifyStoredPasswordHash = (storedHash) => {
   return "legacy_plaintext"
 }
 
+/**
+ * Stored values that are deliberately NOT credentials, and must never be turned into one.
+ *
+ * ⚠ `--apply-plaintext` re-hashes the value ALREADY IN THE COLUMN. That is correct for a genuine
+ * legacy plaintext password -- the user knows it, and hashing it in place preserves their login
+ * while removing the plaintext. It is catastrophic for a PLACEHOLDER: scripts/17 seeds a fresh
+ * owner row with `NO-LOGIN-set-a-password-through-the-app`, which is printed in a public
+ * repository, and hashing that in place would mint a valid owner credential that anybody can read
+ * off GitHub. Worse than the published SHA-256 hash that migration was fixed to remove, because a
+ * published plaintext needs no cracking.
+ *
+ * Raised by Greptile on PR #23, against the migration's remediation advice. Blocked here as well
+ * as there, because guidance in a comment is not a control.
+ */
+const NON_CREDENTIAL_SENTINELS = new Set(["NO-LOGIN-set-a-password-through-the-app"])
+
+const isNonCredentialSentinel = (value) => NON_CREDENTIAL_SENTINELS.has(String(value || "").trim())
+
 const hashPassword = (password) => {
   const saltHex = randomBytes(16).toString("hex")
   const hashHex = scryptSync(password, saltHex, SCRYPT_KEY_LENGTH).toString("hex")
@@ -120,11 +138,24 @@ const main = async () => {
   }
 
   if (applyPlaintext) {
-    for (const row of plaintextRows) {
+    const skipped = plaintextRows.filter((row) => isNonCredentialSentinel(row.password_hash))
+    const rehashable = plaintextRows.filter((row) => !isNonCredentialSentinel(row.password_hash))
+
+    for (const row of rehashable) {
       const nextHash = hashPassword(String(row.password_hash || "").trim())
       await updatePasswordHash(sql, row, nextHash)
     }
-    console.log(`Re-hashed ${plaintextRows.length} plaintext legacy password record(s).`)
+    console.log(`Re-hashed ${rehashable.length} plaintext legacy password record(s).`)
+
+    if (skipped.length) {
+      console.log("")
+      console.log(
+        `REFUSED to re-hash ${skipped.length} placeholder record(s). These are not passwords -- ` +
+          "hashing one in place would mint a credential whose plaintext is published in this " +
+          "repository. Set a real password for them through the app or the admin console:",
+      )
+      for (const row of skipped) console.log(`  - ${row.username || row.id}`)
+    }
   }
 
   if (flagLegacySha) {
