@@ -32,28 +32,51 @@ export const parseNumber = (value: string | null | undefined, fallback: number |
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+// Rejects a shape-valid but calendar-invalid date (e.g. month 13, or day 30 in February)
+// rather than letting it round-trip through as a string Postgres will refuse at insert time.
+const isValidCalendarDate = (year: number, month: number, day: number) => {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false
+  if (month < 1 || month > 12) return false
+  const daysInMonth = new Date(year, month, 0).getDate()
+  return day >= 1 && day <= daysInMonth
+}
+
 export const parseDate = (value: string | null | undefined) => {
   if (!value) return null
   const raw = String(value).trim()
   if (!raw) return null
-  const isoMatch = raw.match(/^\d{4}-\d{2}-\d{2}$/)
-  if (isoMatch) return raw
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoMatch) {
+    const [, yyyy, mm, dd] = isoMatch
+    return isValidCalendarDate(Number(yyyy), Number(mm), Number(dd)) ? raw : null
+  }
 
   const slashMatch = raw.match(/^(\d{2})[\/](\d{2})[\/](\d{4})$/)
   if (slashMatch) {
     const [, dd, mm, yyyy] = slashMatch
+    if (!isValidCalendarDate(Number(yyyy), Number(mm), Number(dd))) return null
     return `${yyyy}-${mm}-${dd}`
   }
 
   const altMatch = raw.match(/^(\d{4})[\/](\d{2})[\/](\d{2})$/)
   if (altMatch) {
     const [, yyyy, mm, dd] = altMatch
+    if (!isValidCalendarDate(Number(yyyy), Number(mm), Number(dd))) return null
     return `${yyyy}-${mm}-${dd}`
   }
 
+  // Reads the parsed date back through its LOCAL components rather than toISOString() (which
+  // reads UTC components). new Date(raw) for a bare date string like "Feb 24, 2026" parses as
+  // local midnight, so converting to UTC before slicing rolled the date back a day on any
+  // server running a positive UTC offset (e.g. Asia/Calcutta, this app's own business locale).
+  // Reading getFullYear/getMonth/getDate back keeps parsing and reading in the same timezone
+  // context, so the result no longer depends on the server's TZ.
   const parsed = new Date(raw)
   if (Number.isNaN(parsed.getTime())) return null
-  return parsed.toISOString().slice(0, 10)
+  const yyyy = parsed.getFullYear()
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0")
+  const dd = String(parsed.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
 }
 
 export const normalizeCoffeeType = (value: string | null | undefined) => {
