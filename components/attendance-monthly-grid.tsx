@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Download, FileSpreadsheet, Loader2, Printer } from "lucide-react"
+import { Download, FileSpreadsheet, Printer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

@@ -1,7 +1,6 @@
 import "server-only"
 
 import Anthropic from "@anthropic-ai/sdk"
-import type { MessageCreateParamsNonStreaming, TextBlockParam } from "@anthropic-ai/sdk/resources/messages"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
 

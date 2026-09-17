@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { TrendingUp, TrendingDown, Users, Plus, Phone, Mail, IndianRupee, Bell, BellOff } from "lucide-react"
+import { TrendingUp, Users, Plus, Phone, Mail, IndianRupee, Bell, BellOff } from "lucide-react"
 import { formatDateOnly } from "@/lib/date-utils"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"

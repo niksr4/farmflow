@@ -10,7 +10,6 @@ import {
   INITIAL_ONBOARDING_STATUS,
   isBlocksAndAcreageDone,
   isInventoryDone,
-  isStorehouseDone,
   isTeamMemberDone,
   isWeatherDone,
   isWorkersDone,

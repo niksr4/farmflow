@@ -1,7 +1,6 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import type { LottieComponentProps } from "lottie-react"
 
 // Loaded client-side only — lottie-react accesses the DOM on mount
 const Lottie = dynamic(() => import("lottie-react"), { ssr: false })

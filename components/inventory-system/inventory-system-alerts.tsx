@@ -1,6 +1,5 @@
 "use client"
 
-import React from "react"
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

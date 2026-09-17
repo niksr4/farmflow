@@ -82,6 +82,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Neither `lint` nor `typecheck` above catches an unread import: eslint-config-next ships no
+      # unused-vars rule and tsc says nothing without --noUnusedLocals. Turning this on found 78,
+      # one of which had made a location-collision guard pass on the import line alone.
+      - name: Dead imports
+        run: pnpm lint:dead-imports
+
       - name: Unit tests + coverage
         run: pnpm test:coverage
 

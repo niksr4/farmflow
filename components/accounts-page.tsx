@@ -1,10 +1,9 @@
 "use client"
 
 import type React from "react"
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { useMemo, useState, useEffect, useRef } from "react"
 import { useAuth } from "@/hooks/use-auth"
-import { isWriterRole } from "@/lib/writer-mode"
+import { isWriterRole, WRITER_ACCOUNTS_TABS } from "@/lib/writer-mode"
 import { useLaborData, type LaborEntry, type LaborDeployment } from "@/hooks/use-labor-data"
 import { useConsumablesData, type ConsumableDeployment } from "@/hooks/use-consumables-data"
 import { Button } from "@/components/ui/button"
@@ -1063,16 +1062,6 @@ export default function AccountsPage({
   const visibleActivitySuggestions = showAllActivitySuggestions ? activitySuggestions : activitySuggestions.slice(0, 12)
 
   const mobileTabItems = useMemo(() => {
-    // Writers (role=user) get only the daily-entry views — no summary
-    // analytics or code management
-    if (isWriterRole(user?.role)) {
-      const writerItems: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-        { value: "labour", label: "Labour", icon: Users },
-        { value: "expenses", label: "Non-Labour Expenses", icon: Receipt },
-      ]
-      if (!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement)) writerItems.push({ value: "picking", label: "Picking", icon: Wheat })
-      return writerItems
-    }
     const items: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
       { value: "dashboard", label: "Summary", icon: BarChart2 },
       { value: "labour", label: "Labour", icon: Users },
@@ -1081,6 +1070,20 @@ export default function AccountsPage({
     ]
     if (!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement)) items.push({ value: "picking", label: "Picking", icon: Wheat })
     if (isAdminOrOwner) items.push({ value: "export", label: "Export", icon: FileSpreadsheet })
+
+    /**
+     * Writers (role=user) get only the daily-entry views — no summary analytics, no code
+     * management.
+     *
+     * WRITER_ACCOUNTS_TABS is the authority on WHICH those are; this list carries the labels and
+     * icons. They used to be two separate hand-kept lists, and the constant was not imported
+     * anywhere at all — so editing it did nothing, which is the most expensive kind of nothing:
+     * it looks like a change. Filtering through it means a tab added above cannot reach a writer
+     * without someone also naming it there.
+     */
+    if (isWriterRole(user?.role)) {
+      return items.filter((item) => (WRITER_ACCOUNTS_TABS as readonly string[]).includes(item.value))
+    }
     return items
   }, [showLaborManagement, showPickingLog, isAdminOrOwner, user?.role])
 

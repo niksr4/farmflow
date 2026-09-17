@@ -1,5 +1,5 @@
 import "server-only"
-import { requireSessionUser, type SessionUser } from "@/lib/server/auth"
+import { requireSessionUser } from "@/lib/server/auth"
 
 export async function requireAdminSession() {
   const sessionUser = await requireSessionUser()

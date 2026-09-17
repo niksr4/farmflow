@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { globSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
@@ -61,24 +61,52 @@ describe("location pickers disambiguate colliding names", () => {
   // (HOUSE-BLOCK, LAXMI-STORE-BLOCK, LAXMI-MEKOOR-BLOCK, GEETHA-BLOCK). Any picker rendering
   // only `name` shows four identical rows, which is how 42 labour records ended up scattered
   // across three of them.
-  const pickers = [
-    "components/worker-profiles-tab.tsx",
-    "components/tenant-settings/operations-sections.tsx",
-  ]
+  /**
+   * ⚠ THIS GUARD USED TO PASS ON A DEAD IMPORT.
+   *
+   * It asserted `expect(src).toContain("formatLocationLabel")` — satisfied by the import line
+   * alone. components/worker-profiles-tab.tsx imported the helper and never called it, and the
+   * test went green on the mention. Found on 2026-09-17 by turning on tsc's --noUnusedLocals,
+   * which reported the import as never read; the guard had been asserting nothing for that file.
+   *
+   * Two changes. The check is now for a CALL, with import lines stripped first, so a mention can
+   * never satisfy it again. And worker-profiles-tab is off the list on its merits: it renders
+   * ESTATE names (`loc.estate`, deduped through a Set), not location names, and has no location
+   * picker to disambiguate. It fetched `locations` purely to derive that estate set.
+   */
+  const locationPickers = ["components/tenant-settings/operations-sections.tsx"]
 
-  for (const file of pickers) {
-    it(`${file} routes location labels through the shared helper`, () => {
-      const src = readFileSync(resolve(process.cwd(), file), "utf8")
-      expect(src).toContain("formatLocationLabel")
-    })
+  const withoutImports = (src: string) =>
+    src
+      .split("\n")
+      .filter((line) => !/^\s*import\b/.test(line) && !/^\s*}\s*from\s*['"]/.test(line))
+      .join("\n")
 
-    it(`${file} does not render a bare location name in a picker`, () => {
+  for (const file of locationPickers) {
+    it(`${file} CALLS the shared helper, not merely imports it`, () => {
       const src = readFileSync(resolve(process.cwd(), file), "utf8")
-      // The old worker-profiles shape also double-prefixed the estate, giving
-      // "Citrus Grove — Citrus Grove – C1" for a tenant who had named things properly.
-      expect(src).not.toContain("${loc.estate} — ${loc.name}")
+      expect(withoutImports(src)).toMatch(/\b(formatLocationLabel|buildLocationLabelMap)\s*\(/)
     })
   }
+
+  it("no picker anywhere renders a bare location name", () => {
+    // The property that actually matters, checked across the app rather than in a hand-kept list
+    // of two files — which is what let worker-profiles-tab sit in that list doing nothing.
+    const offenders = globSync("components/**/*.tsx", { cwd: process.cwd() }).filter((file) => {
+      const src = readFileSync(resolve(process.cwd(), file), "utf8")
+      return /<SelectItem[^>]*>\s*\{\s*(loc|location)\.name\s*\}/.test(src)
+    })
+    expect(offenders).toEqual([])
+  })
+
+  it("does not double-prefix the estate onto the location name", () => {
+    // The old worker-profiles shape gave "Citrus Grove — Citrus Grove – C1" for a tenant who had
+    // named things properly.
+    const offenders = globSync("components/**/*.tsx", { cwd: process.cwd() }).filter((file) =>
+      readFileSync(resolve(process.cwd(), file), "utf8").includes("${loc.estate} — ${loc.name}"),
+    )
+    expect(offenders).toEqual([])
+  })
 })
 
 describe("estate discoverability", () => {
