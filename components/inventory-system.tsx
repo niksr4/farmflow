@@ -135,7 +135,6 @@ import {
   API_INVENTORY,
   API_TRANSACTIONS,
   DASHBOARD_LAUNCHER_TAB,
-  DEFAULT_DASHBOARD_TAB_PRIORITY,
   DRILLDOWN_ALERT_ID_PARAM,
   DRILLDOWN_ALERT_METRIC_PARAM,
   DRILLDOWN_ITEM_PARAM,
@@ -165,9 +164,20 @@ import {
   getTodayDateInputValue,
   parseCustomDateString,
   parseJsonResponse,
-  safeGet,
   transactionDateToInputValue,
 } from "@/components/inventory-system/utils"
+import {
+  coerceNonNegativeNumber,
+  ensureTransactionSafety as normalizeTransaction,
+  normalizeQuantityValue,
+} from "@/components/inventory-system/transaction-normalize"
+import { filterAndSortInventory, filterAndSortTransactions, paginate } from "@/components/inventory-system/filters"
+import {
+  getPreferredDefaultTab,
+  inferBriefTabFromText as inferBriefTab,
+  resolveExceptionDrilldownTab as resolveExceptionTab,
+  type TabVisibility,
+} from "@/components/inventory-system/tab-routing"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import {
   buildExecutionOutcomeChecks,
@@ -636,16 +646,6 @@ export default function InventorySystem() {
   }
   const preventNumberScrollChange = (event: React.WheelEvent<HTMLInputElement>) => {
     event.currentTarget.blur()
-  }
-  const normalizeQuantityValue = (value: unknown) => {
-    if (value === "" || value === null || value === undefined) return null
-    const numeric = Number(value)
-    if (!Number.isFinite(numeric) || numeric < 0) return null
-    return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
-  }
-  const coerceNonNegativeNumber = (value: string) => {
-    if (!value.trim()) return ""
-    return normalizeQuantityValue(value)
   }
   const isModuleEnabled = useCallback(
     (moduleId: string) => {
@@ -1575,14 +1575,7 @@ export default function InventorySystem() {
     [newTransaction?.item_type, newTransaction?.unit, resolveInventoryUnitForItemType],
   )
 
-  const filteredAndSortedInventory = inventory
-    .filter((item) => item.name && item.name.toLowerCase().includes(inventorySearchTerm.toLowerCase()))
-    .sort((a, b) => {
-      if (!a.name || !b.name) return 0
-      if (inventorySortOrder === "asc") return a.name.localeCompare(b.name)
-      if (inventorySortOrder === "desc") return b.name.localeCompare(a.name)
-      return 0
-    })
+  const filteredAndSortedInventory = filterAndSortInventory(inventory, inventorySearchTerm, inventorySortOrder)
 
   // The arithmetic lives in lib/inventory-valuation.ts, with tests. It decides a money figure and
   // used to be untestable prose in the middle of this file -- answering KAB's "why does DAP say
@@ -1787,41 +1780,20 @@ export default function InventorySystem() {
     [filterEmptyMetrics, heroContent],
   )
 
-  const filteredTransactions = transactions
-    .filter((t) => {
-      if (!t) return false
-      const passesFilterType = filterType === "All Types" || (t.item_type && t.item_type === filterType)
-      if (!passesFilterType) return false
-      const searchLower = transactionSearchTerm.toLowerCase()
-      if (searchLower === "") return true
-      const itemMatch = t.item_type ? t.item_type.toLowerCase().includes(searchLower) : false
-      const notesMatch = t.notes ? t.notes.toLowerCase().includes(searchLower) : false
-      const userMatch = t.user_id ? t.user_id.toLowerCase().includes(searchLower) : false
-      const typeMatch = t.transaction_type ? t.transaction_type.toLowerCase().includes(searchLower) : false
-      const locationMatch = resolveLocationLabel(t.location_id, t.location_name || t.location_code).toLowerCase().includes(searchLower)
-      return itemMatch || notesMatch || userMatch || typeMatch || locationMatch
-    })
-    .sort((a, b) => {
-      try {
-        const dateA = a.transaction_date ? parseCustomDateString(a.transaction_date) : null
-        const dateB = b.transaction_date ? parseCustomDateString(b.transaction_date) : null
-        if (!dateA || !dateB) return 0
-        if (transactionSortOrder === "asc") {
-          return dateA.getTime() - dateB.getTime()
-        }
-        return dateB.getTime() - dateA.getTime()
-      } catch (e) {
-        console.error("Error sorting transactions by date:", e)
-        return 0
-      }
-    })
+  const filteredTransactions = filterAndSortTransactions(transactions, {
+    searchTerm: transactionSearchTerm,
+    filterType,
+    sortOrder: transactionSortOrder,
+    resolveLocationLabel,
+  })
 
-  // pagination
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
-  const validatedCurrentPage = Math.max(1, Math.min(currentPage, totalPages || 1))
-  const startIndex = (validatedCurrentPage - 1) * itemsPerPage
-  const endIndex = Math.min(startIndex + itemsPerPage, filteredTransactions.length)
-  const currentTransactions = filteredTransactions.slice(startIndex, endIndex)
+  const {
+    totalPages,
+    currentPage: validatedCurrentPage,
+    startIndex,
+    endIndex,
+    items: currentTransactions,
+  } = paginate(filteredTransactions, currentPage, itemsPerPage)
 
   useEffect(() => {
     if (currentPage !== validatedCurrentPage) {
@@ -1831,33 +1803,13 @@ export default function InventorySystem() {
 
 
   // helpers for transaction object safety
-  const ensureTransactionSafety = (transaction: Transaction | null): Transaction => {
-    const safeQuantity = transaction?.quantity === "" ? "" : safeGet(normalizeQuantityValue(transaction?.quantity), 0)
-    return {
-      item_type: String(safeGet(transaction?.item_type, "")).trim(),
-      quantity: safeQuantity,
-      transaction_type: safeGet(transaction?.transaction_type, "deplete"),
-      notes: safeGet(transaction?.notes, ""),
-      transaction_date: safeGet(transaction?.transaction_date, createDefaultTransaction().transaction_date),
-      user_id: safeGet(transaction?.user_id, user?.username || "unknown"),
-      /**
-       * The price field now MEANS the batch total everywhere it is edited, so an existing row has
-       * to be loaded as one. Loading the stored per-unit rate under a "Total price paid" label
-       * would show a wrong number and then save it as the total on the next keystroke -- a 50 kg
-       * restock at Rs 60/kg reopening as "Rs 60 paid" and being written back as Rs 60 for the lot.
-       *
-       * total_cost is preferred because it is the column the weighted-average replay actually
-       * reads; rate x quantity is the fallback for rows written before it was populated.
-       */
-      price: safeGet(Number(transaction?.total_cost), 0) || safeGet(Number(transaction?.price), 0) * (Number(safeQuantity) || 0),
-      total_cost: safeGet(Number(transaction?.total_cost), 0),
-      unit: safeGet(transaction?.unit, "kg"),
-      location_id: transaction?.location_id ?? null,
-      location_name: transaction?.location_name ?? undefined,
-      location_code: transaction?.location_code ?? undefined,
-      id: transaction?.id,
-    } as Transaction
-  }
+  // components/inventory-system/transaction-normalize.ts, with tests. Bound here so every call site
+  // keeps the signature it had while the component supplies the signed-in user.
+  const ensureTransactionSafety = useCallback(
+    (transaction: Transaction | null): Transaction =>
+      normalizeTransaction(transaction, { fallbackUserId: user?.username }),
+    [user?.username],
+  )
 
   const handleNewTransactionChange = (field: keyof Transaction, value: any) => {
     setNewTransaction((prev) => {
@@ -3168,47 +3120,37 @@ export default function InventorySystem() {
     ],
   )
 
-  const getPreferredDefaultTab = useCallback(
-    (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
-    [],
+  // components/inventory-system/tab-routing.ts, with tests. The visibility object is what those
+  // functions gate on, so they can only ever route to a tab this user can actually open.
+  const tabVisibility: TabVisibility = useMemo(
+    () => ({
+      canShowAccounts,
+      canShowDispatch,
+      canShowProcessing,
+      canShowReceivables,
+      canShowSalesWorkspace,
+      canShowSeason,
+      showTransactionHistory,
+    }),
+    [
+      canShowAccounts,
+      canShowDispatch,
+      canShowProcessing,
+      canShowReceivables,
+      canShowSalesWorkspace,
+      canShowSeason,
+      showTransactionHistory,
+    ],
   )
 
-
   const inferBriefTabFromText = useCallback(
-    (input: string) => {
-      const text = String(input || "").toLowerCase()
-      if (!text) return "home"
-      if ((text.includes("dispatch") || text.includes("received")) && canShowDispatch) return "dispatch"
-      if ((text.includes("sale") || text.includes("buyer") || text.includes("revenue")) && canShowSalesWorkspace) return "sales"
-      if ((text.includes("receivable") || text.includes("outstanding") || text.includes("invoice")) && canShowReceivables) {
-        return "receivables"
-      }
-      if ((text.includes("labour") || text.includes("expense") || text.includes("cost")) && canShowAccounts) return "accounts"
-      if ((text.includes("float") || text.includes("yield") || text.includes("process")) && canShowProcessing) return "processing"
-      if ((text.includes("stock") || text.includes("inventory") || text.includes("transaction")) && showTransactionHistory) {
-        return "transactions"
-      }
-      return "home"
-    },
-    [canShowAccounts, canShowDispatch, canShowProcessing, canShowReceivables, canShowSalesWorkspace, showTransactionHistory],
+    (input: string) => inferBriefTab(input, tabVisibility),
+    [tabVisibility],
   )
 
   const resolveExceptionDrilldownTab = useCallback(
-    (metric?: string) => {
-      const normalized = String(metric || "").trim().toLowerCase()
-      if (!normalized) return canShowSeason ? "season" : "home"
-      if (["float_rate", "dry_parch_yield", "float_rate_zscore", "dry_parch_yield_zscore"].includes(normalized)) {
-        return canShowProcessing ? "processing" : canShowSeason ? "season" : "home"
-      }
-      if (["transit_loss", "dispatch_unconfirmed", "bag_weight_drift"].includes(normalized)) {
-        return canShowDispatch ? "dispatch" : canShowSeason ? "season" : "home"
-      }
-      if (["inventory_mismatch", "sales_spike"].includes(normalized)) {
-        return canShowSalesWorkspace ? "sales" : canShowSeason ? "season" : "home"
-      }
-      return canShowSeason ? "season" : "home"
-    },
-    [canShowDispatch, canShowProcessing, canShowSalesWorkspace, canShowSeason],
+    (metric?: string) => resolveExceptionTab(metric, tabVisibility),
+    [tabVisibility],
   )
 
   const openDrilldown = useCallback(
@@ -3305,7 +3247,7 @@ export default function InventorySystem() {
       const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
       router.replace(nextPath, { scroll: false })
     },
-    [allItemTypesForDropdown, canShowInventory, canShowProcessing, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, showFirstVisitTabLoader, visibleTabs],
+    [allItemTypesForDropdown, canShowInventory, canShowProcessing, canShowSales, locations, markTabAsLoaded, router, searchParams, showFirstVisitTabLoader, visibleTabs],
   )
   const handleTabChange = useCallback(
     (value: string) => {
@@ -3641,7 +3583,7 @@ export default function InventorySystem() {
           : getPreferredDefaultTab(visibleTabs)
       setActiveTab(fallbackTab)
     }
-  }, [activeTab, getPreferredDefaultTab, isModulesLoading, visibleTabs])
+  }, [activeTab, isModulesLoading, visibleTabs])
 
   useEffect(() => {
     if (tabParam !== "accounts") {

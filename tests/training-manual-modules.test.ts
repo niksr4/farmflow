@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 import { MODULES } from "@/lib/modules"
+import { buildManualGroups, getInsightLabels } from "@/components/app-training-manual/build"
 
 /**
  * Found by the daily scan on 2026-08-22, lost to a blocked push, re-found on 08-23, lost again.
@@ -13,34 +14,56 @@ import { MODULES } from "@/lib/modules"
  *
  * The general check below is the useful half: every tab the manual names should be gated on the
  * module that actually owns it, and a mismatch between the two is invisible without comparing them.
+ *
+ * UPGRADED 2026-09-17, when the manual's builders moved to components/app-training-manual/build.ts
+ * and these source scans stopped matching.
+ *
+ * The scans were reaching for a behaviour they could not quite express — the old comment says so
+ * outright: "the NEAREST PRECEDING gate must be yield-forecast ... a character-window regex cannot
+ * express that". It does not have to any more. `buildManualGroups` is now a pure function, so the
+ * question "does a tenant with Season View but not Harvest Forecast read about Harvest Forecast?"
+ * can be ASKED rather than inferred from the shape of the source.
+ *
+ * Only the third check is still a scan, because "every gated id is a real module id" is genuinely
+ * a property of the text rather than of any one tenant's output.
  */
-const manual = readFileSync("components/app-training-manual.tsx", "utf8")
+const build = readFileSync("components/app-training-manual/build.ts", "utf8")
+
+/**
+ * ⚠ BOTH SITES, and this nearly went in covering only one.
+ *
+ * The tab is named in two independent places — the Insights LABEL list (getInsightLabels) and the
+ * detailed ITEM list (buildManualGroups) — which is why the scan this replaced asserted
+ * `gatedOnYield.length >= 2`. A first draft of this test read only the item list; flipping the
+ * label gate back to "season" left it green. Caught by tamper-testing, not by review.
+ */
+const namesFor = (enabledModules: string[]) => [
+  ...buildManualGroups(enabledModules, { isTailored: true, userRole: "admin" }).flatMap((group) =>
+    group.items.map((item) => item.name),
+  ),
+  ...getInsightLabels(enabledModules),
+]
 
 describe("the manual gates each tab on the module that owns it", () => {
-  it("Harvest Forecast is gated on yield-forecast, not season", () => {
-    // Both call sites: the label list and the detailed item list.
-    const gatedOnYield = manual.match(/hasModule\(enabledModules, "yield-forecast"\)/g) ?? []
-    expect(gatedOnYield.length).toBeGreaterThanOrEqual(2)
-
-    // The precise rule: for each mention, the NEAREST PRECEDING gate must be yield-forecast.
-    // A character-window regex cannot express that -- it matches across unrelated neighbours,
-    // which is how a check ends up passing or failing for the wrong reason.
-    const gate = /hasModule\(enabledModules, "([a-z-]+)"\)/g
-    const gates = [...manual.matchAll(gate)].map((m) => ({ at: m.index!, id: m[1] }))
-    const mentions = [...manual.matchAll(/"Harvest Forecast"|name: "Harvest Forecast"/g)].map((m) => m.index!)
-    expect(mentions.length).toBeGreaterThanOrEqual(2)
-    for (const at of mentions) {
-      const owning = [...gates].reverse().find((g) => g.at < at)
-      expect(owning?.id, `the Harvest Forecast entry at ${at} is gated on "${owning?.id}"`).toBe("yield-forecast")
-    }
+  it("does not describe Harvest Forecast to a tenant who only has Season View", () => {
+    // The original bug, stated as the outcome it produced: reading about a tab you cannot open.
+    expect(namesFor(["season"])).not.toContain("Harvest Forecast")
+    expect(getInsightLabels(["season"])).not.toContain("Harvest Forecast")
   })
 
-  it("Season Summary stays on season, which does own it", () => {
-    expect(manual).toMatch(/hasModule\(enabledModules, "season"\)[\s\S]{0,60}Season Summary/)
+  it("does describe it to a tenant who has yield-forecast", () => {
+    // And the other half: never learning a tab you have exists. Both were silent.
+    expect(namesFor(["yield-forecast"])).toContain("Harvest Forecast")
+    expect(getInsightLabels(["yield-forecast"])).toContain("Harvest Forecast")
+  })
+
+  it("keeps Season Summary on season, which does own it", () => {
+    expect(namesFor(["season"])).toContain("Season Summary")
+    expect(namesFor(["yield-forecast"])).not.toContain("Season Summary")
   })
 
   it("every module id the manual gates on is a real module", () => {
-    const ids = [...manual.matchAll(/hasModule\(enabledModules, "([a-z-]+)"\)/g)].map((m) => m[1])
+    const ids = [...build.matchAll(/hasModule\(enabledModules, "([a-z-]+)"\)/g)].map((m) => m[1])
     expect(ids.length).toBeGreaterThan(5)
     const known = new Set(MODULES.map((m) => m.id))
     const unknown = [...new Set(ids)].filter((id) => !known.has(id))
