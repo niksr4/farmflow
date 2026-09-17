@@ -89,14 +89,54 @@ describe("location pickers disambiguate colliding names", () => {
     })
   }
 
-  it("no picker anywhere renders a bare location name", () => {
-    // The property that actually matters, checked across the app rather than in a hand-kept list
-    // of two files — which is what let worker-profiles-tab sit in that list doing nothing.
-    const offenders = globSync("components/**/*.tsx", { cwd: process.cwd() }).filter((file) => {
-      const src = readFileSync(resolve(process.cwd(), file), "utf8")
-      return /<SelectItem[^>]*>\s*\{\s*(loc|location)\.name\s*\}/.test(src)
-    })
+  /**
+   * ⚠ THIS SCAN WAS TOO NARROW AND REPORTED A FALSE CLEAN BILL. Raised by Greptile on PR #26.
+   *
+   * The first version matched `<SelectItem …>{loc.name}</SelectItem>` — hardcoding both the JSX
+   * element and the callback variable name. It therefore missed every real offender, because real
+   * code does not use those names:
+   *
+   *   components/attendance/worker-allocation.tsx      `{l.name}` in a <SelectItem>
+   *   components/accounts/labour-cost-summary.tsx      `{b.name}` in an <option>
+   *
+   * Both were live block pickers. A guard written to catch bare location names found none while
+   * two sat in the tree — the same "reports success having checked nothing" failure as the
+   * `toContain` assertion it replaced, committed in the very act of fixing it.
+   *
+   * Now keyed on SHAPE, not names: an entity picker is `value={X.id}` labelled `{X.name}` for the
+   * same X, whatever X is and whatever the element. That matches 10 sites, of which 3 were
+   * locations; the other 7 are workers, buyers, tenants and certifications, listed below. A new
+   * picker is an unrecognised entry and fails until somebody classifies it.
+   */
+  const ENTITY_PICKER = /<(?:SelectItem|option)\b[^>]*\bvalue=\{(\w+)\.id\}[^>]*>\s*\{\s*\1\.name\s*\}/
+
+  /** Pickers over something that is NOT a location, and why that is fine. */
+  const NOT_LOCATIONS: Record<string, string> = {
+    "components/admin/tenant-operations-sections.tsx": "tenants",
+    "components/attendance-device-settings.tsx": "workers",
+    "components/attendance-scanner-tab.tsx": "workers",
+    "components/compliance-tab.tsx": "certifications",
+    "components/market-pricing-tab.tsx": "buyers",
+    "components/picking-log-tab.tsx": "workers",
+  }
+
+  it("no picker renders a bare location name — whatever the element or variable is called", () => {
+    const offenders = globSync("components/**/*.tsx", { cwd: process.cwd() })
+      .filter((file) => {
+        if (file in NOT_LOCATIONS) return false
+        return ENTITY_PICKER.test(readFileSync(resolve(process.cwd(), file), "utf8"))
+      })
+      .sort()
     expect(offenders).toEqual([])
+  })
+
+  it("the not-a-location list carries no file that stopped having a picker", () => {
+    // Otherwise an exemption outlives its reason and quietly covers a future location picker
+    // added to the same file.
+    const stale = Object.keys(NOT_LOCATIONS).filter(
+      (file) => !ENTITY_PICKER.test(readFileSync(resolve(process.cwd(), file), "utf8")),
+    )
+    expect(stale).toEqual([])
   })
 
   it("does not double-prefix the estate onto the location name", () => {

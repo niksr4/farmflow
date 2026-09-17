@@ -20,6 +20,7 @@ import { Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { formatLocationLabel } from "@/lib/location-label"
 
 type LocationOption = { id: string; name: string; code?: string | null; estate?: string | null }
 type ActivityOption = { code: string; reference?: string | null }
@@ -304,16 +305,19 @@ export default function WorkerAllocation({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={NO_BLOCK}>No particular block</SelectItem>
+          {/* Disambiguated against the FULL location list, not the group the row sits in: a block
+              named "Laxmi" on this estate and another on the next are exactly the pair a worker
+              gets allocated to by mistake, and they never appear in the same group. */}
           {grouped.mine.length > 0 && (
             <SelectGroup>
               <SelectLabel>{workerEstate}</SelectLabel>
-              {grouped.mine.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+              {grouped.mine.map((l) => <SelectItem key={l.id} value={l.id}>{formatLocationLabel(l, locations)}</SelectItem>)}
             </SelectGroup>
           )}
           {grouped.rest.length > 0 && (
             <SelectGroup>
               <SelectLabel>{grouped.mine.length > 0 ? "Other estates" : "Blocks"}</SelectLabel>
-              {grouped.rest.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+              {grouped.rest.map((l) => <SelectItem key={l.id} value={l.id}>{formatLocationLabel(l, locations)}</SelectItem>)}
             </SelectGroup>
           )}
         </SelectContent>
