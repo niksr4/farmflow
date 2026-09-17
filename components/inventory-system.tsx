@@ -168,6 +168,11 @@ import {
   safeGet,
   transactionDateToInputValue,
 } from "@/components/inventory-system/utils"
+import {
+  coerceNonNegativeNumber,
+  ensureTransactionSafety as normalizeTransaction,
+  normalizeQuantityValue,
+} from "@/components/inventory-system/transaction-normalize"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import {
   buildExecutionOutcomeChecks,
@@ -636,16 +641,6 @@ export default function InventorySystem() {
   }
   const preventNumberScrollChange = (event: React.WheelEvent<HTMLInputElement>) => {
     event.currentTarget.blur()
-  }
-  const normalizeQuantityValue = (value: unknown) => {
-    if (value === "" || value === null || value === undefined) return null
-    const numeric = Number(value)
-    if (!Number.isFinite(numeric) || numeric < 0) return null
-    return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
-  }
-  const coerceNonNegativeNumber = (value: string) => {
-    if (!value.trim()) return ""
-    return normalizeQuantityValue(value)
   }
   const isModuleEnabled = useCallback(
     (moduleId: string) => {
@@ -1831,33 +1826,13 @@ export default function InventorySystem() {
 
 
   // helpers for transaction object safety
-  const ensureTransactionSafety = (transaction: Transaction | null): Transaction => {
-    const safeQuantity = transaction?.quantity === "" ? "" : safeGet(normalizeQuantityValue(transaction?.quantity), 0)
-    return {
-      item_type: String(safeGet(transaction?.item_type, "")).trim(),
-      quantity: safeQuantity,
-      transaction_type: safeGet(transaction?.transaction_type, "deplete"),
-      notes: safeGet(transaction?.notes, ""),
-      transaction_date: safeGet(transaction?.transaction_date, createDefaultTransaction().transaction_date),
-      user_id: safeGet(transaction?.user_id, user?.username || "unknown"),
-      /**
-       * The price field now MEANS the batch total everywhere it is edited, so an existing row has
-       * to be loaded as one. Loading the stored per-unit rate under a "Total price paid" label
-       * would show a wrong number and then save it as the total on the next keystroke -- a 50 kg
-       * restock at Rs 60/kg reopening as "Rs 60 paid" and being written back as Rs 60 for the lot.
-       *
-       * total_cost is preferred because it is the column the weighted-average replay actually
-       * reads; rate x quantity is the fallback for rows written before it was populated.
-       */
-      price: safeGet(Number(transaction?.total_cost), 0) || safeGet(Number(transaction?.price), 0) * (Number(safeQuantity) || 0),
-      total_cost: safeGet(Number(transaction?.total_cost), 0),
-      unit: safeGet(transaction?.unit, "kg"),
-      location_id: transaction?.location_id ?? null,
-      location_name: transaction?.location_name ?? undefined,
-      location_code: transaction?.location_code ?? undefined,
-      id: transaction?.id,
-    } as Transaction
-  }
+  // components/inventory-system/transaction-normalize.ts, with tests. Bound here so every call site
+  // keeps the signature it had while the component supplies the signed-in user.
+  const ensureTransactionSafety = useCallback(
+    (transaction: Transaction | null): Transaction =>
+      normalizeTransaction(transaction, { fallbackUserId: user?.username }),
+    [user?.username],
+  )
 
   const handleNewTransactionChange = (field: keyof Transaction, value: any) => {
     setNewTransaction((prev) => {
