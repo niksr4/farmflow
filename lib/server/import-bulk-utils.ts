@@ -32,28 +32,82 @@ export const parseNumber = (value: string | null | undefined, fallback: number |
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+// Rejects a shape-valid but calendar-invalid date (e.g. month 13, or day 30 in February)
+// rather than letting it round-trip through as a string Postgres will refuse at insert time.
+const isValidCalendarDate = (year: number, month: number, day: number) => {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false
+  if (month < 1 || month > 12) return false
+  const daysInMonth = new Date(year, month, 0).getDate()
+  return day >= 1 && day <= daysInMonth
+}
+
 export const parseDate = (value: string | null | undefined) => {
   if (!value) return null
   const raw = String(value).trim()
   if (!raw) return null
-  const isoMatch = raw.match(/^\d{4}-\d{2}-\d{2}$/)
-  if (isoMatch) return raw
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoMatch) {
+    const [, yyyy, mm, dd] = isoMatch
+    return isValidCalendarDate(Number(yyyy), Number(mm), Number(dd)) ? raw : null
+  }
 
   const slashMatch = raw.match(/^(\d{2})[\/](\d{2})[\/](\d{4})$/)
   if (slashMatch) {
     const [, dd, mm, yyyy] = slashMatch
+    if (!isValidCalendarDate(Number(yyyy), Number(mm), Number(dd))) return null
     return `${yyyy}-${mm}-${dd}`
   }
 
   const altMatch = raw.match(/^(\d{4})[\/](\d{2})[\/](\d{2})$/)
   if (altMatch) {
     const [, yyyy, mm, dd] = altMatch
+    if (!isValidCalendarDate(Number(yyyy), Number(mm), Number(dd))) return null
     return `${yyyy}-${mm}-${dd}`
   }
 
+  // Reads the parsed date back through its LOCAL components rather than toISOString() (which
+  // reads UTC components). new Date(raw) for a bare date string like "Feb 24, 2026" parses as
+  // local midnight, so converting to UTC before slicing rolled the date back a day on any
+  // server running a positive UTC offset (e.g. Asia/Calcutta, this app's own business locale).
+  // Reading getFullYear/getMonth/getDate back keeps parsing and reading in the same timezone
+  // context, so the result no longer depends on the server's TZ.
   const parsed = new Date(raw)
   if (Number.isNaN(parsed.getTime())) return null
-  return parsed.toISOString().slice(0, 10)
+
+  /**
+   * ⚠ new Date() NORMALIZES an impossible date instead of rejecting it.
+   *
+   *   "Feb 30, 2026" -> 2026-03-01      "Feb 29, 2026" -> 2026-02-28
+   *   "Apr 31, 2026" -> 2026-04-30      "Jun 31, 2026" -> 2026-06-30
+   *
+   * Every branch above this one checks the calendar, so a typo in an ISO or slash date is
+   * refused and the importer reports the row. Reaching this branch, the same typo came back as
+   * a plausible neighbouring day and was written without complaint — to a transaction, a labour
+   * entry, a rainfall reading or a processing record. Raised by Greptile on PR #22.
+   *
+   * There is no isValidCalendarDate() call to add here, because by this point the damage is
+   * done: Date has already turned the invalid input into a valid date, and re-validating its
+   * output always passes. The only way to tell a typo from a real date is to check that the day
+   * and year WRITTEN IN THE INPUT survived the parse.
+   *
+   * Scoped to month-NAME formats (a run of three or more letters) on purpose. That is where this
+   * branch is actually reached from — "Feb 24, 2026", "24 February 2026" — and it keeps the
+   * check away from strings whose digits cannot be told apart by position. An ISO timestamp like
+   * "2026-02-24T10:30:00Z" falls through to here too, and its first 1..31 token is the MONTH,
+   * so a naive day comparison would reject every timestamped import.
+   */
+  if (/[A-Za-z]{3,}/.test(raw)) {
+    const numbers = (raw.match(/\d+/g) ?? []).map(Number)
+    const writtenYear = numbers.find((n) => n >= 1000)
+    const writtenDay = numbers.find((n) => n >= 1 && n <= 31)
+    if (writtenYear !== undefined && writtenYear !== parsed.getFullYear()) return null
+    if (writtenDay !== undefined && writtenDay !== parsed.getDate()) return null
+  }
+
+  const yyyy = parsed.getFullYear()
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0")
+  const dd = String(parsed.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
 }
 
 export const normalizeCoffeeType = (value: string | null | undefined) => {
