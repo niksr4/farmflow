@@ -71,7 +71,32 @@ Rules, in priority order:
 4. **Feature branches stay short.** 26 commits is how you end up with a PR nobody can review and a
    production deploy that bypasses the PR entirely.
 5. **Deploying still needs the human word.** The gate makes `main` safe to merge into; it does not
-   make merging automatic. See the note on the code word in `CLAUDE.md`.
+   make merging automatic. See the note on the code word in `CLAUDE.md`. Because of rule 1, the word
+   applies to the **merge** — there is no later step to hold back.
+
+### Merging more than one PR
+
+Worked out the hard way on 2026-09-18 with seven open at once.
+
+- **Order by conflict, not by age.** Compute which PRs touch the same file first; the one that
+  overlaps the most merges **last**, so a single branch absorbs the reconciliation instead of
+  several. Two PRs sharing a file is one merge conflict; three PRs each sharing with a fourth is
+  three.
+- **Every `scanner/**` PR after the first needs `git merge origin/main`.**
+  `scripts/dev/check-branch-base.mjs` sets `SCANNER_ALLOWANCE = 0`, so any movement of `main`
+  fails the base check on the rest. Human branches get 40 and are unaffected. N scanner PRs cost
+  N−1 re-merges, and that is by design — a scanner PR is supposed to be cut fresh.
+- **Merge the customer-facing fix first**, alone, and verify it. If seven land together and
+  something is wrong on thefarmflow.in, the diff you have to bisect is all seven.
+- **Confirm each one actually deployed** rather than assuming — local `git log` drifts:
+
+  ```bash
+  curl -s "https://api.vercel.com/v6/deployments?limit=5&target=production" \
+    -H "Authorization: Bearer $Vercel_token" | jq -r '.deployments[] | "\(.meta.githubCommitSha[0:8]) \(.state)"'
+  ```
+
+- Rollback is `vercel alias set <previous-deployment-id> www.thefarmflow.in`. Have the previous id
+  in hand *before* merging, not after.
 
 ## The gate
 
