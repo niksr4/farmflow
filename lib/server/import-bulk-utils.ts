@@ -73,6 +73,37 @@ export const parseDate = (value: string | null | undefined) => {
   // context, so the result no longer depends on the server's TZ.
   const parsed = new Date(raw)
   if (Number.isNaN(parsed.getTime())) return null
+
+  /**
+   * ⚠ new Date() NORMALIZES an impossible date instead of rejecting it.
+   *
+   *   "Feb 30, 2026" -> 2026-03-01      "Feb 29, 2026" -> 2026-02-28
+   *   "Apr 31, 2026" -> 2026-04-30      "Jun 31, 2026" -> 2026-06-30
+   *
+   * Every branch above this one checks the calendar, so a typo in an ISO or slash date is
+   * refused and the importer reports the row. Reaching this branch, the same typo came back as
+   * a plausible neighbouring day and was written without complaint — to a transaction, a labour
+   * entry, a rainfall reading or a processing record. Raised by Greptile on PR #22.
+   *
+   * There is no isValidCalendarDate() call to add here, because by this point the damage is
+   * done: Date has already turned the invalid input into a valid date, and re-validating its
+   * output always passes. The only way to tell a typo from a real date is to check that the day
+   * and year WRITTEN IN THE INPUT survived the parse.
+   *
+   * Scoped to month-NAME formats (a run of three or more letters) on purpose. That is where this
+   * branch is actually reached from — "Feb 24, 2026", "24 February 2026" — and it keeps the
+   * check away from strings whose digits cannot be told apart by position. An ISO timestamp like
+   * "2026-02-24T10:30:00Z" falls through to here too, and its first 1..31 token is the MONTH,
+   * so a naive day comparison would reject every timestamped import.
+   */
+  if (/[A-Za-z]{3,}/.test(raw)) {
+    const numbers = (raw.match(/\d+/g) ?? []).map(Number)
+    const writtenYear = numbers.find((n) => n >= 1000)
+    const writtenDay = numbers.find((n) => n >= 1 && n <= 31)
+    if (writtenYear !== undefined && writtenYear !== parsed.getFullYear()) return null
+    if (writtenDay !== undefined && writtenDay !== parsed.getDate()) return null
+  }
+
   const yyyy = parsed.getFullYear()
   const mm = String(parsed.getMonth() + 1).padStart(2, "0")
   const dd = String(parsed.getDate()).padStart(2, "0")
