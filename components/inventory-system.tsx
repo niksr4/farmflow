@@ -165,7 +165,6 @@ import {
   getTodayDateInputValue,
   parseCustomDateString,
   parseJsonResponse,
-  safeGet,
   transactionDateToInputValue,
 } from "@/components/inventory-system/utils"
 import {
@@ -173,6 +172,7 @@ import {
   ensureTransactionSafety as normalizeTransaction,
   normalizeQuantityValue,
 } from "@/components/inventory-system/transaction-normalize"
+import { filterAndSortInventory, filterAndSortTransactions, paginate } from "@/components/inventory-system/filters"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import {
   buildExecutionOutcomeChecks,
@@ -1570,14 +1570,7 @@ export default function InventorySystem() {
     [newTransaction?.item_type, newTransaction?.unit, resolveInventoryUnitForItemType],
   )
 
-  const filteredAndSortedInventory = inventory
-    .filter((item) => item.name && item.name.toLowerCase().includes(inventorySearchTerm.toLowerCase()))
-    .sort((a, b) => {
-      if (!a.name || !b.name) return 0
-      if (inventorySortOrder === "asc") return a.name.localeCompare(b.name)
-      if (inventorySortOrder === "desc") return b.name.localeCompare(a.name)
-      return 0
-    })
+  const filteredAndSortedInventory = filterAndSortInventory(inventory, inventorySearchTerm, inventorySortOrder)
 
   // The arithmetic lives in lib/inventory-valuation.ts, with tests. It decides a money figure and
   // used to be untestable prose in the middle of this file -- answering KAB's "why does DAP say
@@ -1782,41 +1775,20 @@ export default function InventorySystem() {
     [filterEmptyMetrics, heroContent],
   )
 
-  const filteredTransactions = transactions
-    .filter((t) => {
-      if (!t) return false
-      const passesFilterType = filterType === "All Types" || (t.item_type && t.item_type === filterType)
-      if (!passesFilterType) return false
-      const searchLower = transactionSearchTerm.toLowerCase()
-      if (searchLower === "") return true
-      const itemMatch = t.item_type ? t.item_type.toLowerCase().includes(searchLower) : false
-      const notesMatch = t.notes ? t.notes.toLowerCase().includes(searchLower) : false
-      const userMatch = t.user_id ? t.user_id.toLowerCase().includes(searchLower) : false
-      const typeMatch = t.transaction_type ? t.transaction_type.toLowerCase().includes(searchLower) : false
-      const locationMatch = resolveLocationLabel(t.location_id, t.location_name || t.location_code).toLowerCase().includes(searchLower)
-      return itemMatch || notesMatch || userMatch || typeMatch || locationMatch
-    })
-    .sort((a, b) => {
-      try {
-        const dateA = a.transaction_date ? parseCustomDateString(a.transaction_date) : null
-        const dateB = b.transaction_date ? parseCustomDateString(b.transaction_date) : null
-        if (!dateA || !dateB) return 0
-        if (transactionSortOrder === "asc") {
-          return dateA.getTime() - dateB.getTime()
-        }
-        return dateB.getTime() - dateA.getTime()
-      } catch (e) {
-        console.error("Error sorting transactions by date:", e)
-        return 0
-      }
-    })
+  const filteredTransactions = filterAndSortTransactions(transactions, {
+    searchTerm: transactionSearchTerm,
+    filterType,
+    sortOrder: transactionSortOrder,
+    resolveLocationLabel,
+  })
 
-  // pagination
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
-  const validatedCurrentPage = Math.max(1, Math.min(currentPage, totalPages || 1))
-  const startIndex = (validatedCurrentPage - 1) * itemsPerPage
-  const endIndex = Math.min(startIndex + itemsPerPage, filteredTransactions.length)
-  const currentTransactions = filteredTransactions.slice(startIndex, endIndex)
+  const {
+    totalPages,
+    currentPage: validatedCurrentPage,
+    startIndex,
+    endIndex,
+    items: currentTransactions,
+  } = paginate(filteredTransactions, currentPage, itemsPerPage)
 
   useEffect(() => {
     if (currentPage !== validatedCurrentPage) {
