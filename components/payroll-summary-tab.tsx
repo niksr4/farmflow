@@ -299,7 +299,7 @@ export default function PayrollSummaryTab() {
             <div className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-sm text-amber-300">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                {missingRateCount} worker{missingRateCount !== 1 ? "s" : ""} have no daily rate set — their attendance earnings will show as ₹0.{" "}
+                {missingRateCount} worker{missingRateCount !== 1 ? "s" : ""} {missingRateCount !== 1 ? "have" : "has"} no daily rate set — their attendance earnings will show as ₹0.{" "}
                 Set daily rates in the <strong>Workers</strong> tab.
               </span>
             </div>
