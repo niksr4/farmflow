@@ -11,7 +11,16 @@ import {
 } from "@/lib/stock-loss"
 
 const routeSource = readFileSync(join(process.cwd(), "app/api/transactions-neon/route.ts"), "utf8")
-const expenseRouteSource = readFileSync(join(process.cwd(), "app/api/expenses-neon/route.ts"), "utf8")
+// The route plus the modules extracted out of it on 2026-09-17: EXPENSE_TAG_PREFIX now lives in
+// lib/server/expenses/inventory-notes.ts. What matters is that the writer's tag and the reader's
+// guard agree, not which file the writer's half is declared in.
+const expenseRouteSource = [
+  "app/api/expenses-neon/route.ts",
+  "lib/server/expenses/inventory-notes.ts",
+  "lib/server/expenses/statements.ts",
+]
+  .map((path) => readFileSync(join(process.cwd(), path), "utf8"))
+  .join("\n")
 
 describe("stock loss note", () => {
   it("names the item, the amount and the reason", () => {
