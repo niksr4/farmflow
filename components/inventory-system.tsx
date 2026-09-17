@@ -135,7 +135,6 @@ import {
   API_INVENTORY,
   API_TRANSACTIONS,
   DASHBOARD_LAUNCHER_TAB,
-  DEFAULT_DASHBOARD_TAB_PRIORITY,
   DRILLDOWN_ALERT_ID_PARAM,
   DRILLDOWN_ALERT_METRIC_PARAM,
   DRILLDOWN_ITEM_PARAM,
@@ -173,6 +172,12 @@ import {
   normalizeQuantityValue,
 } from "@/components/inventory-system/transaction-normalize"
 import { filterAndSortInventory, filterAndSortTransactions, paginate } from "@/components/inventory-system/filters"
+import {
+  getPreferredDefaultTab,
+  inferBriefTabFromText as inferBriefTab,
+  resolveExceptionDrilldownTab as resolveExceptionTab,
+  type TabVisibility,
+} from "@/components/inventory-system/tab-routing"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import {
   buildExecutionOutcomeChecks,
@@ -3115,47 +3120,37 @@ export default function InventorySystem() {
     ],
   )
 
-  const getPreferredDefaultTab = useCallback(
-    (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
-    [],
+  // components/inventory-system/tab-routing.ts, with tests. The visibility object is what those
+  // functions gate on, so they can only ever route to a tab this user can actually open.
+  const tabVisibility: TabVisibility = useMemo(
+    () => ({
+      canShowAccounts,
+      canShowDispatch,
+      canShowProcessing,
+      canShowReceivables,
+      canShowSalesWorkspace,
+      canShowSeason,
+      showTransactionHistory,
+    }),
+    [
+      canShowAccounts,
+      canShowDispatch,
+      canShowProcessing,
+      canShowReceivables,
+      canShowSalesWorkspace,
+      canShowSeason,
+      showTransactionHistory,
+    ],
   )
 
-
   const inferBriefTabFromText = useCallback(
-    (input: string) => {
-      const text = String(input || "").toLowerCase()
-      if (!text) return "home"
-      if ((text.includes("dispatch") || text.includes("received")) && canShowDispatch) return "dispatch"
-      if ((text.includes("sale") || text.includes("buyer") || text.includes("revenue")) && canShowSalesWorkspace) return "sales"
-      if ((text.includes("receivable") || text.includes("outstanding") || text.includes("invoice")) && canShowReceivables) {
-        return "receivables"
-      }
-      if ((text.includes("labour") || text.includes("expense") || text.includes("cost")) && canShowAccounts) return "accounts"
-      if ((text.includes("float") || text.includes("yield") || text.includes("process")) && canShowProcessing) return "processing"
-      if ((text.includes("stock") || text.includes("inventory") || text.includes("transaction")) && showTransactionHistory) {
-        return "transactions"
-      }
-      return "home"
-    },
-    [canShowAccounts, canShowDispatch, canShowProcessing, canShowReceivables, canShowSalesWorkspace, showTransactionHistory],
+    (input: string) => inferBriefTab(input, tabVisibility),
+    [tabVisibility],
   )
 
   const resolveExceptionDrilldownTab = useCallback(
-    (metric?: string) => {
-      const normalized = String(metric || "").trim().toLowerCase()
-      if (!normalized) return canShowSeason ? "season" : "home"
-      if (["float_rate", "dry_parch_yield", "float_rate_zscore", "dry_parch_yield_zscore"].includes(normalized)) {
-        return canShowProcessing ? "processing" : canShowSeason ? "season" : "home"
-      }
-      if (["transit_loss", "dispatch_unconfirmed", "bag_weight_drift"].includes(normalized)) {
-        return canShowDispatch ? "dispatch" : canShowSeason ? "season" : "home"
-      }
-      if (["inventory_mismatch", "sales_spike"].includes(normalized)) {
-        return canShowSalesWorkspace ? "sales" : canShowSeason ? "season" : "home"
-      }
-      return canShowSeason ? "season" : "home"
-    },
-    [canShowDispatch, canShowProcessing, canShowSalesWorkspace, canShowSeason],
+    (metric?: string) => resolveExceptionTab(metric, tabVisibility),
+    [tabVisibility],
   )
 
   const openDrilldown = useCallback(
@@ -3252,7 +3247,7 @@ export default function InventorySystem() {
       const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
       router.replace(nextPath, { scroll: false })
     },
-    [allItemTypesForDropdown, canShowInventory, canShowProcessing, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, showFirstVisitTabLoader, visibleTabs],
+    [allItemTypesForDropdown, canShowInventory, canShowProcessing, canShowSales, locations, markTabAsLoaded, router, searchParams, showFirstVisitTabLoader, visibleTabs],
   )
   const handleTabChange = useCallback(
     (value: string) => {
@@ -3588,7 +3583,7 @@ export default function InventorySystem() {
           : getPreferredDefaultTab(visibleTabs)
       setActiveTab(fallbackTab)
     }
-  }, [activeTab, getPreferredDefaultTab, isModulesLoading, visibleTabs])
+  }, [activeTab, isModulesLoading, visibleTabs])
 
   useEffect(() => {
     if (tabParam !== "accounts") {
