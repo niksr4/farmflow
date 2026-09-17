@@ -1,6 +1,5 @@
 "use client"
 
-import type React from "react"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import InPageNav from "@/components/in-page-nav"
@@ -20,7 +19,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Check, PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { EditRecordDialog } from "@/components/ui/edit-record-dialog"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"

@@ -1,6 +1,5 @@
 "use client"
 
-import React from "react"
 import Link from "next/link"
 import { Coins, Download, FileText, Upload } from "lucide-react"
 import { Badge } from "@/components/ui/badge"

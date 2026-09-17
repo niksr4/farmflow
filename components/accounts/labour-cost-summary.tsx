@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatLocationLabel } from "@/lib/location-label"
 
 type Row = { label: string; estate: string | null; areaAcres: number | null; cost: number; costPerAcre: number | null }
 type WorkRow = { code: string; name: string | null; cost: number }
@@ -26,7 +27,7 @@ type Summary = {
   byBlock: Row[]
   byWork: WorkRow[]
   byPeriod: PeriodRow[]
-  filterOptions: { codes: string[]; blocks: Array<{ id: string; name: string }> }
+  filterOptions: { codes: string[]; blocks: Array<{ id: string; name: string; code?: string | null }> }
   byKind: { estateLabourers: number; contractLabourers: number; estateCost: number; contractCost: number }
 }
 
@@ -131,7 +132,7 @@ export default function LabourCostSummary({ startDate, endDate }: { startDate: s
 
         <select aria-label="Filter by block" className={selectCls} value={block} onChange={(e) => setBlock(e.target.value)}>
           <option value="">All blocks</option>
-          {options.blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {options.blocks.map((b) => <option key={b.id} value={b.id}>{formatLocationLabel(b, options.blocks)}</option>)}
         </select>
 
         <div className="flex overflow-hidden rounded-lg border border-stone-200 dark:border-white/[0.1]">

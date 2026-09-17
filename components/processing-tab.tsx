@@ -34,7 +34,7 @@ import { useAiValidate } from "@/hooks/use-ai-validate"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
-import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
+import { trackClick, reportActionError } from "@/lib/track-action"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import { formatLocationLabel } from "@/lib/location-label"
 

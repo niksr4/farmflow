@@ -6,7 +6,6 @@ import {
   pruneRecords,
   sessionDurationSeconds,
   MAX_RECORD_AGE_MS,
-  MIN_CRASH_DURATION_MS,
   MIN_CRASH_INTERACTIONS,
   STALE_AFTER_MS,
   type SessionRecord,

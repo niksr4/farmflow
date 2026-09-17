@@ -17,7 +17,6 @@ import {
 import {
   DEFAULT_TENANT_FEATURE_FLAGS,
   DEFAULT_TENANT_UI_VARIANT,
-  type TenantFeatureFlags,
   type TenantUiVariant,
 } from "@/lib/tenant-experience"
 import { formatDateForDisplay } from "@/lib/date-utils"
@@ -34,7 +33,6 @@ import {
   type TenantProfile,
   type User,
   type WeeklyCompareMode,
-  type WeeklyDeltas,
   type WeeklySummary,
   type WeeklySummaryRange,
   type WeeklySummaryResponse,
