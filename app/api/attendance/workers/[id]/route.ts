@@ -227,7 +227,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         `,
       )
     } catch (error) {
-      if (String((error as any)?.code || "") === "23505") {
+      if (isUniqueViolation(error)) {
         return NextResponse.json(
           { success: false, error: "That device code is already assigned to another employee" },
           { status: 409 },

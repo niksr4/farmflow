@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
@@ -19,6 +19,13 @@ import { describe, expect, it } from "vitest"
  * Asserted here so the next confident-sounding exception has to get past a test.
  */
 const read = (p: string) => readFileSync(resolve(__dirname, "..", p), "utf8")
+
+/** Every .ts under a directory, recursively — route handlers nest by segment. */
+const walkTs = (dir: string): string[] =>
+  readdirSync(dir).flatMap((entry) => {
+    const full = resolve(dir, entry)
+    return statSync(full).isDirectory() ? walkTs(full) : entry.endsWith(".ts") ? [full] : []
+  })
 
 const EDITABLE_RECORDS = [
   { what: "a pay rule", route: "app/api/worker-pay-rules/[id]/route.ts" },
@@ -89,6 +96,56 @@ describe("clearing a value is possible, so COALESCE is not used for nullable fie
     const ledger = read("app/api/worker-ledger/[id]/route.ts")
     expect(ledger).not.toMatch(/recover_from\s*=\s*COALESCE\(/)
     expect(ledger).toMatch(/recover_from\s*=\s*CASE WHEN/)
+  })
+
+  it("an invoice's notes and IRN metadata can be cleared", () => {
+    // Found by the daily scan on 2026-09-18. All four are `z.string().optional().nullable()` in
+    // this route's own schema and nullable columns in billing_invoices, so null was an accepted
+    // input that COALESCE then discarded — voiding an IRN was impossible.
+    const invoice = read("app/api/billing/invoices/[id]/route.ts")
+    for (const column of ["notes", "irn", "irn_ack_no", "irn_ack_date"]) {
+      expect(invoice, `${column} still uses COALESCE`).not.toMatch(
+        new RegExp(`${column}\\s*=\\s*COALESCE\\(`),
+      )
+      expect(invoice, `${column} does not use CASE WHEN`).toMatch(new RegExp(`${column}\\s*=\\s*CASE WHEN`))
+    }
+  })
+
+  /**
+   * ⚠ DERIVED, NOT HAND-LISTED. The three checks above name their routes, and a list of three is
+   * how the invoice route sat broken for however long — it was found by a scanner reading the file,
+   * not by anything failing.
+   *
+   * The rule is derivable from the route itself: a field declared `.nullable()` in its own zod
+   * schema has null as an ACCEPTED INPUT, and `col = COALESCE($param, col)` can never write it.
+   * So every route is checked against its own declaration, and a new nullable field is covered the
+   * day it is added.
+   *
+   * Swept manually when this was written: every other self-referential COALESCE in app/ and lib/
+   * targets a NOT NULL column (amount, entry_type, kg_picked, rate, status, headcount,
+   * recover_over_periods — that last one INTEGER NOT NULL DEFAULT 1), where keeping the old value
+   * is exactly right. This finds the ones where it is not.
+   */
+  it("no route COALESCEs a field its own schema declares nullable", () => {
+    const toSnake = (s: string) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+    const offenders: string[] = []
+
+    for (const file of walkTs(resolve(__dirname, "..", "app/api"))) {
+      const src = readFileSync(file, "utf8")
+      if (!src.includes(".nullable()")) continue
+
+      // `field: z.<type>()....nullable()` — the field names this route accepts null for.
+      const nullableFields = [...src.matchAll(/(\w+)\s*:\s*z\.[^,\n]*\.nullable\(\)/g)].map((m) => m[1])
+      for (const field of new Set(nullableFields)) {
+        const column = toSnake(field)
+        const bad = new RegExp(`\\b${column}\\s*=\\s*COALESCE\\(\\$\\{`)
+        if (bad.test(src)) {
+          offenders.push(`${file.slice(file.indexOf("app/api"))}: ${column} is nullable but uses COALESCE`)
+        }
+      }
+    }
+
+    expect(offenders, "null is an accepted input for these, so COALESCE makes it unwritable").toEqual([])
   })
 })
 
