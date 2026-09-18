@@ -24,7 +24,7 @@ export default function PrivacyPolicyPage() {
           <li><strong>Account data:</strong> username, email address, role, and tenant association provided at registration.</li>
           <li><strong>Operational data:</strong> inventory records, processing logs, dispatch records, sales entries, accounts, and any other data you enter while using FarmFlow.</li>
           <li><strong>Worker or contact data:</strong> names or identifiers of estate workers or buyers that you optionally enter into the system. You are responsible for ensuring lawful basis for entering such data.</li>
-          <li><strong>Usage and analytics data:</strong> pages visited, features used, session duration, and click events — collected via PostHog (analytics) and Google Analytics 4 (GA4) to improve the product.</li>
+          <li><strong>Usage and analytics data:</strong> pages visited, features used, session duration, and click events, collected via PostHog (analytics) and Google Analytics 4 (GA4) to improve the product.</li>
           <li><strong>Technical data:</strong> IP address, browser type, device type, and cookies necessary for session management and security.</li>
           <li><strong>Communications:</strong> messages you send via the contact form or by email.</li>
         </ul>

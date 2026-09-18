@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import posthog from "posthog-js"
+import { CloudRain, Mail, Scale, Smartphone, Wallet } from "lucide-react"
 import { useLocale } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,11 +26,11 @@ export default function SignupRoute() {
   })
 
   const valuePoints = [
-    { icon: "📊", text: "Know your exact cost per kg — labour, fertiliser, fuel, all of it" },
-    { icon: "📬", text: "Weekly AI digest every Monday with season insights and field signals" },
-    { icon: "⚖️", text: "Dispatch ↔ sales reconciliation — catch if you're selling below cost" },
-    { icon: "🌧️", text: "Rainfall, irrigation signals, and market timing in one place" },
-    { icon: "📱", text: "Mobile-first — works on a phone in the field" },
+    { icon: Wallet, text: "What a kilo of parchment cost you. Labour, fertiliser, spray, fuel, all of it." },
+    { icon: Mail, text: "A short brief every Monday at six on the week that went." },
+    { icon: Scale, text: "Dispatch set against sales, so nothing gets sold below what it cost." },
+    { icon: CloudRain, text: "The rain gauge, drying windows and where coffee is trading." },
+    { icon: Smartphone, text: "Marked from a phone in the field, and it holds when the signal drops." },
   ]
 
   return (
@@ -46,29 +47,35 @@ export default function SignupRoute() {
           <Link href="/" className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 transition-colors text-sm font-semibold">
             ← FarmFlow
           </Link>
-          <h2 className="mt-10 text-4xl font-black leading-tight text-stone-50">
-            Your estate.<br />
-            Always in view.
+          <h2 className="mt-10 font-display text-4xl font-black leading-tight text-stone-50">
+            One book for<br />
+            the whole season.
           </h2>
-          <p className="mt-4 text-base text-stone-400 leading-relaxed max-w-sm">
-            FarmFlow replaces the notebook, the Excel, and the WhatsApp chain — with one place that knows your season.
+          <p className="mt-4 max-w-sm text-base leading-relaxed text-stone-400">
+            The notebook, the Excel sheet and the WhatsApp thread, replaced by one place that
+            already knows what outturn means.
           </p>
           <div className="mt-10 space-y-4">
-            {valuePoints.map((pt) => (
-              <div key={pt.text} className="flex items-start gap-3">
-                <span className="text-xl leading-none mt-0.5">{pt.icon}</span>
-                <p className="text-sm text-stone-300 leading-relaxed">{pt.text}</p>
-              </div>
-            ))}
+            {valuePoints.map((pt) => {
+              const Icon = pt.icon
+              return (
+                <div key={pt.text} className="flex items-start gap-3">
+                  <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08]">
+                    <Icon className="h-3.5 w-3.5 text-emerald-200" />
+                  </span>
+                  <p className="text-sm leading-relaxed text-stone-300">{pt.text}</p>
+                </div>
+              )
+            })}
           </div>
         </div>
         <div className="mt-10 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-4">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">What happens after signup</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">What happens next</p>
           <div className="mt-3 space-y-2 text-sm text-stone-400">
-            <p>1. Estate ready in under a minute</p>
-            <p>2. 80 activity codes pre-loaded — no blank slate</p>
-            <p>3. Guided setup walks you through the first entry</p>
-            <p>4. First weekly digest arrives Monday morning</p>
+            <p>1. Your estate is ready inside a minute</p>
+            <p>2. Eighty activity codes are already loaded, so no blank slate</p>
+            <p>3. A guided setup walks you through the first entry</p>
+            <p>4. Your first Monday brief arrives the week after</p>
           </div>
         </div>
       </div>
