@@ -62,7 +62,7 @@ const firstWeekLessons = [
     how: [
       "Open the Accounts tab from the sidebar.",
       "Go to the Cost Codes section.",
-      "Add LABOR, SUPPLIES, MAINTENANCE, and ADMIN — or use the starter codes button in the setup checklist.",
+      "Add LABOR, SUPPLIES, MAINTENANCE, and ADMIN, or use the starter codes button in the setup checklist.",
     ],
     doneLooksLike: "At least three codes appear in the Cost Codes list. You can now select them when recording labour or expenses.",
   },
@@ -70,7 +70,7 @@ const firstWeekLessons = [
     number: 2,
     title: "Record your first expense",
     duration: "5–10 min",
-    goal: "Log a real cost — wages paid, materials bought, or anything the estate spent money on.",
+    goal: "Log a real cost: wages paid, materials bought, or anything the estate spent money on.",
     how: [
       "Open Accounts → Expenses.",
       "Enter the amount, date, and select an activity code (e.g. LABOR or SUPPLIES).",
@@ -83,7 +83,7 @@ const firstWeekLessons = [
     number: 3,
     title: "Log your first labour deployment",
     duration: "5–10 min",
-    goal: "Track the workers who showed up for one activity — picking, pruning, irrigation, or any task.",
+    goal: "Track the workers who showed up for one activity: picking, pruning, irrigation, or any task.",
     how: [
       "Open Accounts → Daily Labour.",
       "Choose the date, number of workers, hours worked, and the activity code.",
@@ -96,7 +96,7 @@ const firstWeekLessons = [
     number: 4,
     title: "Add your first inventory item",
     duration: "5 min",
-    goal: "Create an item to track — coffee cherry, fertiliser, bags, or any stock your estate holds.",
+    goal: "Create an item to track: coffee cherry, fertiliser, bags, or any stock your estate holds.",
     how: [
       "Open the Stock & Inventory tab.",
       "Click Add item, give it a name and unit (e.g. kg, bags, litres).",
@@ -145,7 +145,7 @@ const glossary = [
   },
   {
     term: "Subtab",
-    meaning: "A smaller view living inside a main tab — for example Transaction History lives inside Stock & Inventory, and Payroll lives inside Accounts.",
+    meaning: "A smaller view living inside a main tab. For example, Transaction History lives inside Stock & Inventory, and Payroll lives inside Accounts.",
   },
 ]
 
@@ -223,7 +223,7 @@ const buildStartHereSteps = (enabledModules: string[]) => {
     },
     {
       title: "Use the Workspace Navigator to find your way around",
-      detail: "The home screen organises the workspace into three sections — Operations, Finance, and Reports. Operations and Finance hold the tabs where real records get entered; Reports is for reviewing trends once those records exist. Tap a section card to open it, or use the quick-action shortcuts to jump straight to a tab you use often.",
+      detail: "The home screen organises the workspace into three sections: Operations, Finance, and Reports. Operations and Finance hold the tabs where real records get entered; Reports is for reviewing trends once those records exist. Tap a section card to open it, or use the quick-action shortcuts to jump straight to a tab you use often.",
     },
     {
       title: "If stock changed physically, use Operations",
@@ -232,9 +232,9 @@ const buildStartHereSteps = (enabledModules: string[]) => {
         : "Operations tabs are for things that happened to actual crop or goods.",
     },
     {
-      title: "If money changed — or you're checking a price — use Finance",
+      title: "If money changed, or you're checking a price, use Finance",
       detail: financeEntries
-        ? `${financeEntries} are for labour, expenses, invoices, and money due.${hasMarketPricing ? " Market Rates is the exception — it's for comparing buyer prices, not recording a transaction." : ""}${hasBalanceSheet ? " Use Balance Sheet to review the summary after the source records are in." : ""}`
+        ? `${financeEntries} are for labour, expenses, invoices, and money due.${hasMarketPricing ? " Market Rates is the exception, since it's for comparing buyer prices rather than recording a transaction." : ""}${hasBalanceSheet ? " Use Balance Sheet to review the summary after the source records are in." : ""}`
         : hasBalanceSheet
           ? "Balance Sheet is for review after the source records are in."
           : "Finance tabs are for labour, expenses, invoices, and money due.",
@@ -357,7 +357,7 @@ const buildDailyRoutines = (
         supervisorActions.length ? `Record ${joinReadableList(supervisorActions)} as the day happens.` : null,
         supportActions.length ? `Add ${joinReadableList(supportActions)} if there is proof or context to keep.` : null,
         hasModule(enabledModules, "inventory")
-          ? "Use Stock & Inventory when new stock arrives or a count needs correcting — not for every daily check."
+          ? "Use Stock & Inventory when new stock arrives or a count needs correcting, not for every daily check."
           : null,
       ]),
     },
@@ -399,7 +399,7 @@ const buildClimateManualItem = (enabledModules: string[]): ManualItem | null => 
   return {
     name: "Rain & Weather",
     whatItIs: hasRainfall && hasWeather
-      ? "Climate context for field and production decisions — rainfall logs plus a short-range forecast, in one place inside Operations."
+      ? "Climate context for field and production decisions: rainfall logs plus a short-range forecast, in one place inside Operations."
       : hasWeather
         ? "A short-range weather view for field and drying decisions, inside Operations."
         : "Rainfall logging for field and production decisions, inside Operations.",
@@ -436,7 +436,7 @@ const buildManualGroups = (
     hasModule(enabledModules, "curing")
       ? {
           name: "Curing & Drying",
-          whatItIs: "Drying-bed tracking for the stage right after pulping — intake, moisture drop, lot, and outturn.",
+          whatItIs: "Drying-bed tracking for the stage right after pulping: intake, moisture drop, lot, and outturn.",
           openItWhen: "A batch is on the drying bed and you're tracking moisture loss toward a finished outturn.",
           doneLooksLike: "Each batch shows starting and ending moisture and the outturn it produced.",
         }
@@ -496,7 +496,7 @@ const buildManualGroups = (
     hasModule(enabledModules, "accounts") && options.userRole !== "user"
       ? {
           name: "P&L Report",
-          whatItIs: "A season profit-and-loss view that appears automatically for admins and owners once Accounts is enabled — there is no separate module toggle for it.",
+          whatItIs: "A season profit-and-loss view that appears automatically for admins and owners once Accounts is enabled. There is no separate module toggle for it.",
           openItWhen: "You want season revenue set against season cost in one place, not just cost on its own.",
           doneLooksLike: "You can explain whether the season is ahead or behind on margin.",
         }
@@ -611,7 +611,7 @@ const buildManualGroups = (
   const adminItems = compact([
     {
       name: "Settings",
-      whatItIs: "Estate setup, people, access, and reporting rules — organised into six groups. See \"Settings, step by step\" below for the full walkthrough of each one.",
+      whatItIs: "Estate setup, people, access, and reporting rules, organised into six groups. See \"Settings, step by step\" below for the full walkthrough of each one.",
       openItWhen: "The estate needs a new user, changed permissions, updated estate details, or module updates.",
       doneLooksLike: "The workspace stays clean and people only see what they should use.",
     },
@@ -657,7 +657,7 @@ const buildManualGroups = (
       ? {
           id: "operations",
           title: "Operations",
-          description: "Use these tabs when crop, lots, or stock physically move — Rain & Weather also lives here for quick reference.",
+          description: "Use these tabs when crop, lots, or stock physically move. Rain & Weather also lives here for quick reference.",
           icon: Factory,
           badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
           items: operationsItems,
@@ -713,7 +713,7 @@ const buildSettingsManualGroups = (options: {
       items: [
         {
           name: "Digest Email",
-          whatItIs: "The address that receives the weekly digest and operational alerts. It's your personal account email — not visible to other users.",
+          whatItIs: "The address that receives the weekly digest and operational alerts. It's your personal account email, and it is not visible to other users.",
           openItWhen: "You want alerts going to a different inbox, or you're setting one up for the first time.",
           doneLooksLike: "The address you actually check regularly is saved, and next week's digest lands there.",
         },
@@ -778,7 +778,7 @@ const buildSettingsManualGroups = (options: {
               name: "Labour Wage Defaults",
               whatItIs: "Default in-house and outside worker wage rates that pre-fill new labour entries. Each entry can still be adjusted individually.",
               openItWhen: "Your standard day rates change, or you're setting up for the first time.",
-              doneLooksLike: "New labour entries start with the right numbers already filled in — you only adjust exceptions.",
+              doneLooksLike: "New labour entries start with the right numbers already filled in, so you only adjust exceptions.",
             },
             {
               name: "Locations",
@@ -813,7 +813,7 @@ const buildSettingsManualGroups = (options: {
               name: "Per-User Exceptions",
               whatItIs: "Give one specific person access different from the estate default. Meant to stay rare.",
               openItWhen: "One person genuinely needs to see, or not see, something the rest of the team doesn't.",
-              doneLooksLike: "Only a few, well-understood exceptions exist — most users stay on estate defaults.",
+              doneLooksLike: "Only a few, well-understood exceptions exist, and most users stay on estate defaults.",
             },
             showOwnerGroups
               ? {
@@ -1021,15 +1021,15 @@ export default function AppTrainingManual({
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Settings, step by step</h2>
             <p className="text-sm text-muted-foreground">
-              Settings is organised into six groups. They are ordered the way most estates should actually use them —
+              Settings is organised into six groups. They are ordered the way most estates should actually use them:
               start with Profile and Estate, add People and Locations, and only open Privacy or Advanced when you have
               a specific reason to.
             </p>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-950">
             <span className="font-semibold">Recommended order:</span> Estate Identity → Locations → People and Roles
-            (get the basics running) — then Estate Footprint, Data Import, Language, and Account Security (useful
-            context) — then Thresholds, Dashboard Preferences, Allowed Modules, Per-User Exceptions, Tenant Experience,
+            (get the basics running), then Estate Footprint, Data Import, Language, and Account Security (useful
+            context), then Thresholds, Dashboard Preferences, Allowed Modules, Per-User Exceptions, Tenant Experience,
             and Audit Log (tune only when you have a clear reason to).
           </div>
           {settingsManualGroups.map((group) => (
