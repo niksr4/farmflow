@@ -222,6 +222,12 @@ export function StickyMobileCta({
       className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#081411]/92 px-4 py-3 backdrop-blur-xl lg:hidden"
       style={{ pointerEvents: visible ? "auto" : "none" }}
       aria-hidden={!visible}
+      // aria-hidden and pointer-events:none both stop short of keyboard focus: the CTA button
+      // inside `children` stays in tab order even while slid off-screen and invisible, so a
+      // keyboard user tabbing through the page can land on a control they can't see. `inert`
+      // (React 19, this repo's version) removes it from the tab order and blocks all
+      // interaction whenever the bar is hidden, matching what aria-hidden already implies.
+      inert={!visible}
     >
       {children}
     </MotionDiv>
