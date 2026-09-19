@@ -312,10 +312,6 @@ export default function WelcomeOnboardingPage() {
               </div>
 
               <div className="space-y-3">
-
-              </div>
-
-              <div className="space-y-3">
                 <div>
                   <Label>{t("public.welcome.moduleBundle")}</Label>
                   <p className="mt-1 text-xs text-muted-foreground">

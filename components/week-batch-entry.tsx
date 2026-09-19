@@ -258,7 +258,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                             type="button"
                             onClick={() => removeRow(rowIdx)}
                             aria-label={`Remove ${row.reference}`}
-                            className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-400 transition-all"
+                            className="text-neutral-300 hover:text-red-400 active:text-red-400 transition-colors touch-manipulation"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
