@@ -8,26 +8,38 @@ export const supportsImportTemplate = (dataset: ExportDatasetId): dataset is key
 
 export function parseCustomDateString(dateString: string | undefined | null): Date | null {
   if (!dateString || typeof dateString !== "string") return null
-  const iso = Date.parse(dateString)
-  if (!isNaN(iso)) return new Date(iso)
 
-  const parts = dateString.split(" ")
-  const dateParts = parts[0].split("/")
-  const timeParts = parts[1] ? parts[1].split(":") : ["00", "00"]
+  // Slash-delimited dates are always the estate's own DD/MM/YYYY format, and must never be
+  // handed to Date.parse first. Date.parse treats a slash-delimited date as US MM/DD/YYYY, so
+  // "03/04/2024" (3 April) silently became 4 March -- Date.parse succeeds there (it is a valid
+  // US-format date), so the custom parser below, which gets day and month the right way round,
+  // was never reached. Only day values 13-31 exposed this, because Date.parse rejects those as
+  // an invalid month and falls through -- so the common case (day <= 12) was the one silently
+  // wrong. Checking for "/" first routes every slash-delimited date to the parser that actually
+  // knows this format, regardless of which half of the ambiguity Date.parse would have guessed.
+  if (dateString.includes("/")) {
+    const parts = dateString.split(" ")
+    const dateParts = parts[0].split("/")
+    const timeParts = parts[1] ? parts[1].split(":") : ["00", "00"]
 
-  if (dateParts.length !== 3) return null
+    if (dateParts.length !== 3) return null
 
-  const day = Number.parseInt(dateParts[0], 10)
-  const month = Number.parseInt(dateParts[1], 10) - 1
-  const year = Number.parseInt(dateParts[2], 10)
-  const hour = Number.parseInt(timeParts[0], 10)
-  const minute = Number.parseInt(timeParts[1], 10)
+    const day = Number.parseInt(dateParts[0], 10)
+    const month = Number.parseInt(dateParts[1], 10) - 1
+    const year = Number.parseInt(dateParts[2], 10)
+    const hour = Number.parseInt(timeParts[0], 10)
+    const minute = Number.parseInt(timeParts[1], 10)
 
-  if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute)) {
-    return null
+    if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute)) {
+      return null
+    }
+
+    return new Date(year, month, day, hour, minute)
   }
 
-  return new Date(year, month, day, hour, minute)
+  const iso = Date.parse(dateString)
+  if (!isNaN(iso)) return new Date(iso)
+  return null
 }
 
 export const formatDate = (dateString?: string | null) => {

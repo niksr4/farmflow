@@ -2495,6 +2495,16 @@ export default function InventorySystem() {
   const handleCreateNewItem = useSingleFlight(handleCreateNewItemUnguarded)
 
   // CSV export (transactions & inventory)
+  // Quotes/escapes every field -- an item name, note, or user id containing a comma or quote
+  // would otherwise silently misalign the exported sheet. Same pattern as accounts-page.tsx's
+  // escapeCsvField and payroll-summary-tab.tsx's escapeCsv.
+  const escapeCsvField = (field: unknown): string => {
+    if (field === null || field === undefined) return ""
+    const stringField = String(field)
+    if (/[",\n]/.test(stringField)) return `"${stringField.replace(/"/g, '""')}"`
+    return stringField
+  }
+
   const exportInventoryToCSV = () => {
     const headers = ["Item Name", "Quantity", "Unit", "Value"]
     const rows = filteredAndSortedInventory.map((item) => {
@@ -2502,7 +2512,7 @@ export default function InventorySystem() {
       const itemValue = valueInfo.totalValue || 0
       return [item.name, String(item.quantity), item.unit || "kg", `₹${itemValue.toFixed(2)}`]
     })
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    const csvContent = [headers, ...rows].map((r) => r.map(escapeCsvField).join(",")).join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
@@ -2525,7 +2535,7 @@ export default function InventorySystem() {
       (t.notes ?? "").replace(/\n/g, " "),
       t.user_id ?? "",
     ])
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    const csvContent = [headers, ...rows].map((r) => r.map(escapeCsvField).join(",")).join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
