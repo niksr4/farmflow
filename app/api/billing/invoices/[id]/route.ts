@@ -101,10 +101,14 @@ export async function PATCH(request: Request, context: RouteContext) {
         UPDATE billing_invoices
         SET
           status = COALESCE(${payload.status || null}, status),
-          notes = COALESCE(${payload.notes ?? null}, notes),
-          irn = COALESCE(${payload.irn ?? null}, irn),
-          irn_ack_no = COALESCE(${payload.irnAckNo ?? null}, irn_ack_no),
-          irn_ack_date = COALESCE(${payload.irnAckDate || null}::timestamptz, irn_ack_date),
+          -- CASE WHEN, not COALESCE: these three are nullable in the request schema
+          -- specifically so a caller can clear them (e.g. voiding an IRN). COALESCE(null, column)
+          -- always keeps the old value, silently refusing the one thing a null was sent to do --
+          -- the same trap already fixed on the attendance/devices and worker-profile edit paths.
+          notes = CASE WHEN ${payload.notes !== undefined} THEN ${payload.notes ?? null} ELSE notes END,
+          irn = CASE WHEN ${payload.irn !== undefined} THEN ${payload.irn ?? null} ELSE irn END,
+          irn_ack_no = CASE WHEN ${payload.irnAckNo !== undefined} THEN ${payload.irnAckNo ?? null} ELSE irn_ack_no END,
+          irn_ack_date = CASE WHEN ${payload.irnAckDate !== undefined} THEN ${payload.irnAckDate || null}::timestamptz ELSE irn_ack_date END,
           updated_at = NOW()
         WHERE id = ${invoiceId}
           AND tenant_id = ${tenantContext.tenantId}

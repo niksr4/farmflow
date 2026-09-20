@@ -316,7 +316,7 @@ export default function AttendanceReportTab() {
                     </tr>
                     {open && (
                       <tr key={`${w.workerId}-days`} className="border-b border-stone-100 bg-stone-50/60 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                        <td colSpan={8} className="px-3 py-2">
+                        <td colSpan={9} className="px-3 py-2">
                           <div className="space-y-1">
                             {w.days.map((d) => (
                               <div key={d.date} className="grid grid-cols-[6rem_5rem_5rem_5rem_1fr] items-center gap-2 text-[11px] tabular-nums">

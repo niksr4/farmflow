@@ -671,7 +671,12 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
         isPresentRow ? "P" : "A",
       ]
     })
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    // Quote everything: worker names contain commas often enough, and a report that opens
+    // misaligned in Excel is a report nobody trusts again (same rule as the weekly export below
+    // and attendance-report-tab.tsx's exportCsv).
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
@@ -693,7 +698,11 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     if (weeklyReportHasRates) {
       rows.push(["Total", "", "", String(weeklyReportTotal)])
     }
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    // Same quoting rule as exportDailyReportToCSV above -- worker names contain commas often
+    // enough that an unquoted export silently misaligns in Excel.
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)

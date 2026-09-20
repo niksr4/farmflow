@@ -32,7 +32,8 @@ export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState("")
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
     if (submitting) return
     setSubmitting(true)
     setError("")
@@ -137,7 +138,7 @@ export default function ContactPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="contact-name" className="text-stone-300">Your name</Label>
@@ -195,14 +196,14 @@ export default function ContactPage() {
                   )}
 
                   <Button
+                    type="submit"
                     disabled={submitting || !canSubmit}
-                    onClick={handleSubmit}
                     className="w-full border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.5)] hover:bg-emerald-200 disabled:opacity-50"
                   >
                     {submitting ? "Sending…" : "Send message"}
                     {!submitting && <Send className="ml-2 h-4 w-4" />}
                   </Button>
-                </div>
+                </form>
               )}
             </CardContent>
           </Card>
