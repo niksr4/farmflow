@@ -15,6 +15,7 @@ import { formatCurrency } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { useAuth } from "@/hooks/use-auth"
+import { useSearchParams } from "next/navigation"
 import TaskGuideCard from "@/components/task-guide-card"
 import { toast } from "@/components/ui/use-toast"
 import { numericInputValue } from "@/lib/number-input"
@@ -67,7 +68,18 @@ type BillingTabProps = {
 
 export default function BillingTab({ showDataToolsControls = false }: BillingTabProps) {
   const { user } = useAuth()
-  const canEdit = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
+  const searchParams = useSearchParams()
+  // Mirrors inventory-system.tsx's own preview-mode computation: an owner previewing another
+  // tenant's workspace should see the same read-only surface everywhere. user.role stays "owner"
+  // for the whole duration of a preview (it's the raw, real session role), so checking it directly
+  // reported the owner as able to delete/edit even while previewing a tenant as a read-only "user".
+  const previewRoleParam = (searchParams.get("previewRole") || "").toLowerCase()
+  const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
+  const previewTenantId = (searchParams.get("previewTenantId") || "").trim()
+  const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
+  const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
+  const canEdit = effectiveRole === "admin" || effectiveRole === "owner" || effectiveRole === "user"
   const [loading, setLoading] = useState(false)
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const invoiceControls = useListControls(invoices, {

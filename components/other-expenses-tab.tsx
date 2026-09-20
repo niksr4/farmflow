@@ -36,6 +36,8 @@ import ActivitySuggestList, { filterActivitySuggestions } from "@/components/act
 import { formatLocationLabel } from "@/lib/location-label"
 import { numericInputValue } from "@/lib/number-input"
 import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
+import { useAuth } from "@/hooks/use-auth"
+import { useSearchParams } from "next/navigation"
 
 /**
  * Chosen when a cost belongs to the estate rather than to any one block. Stored as NULL, which is
@@ -77,6 +79,21 @@ export default function OtherExpensesTab({
   startDate?: string
   endDate?: string
 }) {
+  const { user } = useAuth()
+  const searchParams = useSearchParams()
+  // Every sibling tab (sales, dispatch, billing, curing, pepper, processing, other-sales, quality
+  // grading) gates its Edit/Delete controls behind a role check that also accounts for owner
+  // preview mode -- this tab had no gate at all, so an owner previewing a tenant read-only could
+  // still see enabled Edit/Delete buttons here (the server-side DELETE/PATCH still scope by the
+  // owner's real tenantId and no-op harmlessly, but the buttons shouldn't be live in the first
+  // place). Matches components/sales-tab.tsx's canDelete computation.
+  const previewRoleParam = (searchParams.get("previewRole") || "").toLowerCase()
+  const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
+  const previewTenantId = (searchParams.get("previewTenantId") || "").trim()
+  const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
+  const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
+  const canDelete = effectiveRole === "admin" || effectiveRole === "owner" || effectiveRole === "user"
   const [locations, setLocations] = useState<LocationOption[]>([])
   // Form-only field, not a history filter — expense history predates this field and mostly
   // has no location on existing rows, so filtering the list by it would hide old entries.
@@ -935,22 +952,24 @@ export default function OtherExpensesTab({
                         {deployment.notes && (
                           <p className="text-sm text-stone-500 italic">{deployment.notes}</p>
                         )}
-                        <div className="flex gap-2 pt-2">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(deployment)}
-                            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-stone-600 touch-manipulation"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteWithUndo(deployment)}
-                            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-red-500 touch-manipulation"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Delete
-                          </button>
-                        </div>
+                        {canDelete && (
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => startEdit(deployment)}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-stone-600 touch-manipulation"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteWithUndo(deployment)}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-red-500 touch-manipulation"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
@@ -992,30 +1011,32 @@ export default function OtherExpensesTab({
                       </TableCell>
                       <TableCell className="max-w-xs truncate">{deployment.notes || "-"}</TableCell>
                       <TableCell>
-                        <TooltipProvider>
-                          <div className="flex gap-2">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Edit expense</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleDeleteWithUndo(deployment)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete expense</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TooltipProvider>
+                        {canDelete && (
+                          <TooltipProvider>
+                            <div className="flex gap-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit expense</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteWithUndo(deployment)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete expense</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TooltipProvider>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

@@ -195,16 +195,50 @@ Route: `app/admin/`
 
 ## Component Architecture
 
-`components/inventory-system.tsx` is the main dashboard shell (~8,300 lines — ongoing decomposition).
+`components/inventory-system.tsx` is the main dashboard shell — **5,064 lines** as of 2026-09-18.
+This line previously said "~8,300", which was true at some point and then quietly was not; check it
+with `wc -l` rather than trusting the number here.
 
-Extracted components so far:
-- `components/inventory-system/` — types, constants, utils, onboarding, data-tools-export
-- `lib/workspace-hero-content.ts` — `buildHeroContent()` utility
-- `components/inventory-dialogs.tsx` — 4 inventory dialogs (NewItem, EditTransaction, InventoryEdit, DeleteConfirm)
-- `components/morning-brief-card.tsx` — AI insights morning brief
-- `components/workspace-launcher.tsx` — workspace nav launcher tab
-- `components/feedback-widget.tsx` — floating feedback/support widget
-- `components/floating-ai-assistant.tsx` — floating AI chat assistant
+Extracted modules live in `components/inventory-system/` (42 files) and `lib/`. **Read the
+directory, not a list in this file** — an inventory of forty-two filenames in a doc is a list that
+rots, and the last one did.
+
+**20 files are still over 1000 lines.** To see them, in size order:
+
+```bash
+git ls-files '*.ts' '*.tsx' | grep -v ^tests/ | xargs wc -l | sort -rn | head -25
+```
+
+### What decomposition has actually cost and returned
+
+Nine passes ran 2026-09-17/18. Worth knowing before starting another:
+
+- **Module preamble is the cheap win.** Types, constants, pure helpers and data sitting *above* the
+  component or handler move with zero behaviour risk, and the move can be *proved*: diff the old
+  file from its first export against the new one from the same point and it should be byte-identical.
+  `app-training-manual.tsx` went 1159 → 303 this way, `expenses-neon/route.ts` 1812 → 1321.
+- **Extracting stateful logic barely shrinks the file.** Three passes over `inventory-system.tsx`
+  moved 58 lines, because anything extracted has to be bound back under the same names. The win
+  there is testability, not size. Getting that file meaningfully smaller needs a provider/children
+  split — an architectural change, not a pass.
+- **⚠ THE TAX NOBODY BUDGETS FOR: 78 tests read source files by path.** Moving code silently
+  decouples them. Five broke across these passes, and *none* was asserting "this file contains X" —
+  each was asserting "the implementation does X". Check before moving:
+
+  ```bash
+  rg -l '<path/you/are/about/to/move>' tests/
+  ```
+
+  `components/attendance-tab.tsx` is pinned by **12** tests. On raw size it looks like a good
+  target; on cost it is the worst on the board.
+- **Two guards count things in a directory** and will silently measure less if you move code out of
+  it: `tests/estate-scope.test.ts` counts joining queries per file, and
+  `tests/labour-cost-readers.test.ts` allowlists direct `labor_transactions` readers *by path*.
+- **A broken source scan is usually an upgrade opportunity.** Once the moved code is a pure
+  function, a scan that was reaching for a behaviour it could not express can simply ask instead —
+  see `tests/training-manual-modules.test.ts` and the rainfall-matrix case in
+  `tests/rainfall-one-figure-a-day.test.ts`, both converted from grepping source to calling the
+  function.
 
 Decomposition target: keep all files under 1000 lines.
 
@@ -213,7 +247,10 @@ Decomposition target: keep all files under 1000 lines.
 ## Testing
 
 ```bash
-pnpm test                    # Vitest unit tests
+pnpm test                    # Vitest — two projects: `unit` (node) and `render` (jsdom)
+pnpm test:unit               # .test.ts only
+pnpm test:render             # .test.tsx only — mounted components
+pnpm lint:dead-imports       # imports nothing reads (see below)
 pnpm test:e2e                # All Playwright e2e
 pnpm test:e2e:onboarding     # Self-serve onboarding flow
 pnpm test:e2e:auth           # Auth flows
@@ -223,6 +260,41 @@ pnpm test:regression         # Dashboard regression
 
 E2e test files in `tests/e2e/`. Key helpers in `tests/e2e/helpers.ts`.
 
+### `pnpm lint` and `pnpm typecheck` do NOT catch an unused import
+
+`eslint-config-next` ships no unused-vars rule, no `@typescript-eslint` plugin is installed, and
+`tsc --noEmit` says nothing without `--noUnusedLocals`. Turning the check on for the first time
+found **78 dead imports across 38 files**, all of which had survived a full green gate.
+
+`scripts/dev/check-dead-imports.mjs` (`pnpm lint:dead-imports`) now runs in CI between typecheck and
+the unit tests. It enforces **imports only**; ~29 unused locals and types are counted and printed
+but not enforced, because a deliberately-kept const is a judgement call.
+
+It is not a tidiness rule. `components/worker-profiles-tab.tsx` imported `formatLocationLabel` and
+never called it, while a test asserted `expect(src).toContain("formatLocationLabel")` — **a guard
+against a real bug, passing on the import line alone.** A dead import is a claim about what a file
+does, and when something greps for that claim, being wrong is silent.
+
+### Writing a guard that cannot go vacuous
+
+Most of this codebase's tests scan source, because the bugs are wrong answers rather than crashes.
+Three failure modes, each of which has actually happened here:
+
+- **Asserting a mention, not a call.** `toContain("helperName")` is satisfied by the import. Strip
+  import lines and match `helperName\s*\(`.
+- **A hand-kept list of files.** A list of two or three is how the next instance hides. Derive the
+  set instead — `tests/pay-records-are-editable.test.ts` finds every field a route declares
+  `.nullable()` and checks *that route* does not `COALESCE` it, so a field added tomorrow is covered
+  tomorrow. Where an exemption list is unavoidable, add a second test that fails when an entry stops
+  being relevant.
+- **A regex pinned to names that happen to be in the current code.** A picker scan matched
+  `<SelectItem>` and `loc.name`, so it missed `{l.name}` and `<option>{b.name}</option>` — the only
+  two real offenders. Key on *shape* (`value={X.id}` labelled `{X.name}`), not on identifiers.
+
+**Tamper-test every new guard**: break the thing it guards and watch it fail. Several of the
+above were caught that way and not by review — including one replacement that was *weaker* than the
+scan it replaced.
+
 CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 
 ---
@@ -230,7 +302,25 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-08-20: up to `130-honeyfarm-two-estates.sql`, applied to both dev and prod.
+As of 2026-09-18 the highest file is `151-update-inventory-onconflict-partial-index.sql`; prod has
+**149** rows in `schema_migrations` and dev has **150**. This line said `130-*` and "as of
+2026-08-20" for four weeks after that stopped being true — **count it, do not read it here**:
+
+```bash
+ls scripts/*.sql | sed 's#scripts/##' | sort -t- -k1 -n | tail -1   # highest file
+```
+
+⚠ **A fresh database does NOT run migrations 1–87.** `migrate.mjs` has
+`BOOTSTRAP_CUTOFF = "87-default-activity-codes.sql"`: when `schema_migrations` is *empty*,
+everything up to and including 87 is recorded as applied **without being executed**, because those
+predate the runner. Consequences worth knowing before reasoning about a new environment:
+
+- Migrations 19, 29, 36 and 84 deliberately `RAISE EXCEPTION` on an unreplaced placeholder
+  (`REPLACE_WITH_TENANT_ID`, `REPLACE_WITH_DIGEST_EMAIL`). They are all below the cutoff, so the
+  runner never executes them and never trips over them. Raised as a P1 on PR #22 on the reasoning
+  that a fresh DB would abort mid-run; it would not, because of the cutoff.
+- The one path that *would* trip is a **non-empty** ledger with one of those rows missing — a
+  partial restore, or somebody deleting a row by hand.
 
 "Fully migrated" is not quite true and never was: `74-tenant-commercial-access.sql` was never
 applied to prod (see the Razorpay Billing section). Verify against `schema_migrations` rather
@@ -269,6 +359,67 @@ bottom of that file. Don't try to force it through.
   always `DATABASE_URL`, unaffected). Roll back instantly by unsetting `APP_DATABASE_URL`
   wherever it's set — the app falls back to the owner connection (RLS-bypassing, isolation via
   query filters only, same as before this was activated).
+
+---
+
+## Dates, clocks and timezones
+
+**The estate's business locale is IST. Every server FarmFlow runs on is UTC.** Nearly every date
+bug in this project lives in that gap, and none of them throws.
+
+### An instant and a wall clock are different things
+
+- An **instant** is a moment (`TIMESTAMPTZ`, `toISOString()`). Use it for arithmetic — durations,
+  ordering, "is this newer than that". Timezone-independent by construction.
+- A **wall clock** is what a person read off a wall (`08:01`, `2026-09-17`). It belongs to a place.
+  A punch happened *at the estate*, so it is IST for everyone looking at it, in every country.
+
+**Never derive a wall clock in the browser.** `date-fns format()`, `toLocaleTimeString()` and
+`toLocaleDateString()` all use the *viewer's* timezone unless given an explicit one, so the same
+record reads differently depending on whose phone is open.
+
+### The rule
+
+Format wall clocks in SQL and send them as strings:
+
+```sql
+to_char(check_in_time AT TIME ZONE 'Asia/Kolkata', 'HH24:MI')  AS check_in_clock
+(NOW() AT TIME ZONE 'Asia/Kolkata')::date                      -- "today", the estate's
+```
+
+A formatted string cannot be re-offset by anybody. Send instants **as well** where arithmetic needs
+them, name the two differently (`checkInClock` vs `checkInTime`), and say in a comment which is for
+display.
+
+### Three ways this has actually broken, all silent
+
+1. **`String(dateObject)` renders the SERVER's zone** and appends a human zone name. `lib/server/db`
+   hands back JS `Date`s for timestamp columns, so `String(row.check_in_time)` produced a value
+   whose meaning depended on where the code ran.
+2. **`AT TIME ZONE` alone is not enough.** It yields a *naive* `timestamp`, which the driver then
+   parses in the **server's** zone and serialises as an instant — so an IST wall clock of `08:00:51`
+   left a UTC server as `08:00:51Z`. If the client then re-offsets it, the error compounds.
+3. **Client-side formatting of a correct instant.** The value is right, the render is local.
+
+Reported by HoneyFarm 2026-09-18 and worth keeping as the worked example: the muster showed
+`04:31 – 13:18` for workers who punched `08:01 – 16:48`. The screenshot came from a phone in Africa,
+3½ hours behind IST, and every row was exactly IST − 3:30. **The terminal and the ingest were
+correct** — `check_in_time` held the right instant the whole time. Three endpoints read that column
+and only `/api/attendance/report` was right, because it was the only one using `to_char`. The
+report tab was worse than the reported bug: it did `AT TIME ZONE` *and* `toLocaleTimeString`, so an
+08:00 punch read **13:30 in India**, and nobody had noticed.
+
+### Testing this
+
+A shape-only assertion (`/\d{1,2}:\d{2}/`) passes in every timezone, which is exactly why it cannot
+see any of the above. `tests/render/attendance-muster.test.tsx` carried one, with a comment reading
+*"Rendered in the runner's local zone, so assert the shape rather than the clock"* — a sentence that
+names the product bug and treats it as a test constraint. **Assert the clock**, and re-render under
+more than one `process.env.TZ`.
+
+Also: `String(date).slice(0,10)` is the date-side signature of the same class, and "5:30 AM on every
+row" is its display-side twin. CI sets no `TZ`, so a timezone-dependent test passes or fails on the
+runner's accident.
 
 ---
 

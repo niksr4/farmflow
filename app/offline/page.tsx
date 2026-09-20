@@ -7,13 +7,14 @@ export default function OfflinePage() {
     <main className="mx-auto flex min-h-screen w-full max-w-xl items-center px-6 py-10">
       <Card className="w-full border-emerald-100 bg-white/95 shadow-sm">
         <CardHeader>
-          <CardTitle>You&apos;re offline</CardTitle>
+          <CardTitle>No signal here</CardTitle>
           <CardDescription>
-            FarmFlow will keep showing cached views. New records are queued and sync when the connection returns.
+            What you have already opened will keep working. Anything you write now waits on the
+            phone and goes up by itself when a bar comes back.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>Reconnect to sync pending dispatch, processing, sales, and inventory updates.</p>
+          <p>Dispatch, pulping, sales and store entries are all held until then. None of it is lost.</p>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
               <Link href="/dashboard">Open dashboard</Link>

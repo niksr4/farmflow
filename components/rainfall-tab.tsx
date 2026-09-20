@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/use-toast"
 import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Pencil, Trash2, Upload } from "lucide-react"
 import { addYears, format, subYears } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
+import { useSearchParams } from "next/navigation"
 import { useLocale } from "@/components/locale-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { formatDateOnly } from "@/lib/date-utils"
@@ -103,7 +104,20 @@ const toIsoDate = (date: Date) => format(date, "yyyy-MM-dd")
 export default function RainfallTab({ username, showDataToolsControls = false }: RainfallTabProps) {
   const { user } = useAuth()
   const { t } = useLocale()
-  const canDelete = user?.role === "admin" || user?.role === "owner"
+  const searchParams = useSearchParams()
+  // Mirrors inventory-system.tsx's own preview-mode computation: an owner previewing another
+  // tenant's workspace should see the same read-only surface everywhere. user.role stays "owner"
+  // for the whole duration of a preview (it's the raw, real session role), so checking it directly
+  // reported the owner as able to delete even while previewing a tenant read-only. This tab
+  // intentionally restricts deletion to admin/owner only (narrower than sibling tabs), so the
+  // fix keeps that same admin/owner-only policy -- just preview-aware now.
+  const previewRoleParam = (searchParams.get("previewRole") || "").toLowerCase()
+  const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
+  const previewTenantId = (searchParams.get("previewTenantId") || "").trim()
+  const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
+  const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
+  const canDelete = effectiveRole === "admin" || effectiveRole === "owner"
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [showAnalysis, setShowAnalysis] = useState(false)
   const [records, setRecords] = useState<RainfallRecord[]>([])

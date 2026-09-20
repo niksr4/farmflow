@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
+import { useSearchParams } from "next/navigation"
 import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { canAcceptNonNegative, isBlockedNumericKey, numericInputValue } from "@/lib/number-input"
@@ -95,7 +96,19 @@ export default function OtherSalesTab({
 }: OtherSalesTabProps) {
   const { toast } = useToast()
   const { user } = useAuth()
-  const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
+  const searchParams = useSearchParams()
+  // An owner previewing another tenant's workspace should see the same read-only surface
+  // everywhere -- effectiveRole mirrors inventory-system.tsx's own preview-mode computation.
+  // Without this, user.role stays "owner" for the whole duration of a preview (that's the raw,
+  // real session role), so a plain `user?.role === "owner"` check -- which is all this used to be
+  // -- reports the owner as able to delete even while previewing a tenant as a read-only "user".
+  const previewRoleParam = (searchParams.get("previewRole") || "").toLowerCase()
+  const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
+  const previewTenantId = (searchParams.get("previewTenantId") || "").trim()
+  const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
+  const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
+  const canDelete = effectiveRole === "admin" || effectiveRole === "owner" || effectiveRole === "user"
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [records, setRecords] = useState<OtherSalesRecord[]>([])

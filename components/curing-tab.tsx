@@ -20,6 +20,7 @@ import { EmptyStateTable } from "@/components/ui/empty-state"
 import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
+import { useSearchParams } from "next/navigation"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { cn } from "@/lib/utils"
 import { formatLocationLabel } from "@/lib/location-label"
@@ -55,7 +56,18 @@ interface CuringRecord {
 export default function CuringTab() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const isAdmin = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
+  const searchParams = useSearchParams()
+  // Mirrors inventory-system.tsx's own preview-mode computation: an owner previewing another
+  // tenant's workspace should see the same read-only surface everywhere. user.role stays "owner"
+  // for the whole duration of a preview (it's the raw, real session role), so checking it directly
+  // reported the owner as able to delete/edit even while previewing a tenant as a read-only "user".
+  const previewRoleParam = (searchParams.get("previewRole") || "").toLowerCase()
+  const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
+  const previewTenantId = (searchParams.get("previewTenantId") || "").trim()
+  const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
+  const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
+  const isAdmin = effectiveRole === "admin" || effectiveRole === "owner" || effectiveRole === "user"
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState("")

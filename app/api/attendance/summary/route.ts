@@ -64,8 +64,16 @@ export async function GET(request: Request) {
           w.estate,
           w.daily_rate,
           r.attendance_date::text                                  AS attendance_date,
+          -- Kept for assessShift, which measures a DURATION and so does not care about zones.
           r.check_in_time  AT TIME ZONE 'Asia/Kolkata'             AS check_in,
           r.check_out_time AT TIME ZONE 'Asia/Kolkata'             AS check_out,
+          -- AND THESE ARE WHAT THE SCREEN SHOWS. AT TIME ZONE yields a NAIVE timestamp, which
+          -- the driver then parses in the SERVER's zone and serialises as an instant — so the IST
+          -- wall clock above became 08:00:51Z on Vercel (UTC), and the report tab's
+          -- toLocaleTimeString added the viewer's offset on top. An 08:00 punch read 13:30 in
+          -- India. A formatted string cannot be re-offset by anybody.
+          to_char(r.check_in_time  AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS check_in_clock,
+          to_char(r.check_out_time AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS check_out_clock,
           r.source,
           -- What the manager actually allocated that day, which is the number that gets paid.
           -- Shown beside the hours so a disagreement between the two is visible rather than
@@ -118,6 +126,9 @@ export async function GET(request: Request) {
       unallocatedDays: number
       days: Array<{
         date: string
+        /** IST "HH:MM", formatted in SQL. What the screen shows — see the query comment. */
+        checkInClock: string | null
+        checkOutClock: string | null
         checkIn: string | null
         checkOut: string | null
         hours: number | null
@@ -171,6 +182,8 @@ export async function GET(request: Request) {
 
       summary.days.push({
         date: String(row.attendance_date),
+        checkInClock: row.check_in_clock ? String(row.check_in_clock) : null,
+        checkOutClock: row.check_out_clock ? String(row.check_out_clock) : null,
         checkIn: row.check_in ? new Date(row.check_in).toISOString() : null,
         checkOut: row.check_out ? new Date(row.check_out).toISOString() : null,
         hours: shift.hours,

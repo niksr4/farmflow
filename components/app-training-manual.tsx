@@ -166,15 +166,15 @@ export default function AppTrainingManual({
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Settings, step by step</h2>
             <p className="text-sm text-muted-foreground">
-              Settings is organised into six groups. They are ordered the way most estates should actually use them —
+              Settings is organised into six groups. They are ordered the way most estates should actually use them:
               start with Profile and Estate, add People and Locations, and only open Privacy or Advanced when you have
               a specific reason to.
             </p>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-sm text-emerald-950">
             <span className="font-semibold">Recommended order:</span> Estate Identity → Locations → People and Roles
-            (get the basics running) — then Estate Footprint, Data Import, Language, and Account Security (useful
-            context) — then Thresholds, Dashboard Preferences, Allowed Modules, Per-User Exceptions, Tenant Experience,
+            (get the basics running), then Estate Footprint, Data Import, Language, and Account Security (useful
+            context), then Thresholds, Dashboard Preferences, Allowed Modules, Per-User Exceptions, Tenant Experience,
             and Audit Log (tune only when you have a clear reason to).
           </div>
           {settingsManualGroups.map((group) => (
