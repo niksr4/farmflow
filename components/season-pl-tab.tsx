@@ -284,7 +284,9 @@ export default function SeasonPlTab() {
             <Card ref={buyersRef} className="border-border/60 bg-white/80">
               <CardHeader>
                 <CardTitle>Revenue by Buyer</CardTitle>
-                <CardDescription>{data.revenue.byBuyer.length} buyer{data.revenue.byBuyer.length > 1 ? "s" : ""} · {fmt(data.revenue.totalSalesInr)} total</CardDescription>
+                {/* `!== 1`, not `> 1`: this line renders before the empty state below it, so a
+                    season with no sales reached it and read "0 buyer". */}
+                <CardDescription>{data.revenue.byBuyer.length} buyer{data.revenue.byBuyer.length !== 1 ? "s" : ""} · {fmt(data.revenue.totalSalesInr)} total</CardDescription>
               </CardHeader>
               <CardContent>
               {data.revenue.byBuyer.length === 0 ? (
