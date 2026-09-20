@@ -127,19 +127,29 @@ describe("razorpay billing helpers", () => {
   })
 })
 
-describe("razorpay billing helpers — known limitations", () => {
-  it("resolves the same plan id regardless of billing cycle (characterisation test)", () => {
-    // resolveRazorpayPlanId's `cycle` ternary is `billingCycle === "monthly" ? "MONTHLY" : "MONTHLY"`
-    // — both branches are identical, so a non-"monthly" cycle silently resolves the same env var
-    // as "monthly" instead of throwing or looking up a distinct *_YEARLY_ID key. Harmless today
-    // because RazorpayBillingCycle only has one member ("monthly"), but it's dead code that would
-    // misroute plan ids the moment a second cycle (e.g. "yearly") is added without also fixing this
-    // ternary.
+describe("razorpay billing helpers — billing cycle resolves a distinct env key", () => {
+  it("resolves a cycle-specific env key rather than always resolving to *_MONTHLY_ID", () => {
+    // Previously `cycle` was `billingCycle === "monthly" ? "MONTHLY" : "MONTHLY"` -- both branches
+    // identical, so any non-"monthly" cycle silently resolved the *_MONTHLY_ID env var instead of
+    // a distinct *_YEARLY_ID one. Harmless while RazorpayBillingCycle had only one member, but a
+    // landmine the moment a second cycle was added without also fixing this ternary. Fixed to
+    // derive the env-key suffix directly from billingCycle instead of a dead conditional.
     const env = {
       RAZORPAY_PLAN_CORE_MONTHLY_ID: "plan_core_monthly_123",
     }
     expect(resolveRazorpayPlanId("core", "monthly", env)).toBe("plan_core_monthly_123")
-    // Casting past the type system to simulate a hypothetical future cycle value.
-    expect(resolveRazorpayPlanId("core", "yearly" as unknown as "monthly", env)).toBe("plan_core_monthly_123")
+
+    // Casting past the type system to simulate a hypothetical future cycle value: it must now
+    // look for a distinct *_YEARLY_ID key (and fail loudly when that key isn't configured) rather
+    // than silently reusing the monthly plan id.
+    expect(() => resolveRazorpayPlanId("core", "yearly" as unknown as "monthly", env)).toThrow(
+      "Razorpay plan is not configured for core (yearly)",
+    )
+    expect(
+      resolveRazorpayPlanId("core", "yearly" as unknown as "monthly", {
+        ...env,
+        RAZORPAY_PLAN_CORE_YEARLY_ID: "plan_core_yearly_456",
+      }),
+    ).toBe("plan_core_yearly_456")
   })
 })

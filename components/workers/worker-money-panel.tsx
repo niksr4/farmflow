@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { formatCurrency } from "@/lib/format"
 import { todayIso } from "@/lib/date-utils"
 import { outstandingAdvance, type LedgerEntry, type PayRule } from "@/lib/pay-rules"
+import { validateWorkerLedgerDraft } from "@/lib/worker-ledger-validation"
 import PayRuleForm from "@/components/workers/pay-rule-form"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 
@@ -161,11 +162,15 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
   }, [rule, dailyRate])
 
   const submitUnguarded = async () => {
-    const amount = Number(form.amount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter an amount greater than zero")
+    const validation = validateWorkerLedgerDraft(
+      { entryType: form.entryType, amount: form.amount },
+      { requireWorker: false },
+    )
+    if (!validation.valid) {
+      toast.error(validation.reason || "Enter an amount greater than zero")
       return
     }
+    const amount = Number(form.amount)
     setSaving(true)
     try {
       const body: Record<string, unknown> = {
@@ -209,11 +214,15 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
   }
 
   const saveEditUnguarded = async (entry: EntryRow) => {
-    const amount = Number(editForm.amount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter an amount greater than zero")
+    const validation = validateWorkerLedgerDraft(
+      { entryType: entry.entryType, amount: editForm.amount },
+      { requireWorker: false },
+    )
+    if (!validation.valid) {
+      toast.error(validation.reason || "Enter an amount greater than zero")
       return
     }
+    const amount = Number(editForm.amount)
     setSaving(true)
     try {
       const body: Record<string, unknown> = {
@@ -436,8 +445,18 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
               editingId === e.id ? (
                 <div key={e.id} className="space-y-2 bg-muted/40 px-3 py-2">
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <Input type="date" value={editForm.entryDate} onChange={(ev) => setEditForm((p) => ({ ...p, entryDate: ev.target.value }))} />
-                    <Input inputMode="decimal" value={editForm.amount} onChange={(ev) => setEditForm((p) => ({ ...p, amount: ev.target.value }))} />
+                    <Input
+                      type="date"
+                      value={editForm.entryDate}
+                      onChange={(ev) => setEditForm((p) => ({ ...p, entryDate: ev.target.value }))}
+                      aria-label="Entry date"
+                    />
+                    <Input
+                      inputMode="decimal"
+                      value={editForm.amount}
+                      onChange={(ev) => setEditForm((p) => ({ ...p, amount: ev.target.value }))}
+                      aria-label="Amount"
+                    />
                     {e.entryType === "advance" ? (
                       <Input
                         inputMode="numeric"
@@ -450,6 +469,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
                   <Input
                     value={editForm.description}
                     placeholder="Note"
+                    aria-label="Note"
                     onChange={(ev) => setEditForm((p) => ({ ...p, description: ev.target.value }))}
                   />
                   <div className="flex gap-2">

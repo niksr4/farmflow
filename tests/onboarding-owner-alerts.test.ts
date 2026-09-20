@@ -55,6 +55,7 @@ describe("sendOwnerSignupRequestedAlert", () => {
     const errorEvent = logAppErrorEvent.mock.calls[0][0]
     expect(errorEvent.errorCode).toBe("signup_requested_email_failed")
     expect(errorEvent.severity).toBe("warning")
+    expect(errorEvent.endpoint).toBe("/api/auth/signup")
     expect(errorEvent.metadata).toMatchObject({ signupRequestId: "req-1" })
   })
 
@@ -95,7 +96,35 @@ describe("sendOwnerTenantCreatedAlert", () => {
     expect(logAppErrorEvent).toHaveBeenCalledTimes(1)
     const errorEvent = logAppErrorEvent.mock.calls[0][0]
     expect(errorEvent.errorCode).toBe("tenant_created_email_failed")
+    /**
+     * ⚠ THIS ASSERTION USED TO SAY "/api/auth/signup", with a comment claiming "the failure
+     * genuinely happened mid-signup". It did not, and the comment is what made the wrong value
+     * look considered.
+     *
+     * `origin: "self-serve-signup"` names the FLOW, not the route. POST /api/auth/signup only
+     * creates or refreshes a pending request; the tenant is provisioned when the emailed token is
+     * redeemed, in verifySignupToken, whose only caller is app/api/auth/verify-email/route.ts --
+     * minutes or hours later. Raised by Greptile on PR #22.
+     */
+    expect(errorEvent.endpoint).toBe("/api/auth/verify-email")
     expect(errorEvent.metadata).toMatchObject({ tenantId: "tenant-1", tenantName: "Tirtha Estate" })
+  })
+
+  it("attributes the failure to /api/admin/tenants, not the verify-email route, when the tenant was created from the owner console", async () => {
+    // Regression test: this previously hardcoded endpoint: "/api/auth/signup" for every call,
+    // regardless of origin, mislabeling every owner-console-created tenant's alert failure as a
+    // signup-flow failure in app_error_events.
+    sendAgentAlertEmail.mockResolvedValueOnce({ sent: false, reason: "provider down" })
+    await sendOwnerTenantCreatedAlert({
+      tenantId: "tenant-3",
+      tenantName: "Owner Console Estate",
+      origin: "owner-console",
+      createdBy: "the-owner",
+      source: "admin/tenants",
+    })
+
+    const errorEvent = logAppErrorEvent.mock.calls[0][0]
+    expect(errorEvent.endpoint).toBe("/api/admin/tenants")
   })
 
   it("renders '-' placeholders for optional fields that are absent", async () => {
