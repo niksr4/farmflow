@@ -28,6 +28,9 @@ import { workerTypeLabel, isPaidDaily } from "@/lib/worker-types"
 
 type DayRow = {
   date: string
+  /** Already IST, formatted server-side. Rendered as-is; re-offsetting it is the bug. */
+  checkInClock: string | null
+  checkOutClock: string | null
   checkIn: string | null
   checkOut: string | null
   hours: number | null
@@ -318,8 +321,8 @@ export default function AttendanceReportTab() {
                             {w.days.map((d) => (
                               <div key={d.date} className="grid grid-cols-[6rem_5rem_5rem_5rem_1fr] items-center gap-2 text-[11px] tabular-nums">
                                 <span className="font-semibold text-stone-600 dark:text-stone-300">{d.date}</span>
-                                <span className="text-stone-500">{d.checkIn ? new Date(d.checkIn).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}</span>
-                                <span className="text-stone-500">{d.checkOut ? new Date(d.checkOut).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}</span>
+                                <span className="text-stone-500">{d.checkInClock || "—"}</span>
+                                <span className="text-stone-500">{d.checkOutClock || "—"}</span>
                                 <span className="text-stone-600 dark:text-stone-300">{formatWorkedHours(d.hours)}</span>
                                 <span className={cn("font-semibold", STATUS_TONE[d.status])}>
                                   {shiftStatusLabel(d.status)}

@@ -2,18 +2,15 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Fraunces, Manrope } from "next/font/google"
-import { ArrowLeft, Mail, MessageSquare, Send, CheckCircle2 } from "lucide-react"
+import { CheckCircle2, Handshake, Mail, MessageCircle, MessageSquare, Send, Sprout, TrendingUp } from "lucide-react"
 import { DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
+import { PublicSiteShell } from "@/components/public-site-shell"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-const display = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"] })
-const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] })
 
 const INQUIRY_TYPES = [
   { value: "estate-trial", label: "Estate trial / demo" },
@@ -23,10 +20,10 @@ const INQUIRY_TYPES = [
 ]
 
 const CONTACT_REASONS = [
-  { icon: "🌱", title: "Estate trials", description: "Want to run FarmFlow on your estate or see a live demo before signing up." },
-  { icon: "🤝", title: "Partnerships", description: "Integrations, distribution, or co-building within the estate farming ecosystem." },
-  { icon: "📈", title: "Funding & mentorship", description: "Looking for early-stage investors, advisors, or incubation support for FarmFlow." },
-  { icon: "💬", title: "General", description: "Anything else — questions, feedback, or just saying hello." },
+  { icon: Sprout, title: "Running it on your estate", description: "You want a look at it working on real records before you hand over an email address." },
+  { icon: Handshake, title: "Working together", description: "Integrations, distribution, or building something alongside us for estate farming." },
+  { icon: TrendingUp, title: "Backing us", description: "Early stage investors, advisors and incubators. We will tell you the honest numbers." },
+  { icon: MessageCircle, title: "Anything else", description: "A question, a complaint, a correction, or telling us we got something wrong." },
 ]
 
 export default function ContactPage() {
@@ -59,29 +56,17 @@ export default function ContactPage() {
   const canSubmit = form.name.trim() && form.email.trim() && form.message.trim().length >= 10
 
   return (
-    <div className={`${body.className} min-h-[100svh] bg-[#07110f] text-stone-100`}>
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_26%),radial-gradient(circle_at_82%_12%,rgba(245,158,11,0.10),transparent_18%),linear-gradient(180deg,#07110f_0%,#091916_42%,#081310_100%)]" />
-      </div>
-
-      <main className="relative z-10 mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6 sm:py-14">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
-            <Link href="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Link>
-          </Button>
-          <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
-            <Link href="/signup">Create Your Estate</Link>
-          </Button>
-        </div>
-
-        <section className="rounded-3xl border border-white/10 bg-[#0a1714]/92 p-6 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.6)] sm:p-8">
-          <p className="text-xs uppercase tracking-[0.25em] text-emerald-200">FarmFlow</p>
-          <h1 className={`${display.className} mt-2 text-3xl font-semibold text-stone-50 sm:text-4xl`}>Get in touch</h1>
-          <p className="mt-3 max-w-2xl text-sm text-stone-300 sm:text-base">
-            Whether you want to run a trial on your estate, explore a partnership, or just ask a question — we read everything and reply personally.
+    <PublicSiteShell theme="dark">
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <section className="pt-4 text-center sm:pt-8">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-400/90">Get in touch</p>
+          <h1 className="mx-auto mt-4 max-w-2xl text-balance font-display text-[2.4rem] font-semibold leading-[1.08] tracking-[-0.025em] text-stone-50 sm:text-5xl">
+            A real person reads these
+          </h1>
+          <p className="mx-auto mt-5 max-w-xl text-[15px] leading-8 text-stone-400">
+            There is no support queue and no ticket number. Write about your estate, a problem you
+            have hit, or something on the site that is plainly wrong, and you get an answer back
+            from whoever can actually do something about it.
           </p>
         </section>
 
@@ -92,8 +77,8 @@ export default function ContactPage() {
                 <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-300/10 text-emerald-200">
                   <Mail className="h-5 w-5" />
                 </div>
-                <CardTitle className={`${display.className} text-xl text-stone-50`}>Direct email</CardTitle>
-                <CardDescription className="text-stone-300">Prefer email? Write to us directly.</CardDescription>
+                <CardTitle className="font-display text-xl text-stone-50">Straight to the inbox</CardTitle>
+                <CardDescription className="text-stone-300">Skip the form if you would rather just write.</CardDescription>
               </CardHeader>
               <CardContent>
                 <a
@@ -103,7 +88,7 @@ export default function ContactPage() {
                   <Mail className="h-4 w-4" />
                   {DEFAULT_SUPPORT_EMAIL}
                 </a>
-                <p className="mt-3 text-xs text-stone-400">We aim to reply within one business day.</p>
+                <p className="mt-3 text-xs text-stone-400">Usually answered the same day, and always within one working day.</p>
               </CardContent>
             </Card>
 
@@ -112,26 +97,31 @@ export default function ContactPage() {
                 <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.05] text-stone-200">
                   <MessageSquare className="h-5 w-5" />
                 </div>
-                <CardTitle className={`${display.className} text-xl text-stone-50`}>What we can help with</CardTitle>
+                <CardTitle className="font-display text-xl text-stone-50">What people usually write about</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {CONTACT_REASONS.map((reason) => (
-                  <div key={reason.title} className="flex items-start gap-3">
-                    <span className="text-base leading-5">{reason.icon}</span>
-                    <div>
-                      <p className="text-sm font-medium text-stone-100">{reason.title}</p>
-                      <p className="text-xs text-stone-400">{reason.description}</p>
+              <CardContent className="space-y-3.5">
+                {CONTACT_REASONS.map((reason) => {
+                  const Icon = reason.icon
+                  return (
+                    <div key={reason.title} className="flex items-start gap-3">
+                      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.04]">
+                        <Icon className="h-3.5 w-3.5 text-emerald-300" />
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium text-stone-100">{reason.title}</p>
+                        <p className="text-xs leading-5 text-stone-400">{reason.description}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </CardContent>
             </Card>
           </div>
 
           <Card className="border border-white/10 bg-[#0a1714]/92">
             <CardHeader>
-              <CardTitle className={`${display.className} text-xl text-stone-50`}>Send a message</CardTitle>
-              <CardDescription className="text-stone-300">Fill in the form and we&apos;ll get back to you.</CardDescription>
+              <CardTitle className="font-display text-xl text-stone-50">Send a message</CardTitle>
+              <CardDescription className="text-stone-300">Four fields, and then it is with us.</CardDescription>
             </CardHeader>
             <CardContent>
               {submitted ? (
@@ -140,8 +130,8 @@ export default function ContactPage() {
                     <CheckCircle2 className="h-7 w-7" />
                   </div>
                   <div>
-                    <p className={`${display.className} text-lg text-stone-50`}>Message received</p>
-                    <p className="mt-1 text-sm text-stone-400">We&apos;ll reply to {form.email} within one business day.</p>
+                    <p className="font-display text-lg text-stone-50">That has reached us</p>
+                    <p className="mt-1 text-sm text-stone-400">You will hear back at {form.email}, usually the same day.</p>
                   </div>
                   <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08]" asChild>
                     <Link href="/">Back to home</Link>
@@ -195,7 +185,7 @@ export default function ContactPage() {
                       id="contact-message"
                       value={form.message}
                       onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
-                      placeholder="Tell us about your estate, what you're looking for, or anything else on your mind."
+                      placeholder="Where the estate is, roughly how many acres, and what you are trying to sort out."
                       rows={5}
                       className="border-white/10 bg-white/[0.04] text-stone-100 placeholder:text-stone-500 focus-visible:border-emerald-300/40 focus-visible:ring-emerald-300/20 resize-none"
                     />
@@ -218,7 +208,7 @@ export default function ContactPage() {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </PublicSiteShell>
   )
 }

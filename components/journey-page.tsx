@@ -10,63 +10,68 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 
+/** House rule: no em dashes in anything a visitor reads. */
 const JOURNEY_STEPS = [
   {
-    title: "Harvest intake",
-    description: "Capture cherry intake and sorting splits (ripe, green, float).",
+    title: "Cherry comes in off the field",
+    description:
+      "Weighed at the store and booked against the block it was picked from, with the ripe, green and float split recorded as it is sorted.",
     image: "/images/estate-journey-harvest.jpg",
-    alt: "Coffee harvest scene at an estate",
+    alt: "A picker's hands full of ripe red coffee cherry above a collecting basin",
   },
   {
-    title: "Washed or natural processing",
-    description: "Track wet parchment or dry cherry output with moisture observations.",
+    title: "Through the pulper and onto the yard",
+    description:
+      "Wet parchment or dry cherry weighed out the far side, moisture noted as it dries. Arabica and Robusta never get pooled.",
     image: "/images/estate-journey-processing.jpg",
-    alt: "Coffee processing scene with beans and equipment",
+    alt: "Ripe cherry moving down the washing channel beside the pulper",
   },
   {
-    title: "Curing + quality",
-    description: "Record drying time, grade outcomes, defects, and quality evidence.",
+    title: "Curing and the grade that comes back",
+    description:
+      "Drying time, the grade the curer returned, and any defects called out. This is the evidence a buyer asks for when the price is being argued.",
     image: "/images/estate-journey-curing.jpg",
-    alt: "Coffee beans drying during curing",
+    alt: "Parchment coffee spread out on hessian sacking to dry",
   },
   {
-    title: "Dispatch + sales",
-    description: "Dispatch confidently, reconcile receipts, and close the revenue loop.",
+    title: "Out of the gate and onto the invoice",
+    description:
+      "Bags counted at dispatch, the weighbridge slip reconciled when it returns, and the sale closed against what was actually received.",
     image: "/images/estate-journey-dispatch.jpg",
-    alt: "Coffee delivery transport ready for dispatch",
+    alt: "A loaded lorry carrying estate produce through Karnataka traffic",
   },
 ]
 
 const MODULE_PATHWAYS = [
   {
-    title: "Estate Owner Command",
-    description: "Best for estates running end-to-end operations with complete lot and cash visibility.",
+    title: "You run the whole thing yourself",
+    description: "Picking through to the bank payment, with the cash side visible the entire way.",
     modules: ["Inventory", "Processing", "Dispatch", "Sales", "Season View", "Costs", "Activity Log"],
   },
   {
-    title: "Estate + Curing Works",
-    description: "Ideal for owners running drying and quality checkpoints with stronger buyer evidence.",
+    title: "You do your own drying and grading",
+    description: "For estates holding quality checkpoints in house, where the buyer wants proof.",
     modules: ["Processing", "Curing", "Quality", "Rainfall", "Weather", "Dispatch", "Sales"],
   },
   {
-    title: "Inventory + Accounts Essentials",
-    description: "Best for estates starting with stock control and finance discipline.",
+    title: "You are starting with the store and the books",
+    description: "Stock control and the day book first. The harvest workflow can wait for next season.",
     modules: ["Inventory", "Costs", "Transaction History"],
   },
 ]
 
 const BUYER_TRUST_PACK = [
   {
-    title: "Lot ID + processing timeline",
-    detail: "From intake through processing, curing, and dispatch.",
+    title: "The lot, and everywhere it went",
+    detail: "Intake, pulping, curing and dispatch, in order, with dates.",
   },
   {
-    title: "Moisture, grade, and defect notes",
-    detail: "Quality evidence linked directly to each lot.",
+    title: "Moisture, grade and defects",
+    detail: "The quality record tied to the lot it belongs to, not to a folder.",
   },
   {
-    title: "Dispatch + sales reconciliation",
-    detail: "Every bag has a clear operational and financial trail.",
+    title: "What you sent against what they paid for",
+    detail: "Every bag with an operational trail and a financial one that agree.",
   },
 ]
 
@@ -125,19 +130,21 @@ export default function JourneyPage() {
         <main className="px-4 pb-16 sm:px-6 sm:pb-20">
           <section className="mx-auto mt-8 w-full max-w-6xl rounded-3xl border border-white/10 bg-gradient-to-br from-[#11433b] via-[#0d2a24] to-[#081613] p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.72)] sm:mt-16 sm:p-12">
             <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">From cherry to buyer</Badge>
-            <h1 className={`font-display mt-4 text-3xl font-bold leading-tight text-white md:text-5xl`}>
-              The coffee workflow, mapped end to end
+            <h1 className="font-display mt-4 text-3xl font-bold leading-tight text-white md:text-5xl">
+              Four stages, and what gets written down at each
             </h1>
             <p className="mt-4 max-w-3xl text-stone-200">
-              Use this journey to align teams, train operators, and show buyers how your estate runs with discipline.
+              Useful for showing a new manager how the estate is meant to run, and for showing a
+              buyer that it does.
             </p>
           </section>
 
           <section className="mx-auto mt-16 w-full max-w-6xl space-y-6">
             <div className="text-center space-y-3">
-              <h2 className={`font-display text-3xl font-semibold text-stone-50`}>Estate journey, from cherry to buyer</h2>
+              <h2 className="font-display text-3xl font-semibold text-stone-50">The season, in the order it happens</h2>
               <p className="mx-auto max-w-2xl text-stone-300">
-                Document each stage so quality and accountability stay visible to managers, farmers, and buyers.
+                Each stage leaves a record behind it, so by the time a question comes up the answer
+                is already written down somewhere.
               </p>
             </div>
 
@@ -203,8 +210,8 @@ export default function JourneyPage() {
           <section className="mx-auto mt-16 w-full max-w-6xl grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <Card className="border border-emerald-300/15 bg-emerald-300/10">
               <CardHeader>
-                <CardTitle className={`font-display text-xl text-stone-50`}>Buyer trust pack</CardTitle>
-                <CardDescription className="text-stone-300">Export-ready evidence for audits, buyers, and internal reviews.</CardDescription>
+                <CardTitle className="font-display text-xl text-stone-50">What you can hand a buyer</CardTitle>
+                <CardDescription className="text-stone-300">Exportable on the spot, for a buyer, an auditor, or your own review.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-stone-200">
                 {BUYER_TRUST_PACK.map((item) => (
@@ -221,8 +228,8 @@ export default function JourneyPage() {
 
             <Card className="border border-white/10 bg-[#0a1714]/90 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`font-display text-xl text-stone-50`}>Who should run which modules?</CardTitle>
-                <CardDescription className="text-stone-300">Select the stack that matches your estate operating model.</CardDescription>
+                <CardTitle className="font-display text-xl text-stone-50">Which of these is your estate?</CardTitle>
+                <CardDescription className="text-stone-300">Take the set that matches how you already work.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {MODULE_PATHWAYS.map((pathway) => (
@@ -245,9 +252,10 @@ export default function JourneyPage() {
           <section className="mx-auto mt-16 w-full max-w-6xl">
             <Card className="border border-white/10 bg-[#0a1714]/92 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`font-display text-2xl text-stone-50`}>Choose your starting path</CardTitle>
+                <CardTitle className="font-display text-2xl text-stone-50">Pick a place to start</CardTitle>
                 <CardDescription className="text-stone-300">
-                  Start with essentials and expand into curing, quality, and full sales traceability as your team grows.
+                  Begin with the parts you need this season. Curing, quality and the full sales
+                  trail are a setting away whenever you want them.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-3">

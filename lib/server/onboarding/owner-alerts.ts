@@ -51,6 +51,7 @@ const buildTenantCreatedAlertText = (input: TenantCreatedOwnerAlertInput) =>
 const logOwnerAlertFailure = async (input: {
   errorCode: string
   message: string
+  endpoint: string
   metadata?: Record<string, unknown>
 }) => {
   logServerWarning("Owner alert email failed", {
@@ -61,7 +62,7 @@ const logOwnerAlertFailure = async (input: {
 
   await logAppErrorEvent({
     source: "owner-alert-email",
-    endpoint: "/api/auth/signup",
+    endpoint: input.endpoint,
     errorCode: input.errorCode,
     severity: "warning",
     message: input.message,
@@ -79,6 +80,7 @@ export async function sendOwnerSignupRequestedAlert(input: SignupRequestedOwnerA
     await logOwnerAlertFailure({
       errorCode: "signup_requested_email_failed",
       message: emailResult.reason || "Owner signup request alert failed",
+      endpoint: "/api/auth/signup",
       metadata: {
         signupRequestId: input.signupRequestId,
         email: input.email,
@@ -95,9 +97,27 @@ export async function sendOwnerTenantCreatedAlert(input: TenantCreatedOwnerAlert
   })
 
   if (!emailResult.sent) {
+    /**
+     * The endpoint this alert failed from depends on how the tenant was created. Hardcoding
+     * "/api/auth/signup" made every owner-console-created tenant's failure look like a
+     * signup-flow failure.
+     *
+     * ⚠ AND THE SELF-SERVE BRANCH WAS STILL WRONG after that fix. A tenant is not provisioned at
+     * signup: POST /api/auth/signup only creates or refreshes a pending request. Provisioning --
+     * and therefore this alert -- happens when the emailed token is redeemed, in
+     * verifySignupToken, which app/api/auth/verify-email/route.ts is the only caller of. So the
+     * normal path's failures were filed against a route that had already returned successfully
+     * minutes or hours earlier.
+     *
+     * That matters beyond tidiness: `endpoint` feeds monitoring and error fingerprints, so
+     * searching /api/auth/verify-email for provisioning failures returned nothing while
+     * /api/auth/signup accumulated failures that never happened there. Raised by Greptile on
+     * PR #22.
+     */
     await logOwnerAlertFailure({
       errorCode: "tenant_created_email_failed",
       message: emailResult.reason || "Owner tenant created alert failed",
+      endpoint: input.origin === "owner-console" ? "/api/admin/tenants" : "/api/auth/verify-email",
       metadata: {
         tenantId: input.tenantId,
         tenantName: input.tenantName,

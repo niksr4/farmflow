@@ -345,7 +345,7 @@ describe("what the screen says when the numbers cannot be trusted", () => {
   it("names how many workers have no daily rate", async () => {
     mockPayroll({ usesRules: false, workers: [{ ...MANOJ, missingDailyRate: true, dailyRate: null }] })
     await generate()
-    expect(screen.getByText(/1 worker have no daily rate set/)).toBeInTheDocument()
+    expect(screen.getByText(/1 worker has no daily rate set/)).toBeInTheDocument()
   })
 
   it("names monthly staff with no salary, which used to pay ₹0 in silence", async () => {
