@@ -1,6 +1,6 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useCallback, useSyncExternalStore } from "react"
 
 const getServerSnapshot = () => false
 
@@ -23,9 +23,14 @@ const subscribe = (query: string, callback: () => void) => {
 }
 
 export function useMediaQuery(query: string): boolean {
+  // subscribe/getSnapshot must stay referentially stable across renders for the same query --
+  // otherwise useSyncExternalStore tears down and resubscribes the matchMedia listener on every
+  // render of every component calling this hook (worker-profiles-tab, inventory-system, and
+  // eight other call sites), which is wasted work on every re-render rather than just on
+  // mount/query-change.
   return useSyncExternalStore(
-    (callback) => subscribe(query, callback),
-    () => getSnapshot(query),
+    useCallback((callback) => subscribe(query, callback), [query]),
+    useCallback(() => getSnapshot(query), [query]),
     getServerSnapshot,
   )
 }
