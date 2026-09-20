@@ -82,7 +82,12 @@ export const resolveRazorpayPlanId = (
   env: RazorpayEnv = process.env,
 ) => {
   const normalizedPlanId = normalizeTenantPlanId(planId)
-  const cycle = billingCycle === "monthly" ? "MONTHLY" : "MONTHLY"
+  // RazorpayBillingCycle only has one member today ("monthly"), so this was always resolving to
+  // the same env-key suffix regardless of the ternary's condition -- dead code that would have
+  // silently kept resolving to "MONTHLY" even if a second cycle (e.g. "yearly") were ever added
+  // to the type without updating this function. Spelled out explicitly instead of leaving a
+  // conditional that can never take its other branch.
+  const cycle = billingCycle.toUpperCase()
   const envKey = `RAZORPAY_PLAN_${normalizedPlanId.toUpperCase()}_${cycle}_ID`
   const providerPlanId = normalizeEnvValue(env[envKey])
   if (!providerPlanId) {
