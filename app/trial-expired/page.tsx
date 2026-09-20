@@ -22,9 +22,9 @@ export default function TrialExpiredPage() {
           <Leaf className="h-7 w-7 text-white" />
         </div>
 
-        <h1 className="font-display text-2xl font-bold text-neutral-900">Your free trial has ended</h1>
+        <h1 className="font-display text-2xl font-bold text-neutral-900">Your thirty days are up</h1>
         <p className="mt-3 text-sm leading-relaxed text-neutral-500">
-          Thanks for giving FarmFlow a try. Your data is safe — reach out and we&#39;ll get you set up to continue.
+          Thanks for giving it a run. Nothing has been deleted. Write to us and we will get you going again.
         </p>
 
         <div className="mt-8 space-y-3">
@@ -45,7 +45,7 @@ export default function TrialExpiredPage() {
         </div>
 
         <p className="mt-6 text-[11px] text-neutral-400">
-          Your season records, accounts, and inventory are all preserved and ready when you subscribe.
+          Your season records, your accounts and your store are all exactly where you left them.
         </p>
       </div>
     </div>

@@ -436,15 +436,17 @@ aside a[href]:active {
      Supported: Chrome 115+, Edge 115+, Firefox 130+, Safari 18.
      Falls back to fully visible on unsupported browsers (opacity:1, translateY:0). */
   @supports (animation-timeline: view()) {
-    .reveal-scroll {
-      animation: reveal-up linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 28%;
-    }
-    .reveal-scroll-sm {
-      animation: reveal-up-sm linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 22%;
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal-scroll {
+        animation: reveal-up linear both;
+        animation-timeline: view();
+        animation-range: entry 0% cover 28%;
+      }
+      .reveal-scroll-sm {
+        animation: reveal-up-sm linear both;
+        animation-timeline: view();
+        animation-range: entry 0% cover 22%;
+      }
     }
   }
 
@@ -642,6 +644,48 @@ aside a[href]:active {
 }
 @media (prefers-reduced-motion: reduce) {
   .marquee-track { animation: none; }
+}
+
+/* ── Landing page reading progress ───────────────────────────────────────
+   Driven by a CSS scroll timeline, so it costs no scroll listener and no React
+   re-render. The bar ships at scale-x-0 and only ever grows where the timeline is
+   supported, which means unsupported browsers get no bar rather than a broken one. */
+@keyframes scroll-progress-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@supports (animation-timeline: scroll()) {
+  .scroll-progress {
+    animation: scroll-progress-grow linear;
+    animation-timeline: scroll(root block);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-progress { animation: none; }
+}
+
+/* ── Landing page FAQ — native <details> styling ─────────────────────────
+   A real disclosure element, so keyboard and screen reader behaviour comes free and
+   the answers are readable with JS switched off. Only the marker needs hiding. */
+.faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item > summary::marker {
+  content: "";
+}
+.faq-item[open] > summary .faq-chevron {
+  transform: rotate(180deg);
+}
+@keyframes faq-answer-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.faq-item[open] .faq-answer {
+  animation: faq-answer-in 0.26s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .faq-item[open] .faq-answer { animation: none; }
+  .faq-item[open] > summary .faq-chevron { transition: none; }
 }
 
 /* ── Hero orbs — slow drifting radial glows ─────────────────────────────── */

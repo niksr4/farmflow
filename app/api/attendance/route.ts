@@ -142,7 +142,13 @@ export async function GET(request: Request) {
         ORDER BY LOWER(full_name), created_at ASC
       `,
       accountsSql`
-        SELECT worker_id, check_in_time, check_out_time, source, overtime_hours
+        SELECT worker_id, check_in_time, check_out_time, source, overtime_hours,
+               -- A punch happened AT THE ESTATE, in IST. Formatted here rather than in the
+               -- browser because the browser formats in the VIEWER's zone, which made the muster
+               -- report a different clock time depending on whose phone was open -- see the
+               -- comment on presentRecords below. Same shape attendance/report already uses.
+               to_char(check_in_time  AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS check_in_ist,
+               to_char(check_out_time AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS check_out_ist
         FROM attendance_records
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
@@ -290,8 +296,30 @@ export async function GET(request: Request) {
       presentWorkerIds: presentRows.map((row: any) => String(row.worker_id)).filter(Boolean),
       presentRecords: presentRows.map((row: any) => ({
         workerId: String(row.worker_id),
-        checkInTime: row.check_in_time ? String(row.check_in_time) : null,
-        checkOutTime: row.check_out_time ? String(row.check_out_time) : null,
+        /**
+         * ⚠ THE CLOCK AND THE INSTANT ARE TWO DIFFERENT THINGS, and the muster needs both.
+         *
+         * `checkInClock` is what the screen shows: the punch as it read on the wall at the
+         * estate, IST, formatted in SQL. Reported by HoneyFarm 2026-09-18 — the muster was
+         * showing 04:31 for a worker who punched in at 08:01, because the only value sent was an
+         * instant and the browser formatted it in the VIEWER's timezone. A phone not set to IST
+         * therefore reported a different punch time than the estate's own terminal recorded, and
+         * nothing anywhere said so.
+         *
+         * attendance/report and attendance/summary already pinned Asia/Kolkata in SQL. The muster
+         * — the screen an estate actually opens every morning — was the one reader of three that
+         * did not.
+         *
+         * `checkInTime` stays, as a real ISO instant, because the hours-worked figure is derived
+         * from the DIFFERENCE between the two punches and a duration must not be computed from
+         * wall-clock strings. toISOString(), not String(): String(Date) renders the server's
+         * local zone and appends a human-readable zone name, which is a parse the client is not
+         * guaranteed to agree with.
+         */
+        checkInClock: row.check_in_ist ? String(row.check_in_ist) : null,
+        checkOutClock: row.check_out_ist ? String(row.check_out_ist) : null,
+        checkInTime: row.check_in_time ? new Date(row.check_in_time).toISOString() : null,
+        checkOutTime: row.check_out_time ? new Date(row.check_out_time).toISOString() : null,
         source: row.source === "biometric" ? "biometric" : "manual",
         // Null rather than 0 so the box renders empty, not "0" — the screen has to be able to
         // show "none recorded" without looking like somebody typed a zero.
