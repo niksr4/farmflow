@@ -3,6 +3,7 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 import { collapseRainfallByDate, totalRainfallBetween, rowInches } from "@/lib/rainfall"
+import { buildRainfallMatrixCsv } from "@/lib/server/exports/csv"
 
 /**
  * Rainfall is a depth, not a quantity — everywhere, not just on the rainfall tab.
@@ -112,9 +113,45 @@ describe("no consumer adds rainfall rows behind these two definitions", () => {
     }
   })
 
-  it("the ops export matrix averages instead of keeping the first row", () => {
-    const ops = readFileSync(resolve(__dirname, "../app/api/exports/ops/route.ts"), "utf8")
-    expect(ops).not.toContain("if (!yearValues.has(isoDate))")
-    expect(ops).toContain("const prior = yearValues.get(isoDate)")
+  /**
+   * UPGRADED 2026-09-17, when buildRainfallMatrixCsv moved to lib/server/exports/csv.ts and this
+   * scan stopped matching. It was asserting on two lines of implementation — the absence of
+   * `if (!yearValues.has(isoDate))` and the presence of `const prior = ...` — which is a proxy for
+   * the behaviour, not the behaviour. The builder is pure, so ask it directly.
+   */
+  it("the ops export matrix averages two gauges instead of keeping the first row", () => {
+    // Two readings for the same day: 2.00" and 4.00". First-one-wins printed one estate's gauge as
+    // the whole property's and dropped the other without trace — in a file somebody archives.
+    const csv = buildRainfallMatrixCsv(
+      [
+        { record_date: "2026-05-21", inches: 2, cents: 0 },
+        { record_date: "2026-05-21", inches: 4, cents: 0 },
+      ],
+      "2026-01-01",
+      "2026-12-31",
+    )
+    const day21 = csv.split("\n").find((line) => line.startsWith('"21"'))!
+    expect(day21, "the 21st should carry the mean of 2.00 and 4.00").toContain('"3.00"')
+    expect(day21).not.toContain('"2.00"')
+    expect(day21).not.toContain('"4.00"')
+  })
+
+  it("the monthly total uses the averaged figure, not the sum of both gauges", () => {
+    // The failure that matters downstream: summing them reports 6 inches of rain that did not fall.
+    const csv = buildRainfallMatrixCsv(
+      [
+        { record_date: "2026-05-21", inches: 2, cents: 0 },
+        { record_date: "2026-05-21", inches: 4, cents: 0 },
+      ],
+      "2026-01-01",
+      "2026-12-31",
+    )
+    const totals = csv.split("\n").find((line) => line.startsWith('"Monthly Total"'))!
+    expect(totals.split(",")[5], "May").toBe('"3.00"')
+  })
+
+  it("a single reading is left exactly as recorded", () => {
+    const csv = buildRainfallMatrixCsv([{ record_date: "2026-05-21", inches: 1, cents: 25 }], "2026-01-01", "2026-12-31")
+    expect(csv.split("\n").find((line) => line.startsWith('"21"'))!).toContain('"1.25"')
   })
 })
