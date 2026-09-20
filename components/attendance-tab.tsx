@@ -73,6 +73,16 @@ type LabourAssignment = {
 type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: number }
 type AttendanceRecordDetail = {
   workerId: string
+  /**
+   * The punch as it read at the estate: IST, "HH:MM", formatted server-side.
+   *
+   * Use these to DISPLAY. `checkInTime` below is the same moment as an instant, and formatting it
+   * here renders it in the viewer's timezone — which is how the muster came to show 04:31 for an
+   * 08:01 punch on a phone that was not set to IST.
+   */
+  checkInClock: string | null
+  checkOutClock: string | null
+  /** The instants. For arithmetic only — hours worked is a difference, so it needs these. */
   checkInTime: string | null
   checkOutTime: string | null
   source: "manual" | "biometric"
@@ -101,11 +111,15 @@ const MUSTER_GRID =
   // left the work and block so far from the name they stopped reading as the same row.
   "sm:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_5rem_7rem_4.5rem]"
 
-const formatPunchTime = (iso: string | null) => {
-  if (!iso) return "--:--"
-  const parsed = new Date(iso)
-  return Number.isNaN(parsed.getTime()) ? "--:--" : format(parsed, "HH:mm")
-}
+/**
+ * A punch time is already IST when it arrives — the API formats it in SQL. This only supplies the
+ * placeholder.
+ *
+ * It used to take the instant and run it through date-fns `format`, which uses the BROWSER's
+ * timezone. HoneyFarm's muster showed 04:31 for a worker who punched in at 08:01. Whose phone was
+ * open should never change what an attendance record says happened.
+ */
+const formatPunchTime = (clock: string | null) => clock || "--:--"
 
 const formatDurationHours = (checkInIso: string | null, checkOutIso: string | null) => {
   if (!checkInIso || !checkOutIso) return ""
@@ -651,13 +665,18 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
       return [
         worker.deviceUserCode || "",
         worker.name,
-        isPresentRow ? formatPunchTime(record?.checkInTime ?? null) : "00:00",
-        isPresentRow ? formatPunchTime(record?.checkOutTime ?? null) : "00:00",
+        isPresentRow ? formatPunchTime(record?.checkInClock ?? null) : "00:00",
+        isPresentRow ? formatPunchTime(record?.checkOutClock ?? null) : "00:00",
         isPresentRow ? formatDurationHours(record?.checkInTime ?? null, record?.checkOutTime ?? null) : "00:00",
         isPresentRow ? "P" : "A",
       ]
     })
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    // Quote everything: worker names contain commas often enough, and a report that opens
+    // misaligned in Excel is a report nobody trusts again (same rule as the weekly export below
+    // and attendance-report-tab.tsx's exportCsv).
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
@@ -679,7 +698,11 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     if (weeklyReportHasRates) {
       rows.push(["Total", "", "", String(weeklyReportTotal)])
     }
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    // Same quoting rule as exportDailyReportToCSV above -- worker names contain commas often
+    // enough that an unquoted export silently misaligns in Excel.
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
@@ -1117,7 +1140,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                             {isBiometric ? (
                               <>
                                 <Fingerprint className="h-3 w-3 shrink-0" />
-                                {formatPunchTime(record?.checkInTime ?? null)} – {formatPunchTime(record?.checkOutTime ?? null)}
+                                {formatPunchTime(record?.checkInClock ?? null)} – {formatPunchTime(record?.checkOutClock ?? null)}
                               </>
                             ) : worker.dailyRate !== null ? (
                               `₹${worker.dailyRate}/day`

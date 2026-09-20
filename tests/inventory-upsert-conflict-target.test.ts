@@ -236,7 +236,10 @@ describe("no source file is binary to the tools that read it", () => {
 
 describe("the two occurrences specifically", () => {
   it("the expense recalculation picks the arm by location, each with its own predicate", () => {
-    const route = readFileSync(resolve(API, "expenses-neon/route.ts"), "utf8")
+    // Moved out of the route into lib/server/expenses/statements.ts on 2026-09-17. The sweep in
+    // the describe above already walks `lib`, so coverage never lapsed — this named check just
+    // has to follow the code.
+    const route = readFileSync(resolve(ROOT, "lib/server/expenses/statements.ts"), "utf8")
     expect(route).toContain("(item_type, tenant_id, location_id) WHERE location_id IS NOT NULL")
     expect(route).toContain("(item_type, tenant_id) WHERE location_id IS NULL")
   })

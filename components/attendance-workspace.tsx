@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Check, Users, IndianRupee, CalendarRange, Fingerprint } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Check, Users, BookOpen, IndianRupee, CalendarRange, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
 import AttendanceTab from "./attendance-tab"
 import WorkerProfilesTab from "./worker-profiles-tab"
@@ -82,6 +82,16 @@ const SECTION_COLORS: Record<AttendanceSection, string> = {
 
 export default function AttendanceWorkspace({ showLaborManagement = false, selectedEstate = null }: AttendanceWorkspaceProps) {
   const [activeSection, setActiveSection] = useState<AttendanceSection>("attendance")
+
+  // Mirrors accounts-page.tsx's normalizeAccountsTab effect: if the tenant's "labor" module
+  // gets disabled (e.g. an owner override) while a labour-management sub-tab is open, fall back
+  // to Muster rather than leaving activeSection pointed at a section whose nav button no longer
+  // renders -- without this, the workspace would show a blank panel with no way back.
+  useEffect(() => {
+    if (!showLaborManagement && activeSection !== "attendance") {
+      setActiveSection("attendance")
+    }
+  }, [showLaborManagement, activeSection])
 
   const navItems: Array<{ value: AttendanceSection; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { value: "attendance", label: "Muster", icon: Check },

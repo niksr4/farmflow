@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
+import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import TaskGuideCard from "@/components/task-guide-card"
@@ -56,6 +57,7 @@ const UNASSIGNED_LABEL = "Unassigned (legacy)"
 export function PepperTab() {
   const { user } = useAuth()
   const { settings: tenantSettings } = useTenantSettings()
+  const searchParams = useSearchParams()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(LOCATION_ALL)
@@ -83,7 +85,17 @@ export function PepperTab() {
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null)
   const [isDeletingRecordId, setIsDeletingRecordId] = useState<number | null>(null)
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
-  const canDeleteRecord = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
+  // Mirrors inventory-system.tsx's own preview-mode computation: an owner previewing another
+  // tenant's workspace should see the same read-only surface everywhere. user.role stays "owner"
+  // for the whole duration of a preview (it's the raw, real session role), so checking it directly
+  // reported the owner as able to delete even while previewing a tenant as a read-only "user".
+  const previewRoleParam = (searchParams.get("previewRole") || "").toLowerCase()
+  const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
+  const previewTenantId = (searchParams.get("previewTenantId") || "").trim()
+  const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
+  const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
+  const canDeleteRecord = effectiveRole === "admin" || effectiveRole === "owner" || effectiveRole === "user"
   const hasUnassignedRecords = useMemo(
     () => recentRecords.some((r) => !r.location_id),
     [recentRecords],

@@ -62,7 +62,7 @@ export default function TermsPage() {
         <h2 className="text-lg font-semibold text-foreground">5. Cancellation and Refunds</h2>
         <p className="text-sm text-muted-foreground">
           You may cancel your subscription at any time from your account settings or by contacting us. Cancellation
-          takes effect at the end of the current billing period — you retain access until that date. We do not offer
+          takes effect at the end of the current billing period, and you retain access until that date. We do not offer
           pro-rata refunds for unused time within a billing period. If you believe a charge was made in error, contact
           us within 14 days and we will review it.
         </p>

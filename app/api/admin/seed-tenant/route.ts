@@ -8,38 +8,25 @@ import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
+import {
+  accountActivities,
+  demoDispatchRows,
+  demoExpenseTransactions,
+  demoLaborTransactions,
+  demoPepperRows,
+  demoProcessingRows,
+  demoRainfallRows,
+  demoSalesRows,
+  demoTransactions,
+  seedLocations,
+  seededBy,
+  seededInventoryUnits,
+  type SeedContext,
+} from "./fixtures"
 
 const isMissingRelation = (error: unknown) => {
   const message = String((error as Error)?.message || error)
   return /relation\s+"[^"]+"\s+does not exist/i.test(message)
-}
-
-const accountActivities = [
-  { code: "ADMIN", activity: "Administrative Expenses" },
-  { code: "LABOR", activity: "Labour Costs" },
-  { code: "SUPPLIES", activity: "Office Supplies" },
-  { code: "UTILITIES", activity: "Utilities" },
-  { code: "MAINT", activity: "Equipment Maintenance" },
-  { code: "TRANSPORT", activity: "Transportation" },
-  { code: "MARKETING", activity: "Marketing and Advertising" },
-  { code: "INSURANCE", activity: "Insurance" },
-  { code: "RENT", activity: "Rent and Facilities" },
-  { code: "MISC", activity: "Miscellaneous Expenses" },
-]
-
-const seedLocations = [
-  { name: "HF", code: "HF" },
-  { name: "MV", code: "MV" },
-  { name: "PG", code: "PG" },
-]
-
-const seededBy = "seed"
-
-const seededInventoryUnits: Record<string, string> = {
-  "Urea Fertilizer": "kg",
-  "NPK 19-19-19": "kg",
-  "Diesel (L)": "L",
-  "Fungicide (L)": "L",
 }
 
 const daysAgo = (days: number) => {
@@ -185,6 +172,7 @@ export async function POST(request: Request) {
     const hfLocationId = hfId || defaultLocationId
     const mvLocationId = mvId || defaultLocationId
     const pgLocationId = pgId || defaultLocationId
+    const seedContext: SeedContext = { hfLocationId, mvLocationId, pgLocationId, defaultLocationId, seededBy }
 
     for (const activity of accountActivities) {
       await runTenantQuery(
@@ -198,107 +186,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const transactions = [
-      {
-        days: 24,
-        locationId: hfLocationId,
-        item_type: "Urea Fertilizer",
-        quantity: 1800,
-        transaction_type: "restock",
-        notes: "Pre-season fertilizer stock",
-        user_id: seededBy,
-        price: 39,
-        total_cost: 70200,
-      },
-      {
-        days: 23,
-        locationId: mvLocationId,
-        item_type: "NPK 19-19-19",
-        quantity: 1200,
-        transaction_type: "restock",
-        notes: "Nutrient blend for Robusta blocks",
-        user_id: seededBy,
-        price: 63,
-        total_cost: 75600,
-      },
-      {
-        days: 22,
-        locationId: pgLocationId,
-        item_type: "Diesel (L)",
-        quantity: 900,
-        transaction_type: "restock",
-        notes: "Fuel for pulpers and transport",
-        user_id: seededBy,
-        price: 94,
-        total_cost: 84600,
-      },
-      {
-        days: 21,
-        locationId: hfLocationId,
-        item_type: "Fungicide (L)",
-        quantity: 160,
-        transaction_type: "restock",
-        notes: "Rust prevention inventory",
-        user_id: seededBy,
-        price: 520,
-        total_cost: 83200,
-      },
-      {
-        days: 15,
-        locationId: hfLocationId,
-        item_type: "Urea Fertilizer",
-        quantity: 280,
-        transaction_type: "deplete",
-        notes: "Block A nutrient application",
-        user_id: seededBy,
-        price: 0,
-        total_cost: 0,
-      },
-      {
-        days: 12,
-        locationId: mvLocationId,
-        item_type: "NPK 19-19-19",
-        quantity: 210,
-        transaction_type: "deplete",
-        notes: "Robusta foliar feed cycle",
-        user_id: seededBy,
-        price: 0,
-        total_cost: 0,
-      },
-      {
-        days: 10,
-        locationId: pgLocationId,
-        item_type: "Diesel (L)",
-        quantity: 220,
-        transaction_type: "deplete",
-        notes: "Cherry transport + generator usage",
-        user_id: seededBy,
-        price: 0,
-        total_cost: 0,
-      },
-      {
-        days: 8,
-        locationId: hfLocationId,
-        item_type: "Fungicide (L)",
-        quantity: 22,
-        transaction_type: "deplete",
-        notes: "Canopy spray completed",
-        user_id: seededBy,
-        price: 0,
-        total_cost: 0,
-      },
-      {
-        days: 4,
-        locationId: mvLocationId,
-        item_type: "Diesel (L)",
-        quantity: 120,
-        transaction_type: "deplete",
-        notes: "Drying line fuel consumption",
-        user_id: seededBy,
-        price: 0,
-        total_cost: 0,
-      },
-    ]
+    const transactions = demoTransactions(seedContext)
 
     await repairCurrentInventoryUpsertConstraints(tenantContext)
 
@@ -378,52 +266,7 @@ export async function POST(request: Request) {
       await recalculateInventoryForItem(sql, tenantContext, itemType, locationScope)
     }
 
-    const laborTransactions = [
-      {
-        days: 20,
-        code: "LABOR",
-        locationId: hfLocationId,
-        hf_laborers: 14,
-        hf_cost_per_laborer: 460,
-        outside_laborers: 4,
-        outside_cost_per_laborer: 520,
-        total_cost: 8520,
-        notes: "Arabica selective picking team",
-      },
-      {
-        days: 14,
-        code: "LABOR",
-        locationId: mvLocationId,
-        hf_laborers: 11,
-        hf_cost_per_laborer: 430,
-        outside_laborers: 3,
-        outside_cost_per_laborer: 500,
-        total_cost: 6230,
-        notes: "Robusta harvest support",
-      },
-      {
-        days: 9,
-        code: "LABOR",
-        locationId: pgLocationId,
-        hf_laborers: 9,
-        hf_cost_per_laborer: 420,
-        outside_laborers: 2,
-        outside_cost_per_laborer: 490,
-        total_cost: 4760,
-        notes: "Sorting + drying crew",
-      },
-      {
-        days: 5,
-        code: "ADMIN",
-        locationId: defaultLocationId,
-        hf_laborers: 4,
-        hf_cost_per_laborer: 320,
-        outside_laborers: 0,
-        outside_cost_per_laborer: 0,
-        total_cost: 1280,
-        notes: "Ledger reconciliation and QA paperwork",
-      },
-    ]
+    const laborTransactions = demoLaborTransactions(seedContext)
 
     for (const row of laborTransactions) {
       await runTenantQuery(
@@ -458,13 +301,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const expenseTransactions = [
-      { days: 18, code: "SUPPLIES", locationId: hfLocationId, total_amount: 2450, notes: "Drying mesh repairs" },
-      { days: 13, code: "TRANSPORT", locationId: mvLocationId, total_amount: 3150, notes: "Cherry transport to mill" },
-      { days: 10, code: "MAINT", locationId: pgLocationId, total_amount: 1850, notes: "Pulping line service" },
-      { days: 7, code: "UTILITIES", locationId: defaultLocationId, total_amount: 2100, notes: "Electricity + water" },
-      { days: 3, code: "MARKETING", locationId: defaultLocationId, total_amount: 1400, notes: "Buyer sample shipping" },
-    ]
+    const expenseTransactions = demoExpenseTransactions(seedContext)
 
     for (const row of expenseTransactions) {
       await runTenantQuery(
@@ -491,148 +328,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const processingRows = [
-      {
-        days: 20,
-        locationId: hfLocationId,
-        lot_id: "HF-A-2401",
-        coffee_type: "Arabica",
-        crop_today: 1680,
-        crop_todate: 6120,
-        ripe_today: 1390,
-        ripe_todate: 5050,
-        green_today: 205,
-        green_todate: 740,
-        float_today: 85,
-        float_todate: 330,
-        wet_parchment: 990,
-        dry_parch: 640,
-        dry_cherry: 120,
-        dry_p_bags: 13,
-        dry_cherry_bags: 2,
-        notes: "Strong arabica recovery in HF block",
-      },
-      {
-        days: 13,
-        locationId: hfLocationId,
-        lot_id: "HF-A-2402",
-        coffee_type: "Arabica",
-        crop_today: 1590,
-        crop_todate: 7710,
-        ripe_today: 1310,
-        ripe_todate: 6360,
-        green_today: 195,
-        green_todate: 935,
-        float_today: 80,
-        float_todate: 410,
-        wet_parchment: 930,
-        dry_parch: 610,
-        dry_cherry: 115,
-        dry_p_bags: 12,
-        dry_cherry_bags: 2,
-        notes: "Clean cherry selection maintained",
-      },
-      {
-        days: 18,
-        locationId: hfLocationId,
-        lot_id: "HF-R-2401",
-        coffee_type: "Robusta",
-        crop_today: 1460,
-        crop_todate: 4820,
-        ripe_today: 1190,
-        ripe_todate: 3980,
-        green_today: 185,
-        green_todate: 640,
-        float_today: 85,
-        float_todate: 300,
-        wet_parchment: 860,
-        dry_parch: 520,
-        dry_cherry: 150,
-        dry_p_bags: 10,
-        dry_cherry_bags: 3,
-        notes: "HF robusta mixed washed + natural",
-      },
-      {
-        days: 16,
-        locationId: mvLocationId,
-        lot_id: "MV-R-2401",
-        coffee_type: "Robusta",
-        crop_today: 1540,
-        crop_todate: 5080,
-        ripe_today: 1250,
-        ripe_todate: 4170,
-        green_today: 205,
-        green_todate: 690,
-        float_today: 85,
-        float_todate: 315,
-        wet_parchment: 905,
-        dry_parch: 545,
-        dry_cherry: 170,
-        dry_p_bags: 11,
-        dry_cherry_bags: 3,
-        notes: "MV wet-mill performance stable",
-      },
-      {
-        days: 7,
-        locationId: mvLocationId,
-        lot_id: "MV-R-2402",
-        coffee_type: "Robusta",
-        crop_today: 1490,
-        crop_todate: 6570,
-        ripe_today: 1200,
-        ripe_todate: 5370,
-        green_today: 205,
-        green_todate: 895,
-        float_today: 85,
-        float_todate: 400,
-        wet_parchment: 875,
-        dry_parch: 525,
-        dry_cherry: 165,
-        dry_p_bags: 10,
-        dry_cherry_bags: 3,
-        notes: "Rain-affected intake, controlled float",
-      },
-      {
-        days: 12,
-        locationId: pgLocationId,
-        lot_id: "PG-R-2401",
-        coffee_type: "Robusta",
-        crop_today: 1380,
-        crop_todate: 4480,
-        ripe_today: 1110,
-        ripe_todate: 3590,
-        green_today: 190,
-        green_todate: 610,
-        float_today: 80,
-        float_todate: 280,
-        wet_parchment: 820,
-        dry_parch: 500,
-        dry_cherry: 150,
-        dry_p_bags: 10,
-        dry_cherry_bags: 3,
-        notes: "PG lot entered drying beds on schedule",
-      },
-      {
-        days: 4,
-        locationId: pgLocationId,
-        lot_id: "PG-R-2402",
-        coffee_type: "Robusta",
-        crop_today: 1330,
-        crop_todate: 5810,
-        ripe_today: 1060,
-        ripe_todate: 4650,
-        green_today: 185,
-        green_todate: 795,
-        float_today: 85,
-        float_todate: 365,
-        wet_parchment: 790,
-        dry_parch: 480,
-        dry_cherry: 145,
-        dry_p_bags: 10,
-        dry_cherry_bags: 3,
-        notes: "Late cycle robusta; good dry-cherry consistency",
-      },
-    ].filter((row) => row.locationId)
+    const processingRows = demoProcessingRows(seedContext)
 
     for (const row of processingRows) {
       await runTenantQuery(
@@ -703,14 +399,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const pepperRows = [
-      { days: 17, locationId: hfLocationId, kg_picked: 420, green_pepper: 320, dry_pepper: 100, notes: "Good drying cycle" },
-      { days: 8, locationId: hfLocationId, kg_picked: 360, green_pepper: 274, dry_pepper: 86, notes: "Steady pepper quality" },
-      { days: 16, locationId: mvLocationId, kg_picked: 310, green_pepper: 238, dry_pepper: 72, notes: "Uniform moisture profile" },
-      { days: 7, locationId: mvLocationId, kg_picked: 280, green_pepper: 210, dry_pepper: 70, notes: "Improved drying control" },
-      { days: 15, locationId: pgLocationId, kg_picked: 295, green_pepper: 212, dry_pepper: 83, notes: "Good sun window" },
-      { days: 6, locationId: pgLocationId, kg_picked: 265, green_pepper: 191, dry_pepper: 74, notes: "Consistent dry conversion" },
-    ].filter((row) => row.locationId)
+    const pepperRows = demoPepperRows(seedContext)
 
     for (const row of pepperRows) {
       const greenPct = row.kg_picked > 0 ? (row.green_pepper / row.kg_picked) * 100 : 0
@@ -757,14 +446,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const rainfallRows = [
-      { days: 19, inches: 1, cents: 8, notes: "Scattered showers" },
-      { days: 15, inches: 2, cents: 2, notes: "Night rain helped flowering blocks" },
-      { days: 11, inches: 0, cents: 9, notes: "Dry spell" },
-      { days: 7, inches: 3, cents: 1, notes: "Moderate rain event" },
-      { days: 3, inches: 1, cents: 6, notes: "Light rain with wind" },
-      { days: 1, inches: 0, cents: 7, notes: "Clear weather for drying" },
-    ]
+    const rainfallRows = demoRainfallRows()
     for (const row of rainfallRows) {
       await runTenantQuery(
         sql,
@@ -776,86 +458,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const dispatchRows = [
-      {
-        days: 10,
-        locationId: hfLocationId,
-        estate: "HF",
-        lot_id: "HF-A-2401",
-        coffee_type: "Arabica",
-        bag_type: "Dry Parchment",
-        bags_dispatched: 12,
-        kgs_received: 588,
-        price_per_bag: 6400,
-        buyer_name: "South Roast Co.",
-        notes: "Moisture-adjusted weighbridge receipt",
-      },
-      {
-        days: 9,
-        locationId: hfLocationId,
-        estate: "HF",
-        lot_id: "HF-R-2401",
-        coffee_type: "Robusta",
-        bag_type: "Dry Cherry",
-        bags_dispatched: 8,
-        kgs_received: 392,
-        price_per_bag: 5650,
-        buyer_name: "Metro Traders",
-        notes: "Dry cherry lot moved to curing partner",
-      },
-      {
-        days: 6,
-        locationId: mvLocationId,
-        estate: "MV",
-        lot_id: "MV-R-2401",
-        coffee_type: "Robusta",
-        bag_type: "Dry Parchment",
-        bags_dispatched: 10,
-        kgs_received: 490,
-        price_per_bag: 6000,
-        buyer_name: "Cascara Exports",
-        notes: "Bridge slip attached",
-      },
-      {
-        days: 4,
-        locationId: pgLocationId,
-        estate: "PG",
-        lot_id: "PG-R-2401",
-        coffee_type: "Robusta",
-        bag_type: "Dry Cherry",
-        bags_dispatched: 9,
-        kgs_received: 438,
-        price_per_bag: 5500,
-        buyer_name: "Malnad Beans",
-        notes: "Transit moisture variance recorded",
-      },
-      {
-        days: 2,
-        locationId: hfLocationId,
-        estate: "HF",
-        lot_id: "HF-A-2402",
-        coffee_type: "Arabica",
-        bag_type: "Dry Parchment",
-        bags_dispatched: 11,
-        kgs_received: 538,
-        price_per_bag: 6550,
-        buyer_name: "South Roast Co.",
-        notes: "Second arabica dispatch this cycle",
-      },
-      {
-        days: 1,
-        locationId: mvLocationId,
-        estate: "MV",
-        lot_id: "MV-R-2402",
-        coffee_type: "Robusta",
-        bag_type: "Dry Cherry",
-        bags_dispatched: 7,
-        kgs_received: 340,
-        price_per_bag: 5750,
-        buyer_name: "Metro Traders",
-        notes: "Late-cycle robusta shipment",
-      },
-    ].filter((row) => row.locationId)
+    const dispatchRows = demoDispatchRows(seedContext)
 
     for (const row of dispatchRows) {
       await runTenantQuery(
@@ -896,98 +499,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const salesRows = [
-      {
-        days: 8,
-        batch_no: "BL-HF-2401",
-        lot_id: "HF-A-2401",
-        locationId: hfLocationId,
-        estate: "HF",
-        coffee_type: "Arabica",
-        bag_type: "Dry Parchment",
-        buyer_name: "South Roast Co.",
-        bags_sold: 8.4,
-        kgs: 420,
-        price_per_bag: 6800,
-        bank_account: "HDFC-Primary",
-        notes: "Buyer accepted full quality premium",
-      },
-      {
-        days: 6,
-        batch_no: "BL-HF-2402",
-        lot_id: "HF-R-2401",
-        locationId: hfLocationId,
-        estate: "HF",
-        coffee_type: "Robusta",
-        bag_type: "Dry Cherry",
-        buyer_name: "Metro Traders",
-        bags_sold: 5.6,
-        kgs: 280,
-        price_per_bag: 5650,
-        bank_account: "HDFC-Primary",
-        notes: "Robusta cherry lot partially sold",
-      },
-      {
-        days: 3,
-        batch_no: "BL-MV-2401",
-        lot_id: "MV-R-2401",
-        locationId: mvLocationId,
-        estate: "MV",
-        coffee_type: "Robusta",
-        bag_type: "Dry Parchment",
-        buyer_name: "Cascara Exports",
-        bags_sold: 7.2,
-        kgs: 360,
-        price_per_bag: 6100,
-        bank_account: "HDFC-Primary",
-        notes: "Weight reconciled against dispatch receipt",
-      },
-      {
-        days: 1,
-        batch_no: "BL-PG-2401",
-        lot_id: "PG-R-2401",
-        locationId: pgLocationId,
-        estate: "PG",
-        coffee_type: "Robusta",
-        bag_type: "Dry Cherry",
-        buyer_name: "Malnad Beans",
-        bags_sold: 6,
-        kgs: 300,
-        price_per_bag: 5600,
-        bank_account: "HDFC-Primary",
-        notes: "Balanced with PG dispatch records",
-      },
-      {
-        days: 0,
-        batch_no: "BL-HF-2403",
-        lot_id: "HF-A-2402",
-        locationId: hfLocationId,
-        estate: "HF",
-        coffee_type: "Arabica",
-        bag_type: "Dry Parchment",
-        buyer_name: "South Roast Co.",
-        bags_sold: 5,
-        kgs: 250,
-        price_per_bag: 7000,
-        bank_account: "HDFC-Primary",
-        notes: "Spot order filled at premium rate",
-      },
-      {
-        days: 0,
-        batch_no: "BL-MV-2402",
-        lot_id: "MV-R-2402",
-        locationId: mvLocationId,
-        estate: "MV",
-        coffee_type: "Robusta",
-        bag_type: "Dry Cherry",
-        buyer_name: "Metro Traders",
-        bags_sold: 4.2,
-        kgs: 210,
-        price_per_bag: 5750,
-        bank_account: "HDFC-Primary",
-        notes: "Advance settled on delivery",
-      },
-    ].filter((row) => row.locationId)
+    const salesRows = demoSalesRows(seedContext)
 
     for (const row of salesRows) {
       const revenue = Number((row.bags_sold * row.price_per_bag).toFixed(2))

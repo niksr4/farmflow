@@ -134,16 +134,62 @@ describe("import bulk utils — field normalization", () => {
     expect(parseDate("03/04/2026")).toBe("2026-04-03") // interpreted as 3 April, not 4 March
   })
 
-  it("the ISO-shape regex accepts a calendar-invalid date without validating it (known bug)", () => {
-    // isoMatch is `/^\d{4}-\d{2}-\d{2}$/` — it only checks digit-group *shape*, not that the
-    // month is 01-12 or the day is valid for that month. A shape match returns `raw` as-is with
-    // no further validation (it never reaches the Date() fallback, which — separately — DOES
-    // reject genuinely invalid dates, see the passing case below). So "2026-13-45" (month 13,
-    // day 45) round-trips straight through as a "valid" parsed date. Downstream this becomes a
-    // Postgres date literal and would fail at insert time with a DB-level error rather than the
-    // friendly per-row validation message this module exists to produce — a confusing failure
-    // mode for a bulk CSV import.
-    expect(parseDate("2026-13-45")).toBe("2026-13-45")
+  it("rejects a calendar-invalid ISO-shaped date instead of round-tripping it unchecked", () => {
+    // Fixed 2026-09-16: isoMatch used to check digit-group *shape* only, not that the month was
+    // 01-12 or the day valid for that month, so a shape match returned `raw` as-is. "2026-13-45"
+    // (month 13, day 45) round-tripped through as a "valid" parsed date and would only fail
+    // downstream as a Postgres date-literal error at insert time, instead of the friendly
+    // per-row validation message this module exists to produce.
+    expect(parseDate("2026-13-45")).toBeNull()
+    expect(parseDate("2026-02-30")).toBeNull() // shape-valid, but February never has a 30th
+    expect(parseDate("2026-00-10")).toBeNull() // month 0
+  })
+
+  it("rejects a calendar-invalid MONTH-NAME date, which Date silently rolls forward", () => {
+    /**
+     * The gap Greptile found on PR #22. The three branches above parseDate's fallback check the
+     * calendar; the fallback did not, and new Date() does not reject an impossible date — it
+     * NORMALIZES it into a real one:
+     *
+     *   "Feb 30, 2026" -> March 1      "Feb 29, 2026" -> February 28
+     *   "Apr 31, 2026" -> April 30     "Jun 31, 2026" -> June 30
+     *
+     * So a typo came back as a plausible neighbouring day and was written to a transaction,
+     * labour entry, rainfall reading or processing record with no complaint at all.
+     */
+    expect(parseDate("Feb 30, 2026")).toBeNull()
+    expect(parseDate("Feb 29, 2026")).toBeNull() // 2026 is not a leap year
+    expect(parseDate("Apr 31, 2026")).toBeNull()
+    expect(parseDate("31 June 2026")).toBeNull()
+  })
+
+  it("still accepts the month-name dates that reach that branch legitimately", () => {
+    expect(parseDate("Feb 24, 2026")).toBe("2026-02-24")
+    expect(parseDate("24 February 2026")).toBe("2026-02-24")
+    expect(parseDate("Feb 29, 2028")).toBe("2028-02-29") // a real leap day
+  })
+
+  it("does not reject a timestamp, whose first 1..31 token is the month rather than the day", () => {
+    // Why the check is scoped to a run of three or more letters. An ISO timestamp falls through
+    // to the same fallback, and its digits cannot be told apart by position: the first token in
+    // 1..31 is "02", the month. Comparing that against the parsed day would refuse every
+    // timestamped import — a fix for silent corruption causing loud, total breakage instead.
+    expect(parseDate("2026-02-24T10:30:00Z")).toBe("2026-02-24")
+    expect(parseDate("2026-02-24 10:30:00")).toBe("2026-02-24")
+  })
+
+  it("accepts a month and year with no day, rather than guessing it is wrong", () => {
+    // Date assigns the 1st. That is its own kind of silent assumption, but it is not what this
+    // fix is about, and rejecting it would break any estate importing monthly figures.
+    expect(parseDate("February 2026")).toBe("2026-02-01")
+  })
+
+  it("still accepts every genuinely valid ISO and slash-formatted date, including leap days", () => {
+    expect(parseDate("2026-02-24")).toBe("2026-02-24")
+    expect(parseDate("2028-02-29")).toBe("2028-02-29") // 2028 is a leap year
+    expect(parseDate("2026-02-29")).toBeNull() // 2026 is not
+    expect(parseDate("24/02/2026")).toBe("2026-02-24")
+    expect(parseDate("31/04/2026")).toBeNull() // April has 30 days
   })
 
   it("does reject a calendar-invalid date once it reaches the Date() fallback path", () => {
@@ -151,22 +197,24 @@ describe("import bulk utils — field normalization", () => {
     expect(parseDate("2026-002-45")).toBeNull()
   })
 
-  it("the Date()-parsing fallback is timezone-sensitive and can shift the date by a day (known bug)", () => {
-    // isoMatch and slashMatch never touch the Date constructor, so they're timezone-independent.
-    // Anything else falls through to `new Date(raw).toISOString().slice(0, 10)`, which parses
-    // the string as LOCAL midnight and then reads back the UTC calendar date — for any positive
-    // UTC offset (e.g. Asia/Calcutta, this app's own business locale) that rolls back to the
-    // previous day. A bulk-import CSV with a date in a format that only the fallback handles
-    // (e.g. "Feb 24, 2026") would silently import as Feb 23 on a server running IST, while the
-    // exact same file would import correctly as Feb 24 on a server running UTC or a negative
-    // offset. Confirmed the runtime's TZ env var is what drives this (not fixed at process start)
-    // via a standalone node -e check across UTC / Asia/Calcutta / America/Los_Angeles.
+  it("the Date()-parsing fallback no longer shifts the date by a day across server timezones", () => {
+    // Fixed 2026-09-16: isoMatch and slashMatch never touch the Date constructor, so they were
+    // always timezone-independent. Anything else fell through to
+    // `new Date(raw).toISOString().slice(0, 10)`, which parses the string as LOCAL midnight and
+    // then read back the UTC calendar date — for any positive UTC offset (e.g. Asia/Calcutta,
+    // this app's own business locale) that rolled back to the previous day. A bulk-import CSV
+    // with a date in a format that only the fallback handles (e.g. "Feb 24, 2026") would
+    // silently import as Feb 23 on a server running IST. Now reads the parsed Date's LOCAL
+    // components back (getFullYear/getMonth/getDate) instead of converting through UTC first, so
+    // parsing and reading stay in the same timezone context and the result is TZ-independent.
     const originalTZ = process.env.TZ
     try {
       process.env.TZ = "UTC"
       expect(parseDate("Feb 24, 2026")).toBe("2026-02-24")
       process.env.TZ = "Asia/Calcutta"
-      expect(parseDate("Feb 24, 2026")).toBe("2026-02-23") // same input, different (wrong) day
+      expect(parseDate("Feb 24, 2026")).toBe("2026-02-24") // same input, same day now
+      process.env.TZ = "America/Los_Angeles"
+      expect(parseDate("Feb 24, 2026")).toBe("2026-02-24")
     } finally {
       process.env.TZ = originalTZ
     }

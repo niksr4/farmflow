@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -431,8 +431,12 @@ describe("a biometric punch shows its times, a manual mark shows the rate", () =
       presentRecords: [
         {
           workerId: "a",
+          // The instants, as the API sends them, and the IST clock it now sends alongside.
+          // 02:30Z is 08:00 IST; 11:09Z is 16:39 IST.
           checkInTime: "2026-09-14T02:30:00.000Z",
           checkOutTime: "2026-09-14T11:09:00.000Z",
+          checkInClock: "08:00",
+          checkOutClock: "16:39",
           source: "biometric",
           overtimeHours: null,
         },
@@ -440,9 +444,55 @@ describe("a biometric punch shows its times, a manual mark shows the rate", () =
     })
     const { container } = await openMuster({ workers })
 
-    // Rendered in the runner's local zone, so assert the shape rather than the clock.
-    expect(container.textContent).toMatch(/\d{1,2}:\d{2}\s?(am|pm|AM|PM)?\s*[–-]\s*\d{1,2}:\d{2}/)
+    /**
+     * ⚠ THIS ASSERTION USED TO READ:
+     *
+     *     // Rendered in the runner's local zone, so assert the shape rather than the clock.
+     *     expect(container.textContent).toMatch(/\d{1,2}:\d{2}\s?(am|pm)?\s*[–-]\s*\d{1,2}:\d{2}/)
+     *
+     * I wrote that comment, and it names the product bug while treating it as a test constraint to
+     * work around. "Rendered in the runner's local zone" is exactly what HoneyFarm reported on
+     * 2026-09-18: their muster showed 04:31 for an 08:01 punch, because the browser formatted the
+     * instant in the VIEWER's timezone. A shape-only assertion passes in every zone, which is
+     * precisely why it could not see it.
+     *
+     * The clock is now pinned in SQL, so the test can assert the time itself — and asserting the
+     * time is what makes it fail if anyone formats the instant client-side again.
+     */
+    expect(container.textContent).toContain("08:00 – 16:39")
     expect(screen.queryByText("₹450/day")).toBeNull()
+  })
+
+  it("shows the punch as recorded at the estate, whatever timezone the phone is in", async () => {
+    // The whole point: the muster must not change what it says because of who is looking. These
+    // clock strings arrive already formatted, so no local-zone formatting can reach them.
+    const original = process.env.TZ
+    try {
+      for (const tz of ["UTC", "Asia/Kolkata", "America/Los_Angeles"]) {
+        process.env.TZ = tz
+        const workers = [worker({ id: "a", name: "Manoj" })]
+        mockMuster({
+          workers,
+          presentWorkerIds: ["a"],
+          presentRecords: [
+            {
+              workerId: "a",
+              checkInTime: "2026-09-14T02:30:00.000Z",
+              checkOutTime: "2026-09-14T11:09:00.000Z",
+              checkInClock: "08:00",
+              checkOutClock: "16:39",
+              source: "biometric",
+              overtimeHours: null,
+            },
+          ],
+        })
+        const { container } = await openMuster({ workers })
+        expect(container.textContent, `punch time moved in ${tz}`).toContain("08:00 – 16:39")
+        cleanup() // three renders in one test; without this the next one finds two of every row
+      }
+    } finally {
+      process.env.TZ = original
+    }
   })
 
   it("prints the daily rate for a hand-marked worker", async () => {

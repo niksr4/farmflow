@@ -277,17 +277,17 @@ export function TransactionHistoryPanel({
                     {transaction.notes}
                   </p>
                 )}
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleEditTransaction(transaction)}
-                    className="h-10 flex-1 justify-center gap-1.5 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  >
-                    <Edit className="h-4 w-4" />
-                    Edit
-                  </Button>
-                  {canManageRecords && (
+                {canManageRecords && (
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEditTransaction(transaction)}
+                      className="h-10 flex-1 justify-center gap-1.5 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -297,8 +297,8 @@ export function TransactionHistoryPanel({
                       <Trash2 className="h-4 w-4" />
                       Delete
                     </Button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -381,23 +381,23 @@ export function TransactionHistoryPanel({
                     </td>
                     <td className="py-4 px-4">{transaction.user_id}</td>
                     <td className="py-4 px-4">
-                      <TooltipProvider>
-                        <div className="flex gap-2">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                aria-label="Edit transaction"
-                                onClick={() => handleEditTransaction(transaction)}
-                                className="text-amber-600 p-2 h-auto"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Edit transaction</TooltipContent>
-                          </Tooltip>
-                          {canManageRecords && (
+                      {canManageRecords && (
+                        <TooltipProvider>
+                          <div className="flex gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  aria-label="Edit transaction"
+                                  onClick={() => handleEditTransaction(transaction)}
+                                  className="text-amber-600 p-2 h-auto"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Edit transaction</TooltipContent>
+                            </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
@@ -412,9 +412,9 @@ export function TransactionHistoryPanel({
                               </TooltipTrigger>
                               <TooltipContent>Delete transaction</TooltipContent>
                             </Tooltip>
-                          )}
-                        </div>
-                      </TooltipProvider>
+                          </div>
+                        </TooltipProvider>
+                      )}
                     </td>
                   </tr>
                 )

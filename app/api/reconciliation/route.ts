@@ -157,10 +157,15 @@ export async function GET(request: NextRequest) {
       const { missingWeeks, totalWeeks, weeksWithEntries } = gaps
       const windowLabel = gaps.measuredFromFirstEntry ? " since the first entry was logged" : " of the period"
 
+      // `week${n === 1 ? "" : "s"}` throughout. A tenant measured from their first entry can have a
+      // one-week window, so "all 1 weeks" and a "1 weeks" value chip were both reachable — the
+      // warning branch only fires for missingWeeks of 1 or 2, so 1 is half of everything it says.
+      const weeks = (n: number) => `${n} week${n === 1 ? "" : "s"}`
+
       if (gaps.status === "ok" || weeksWithEntries === 0) {
-        checks.push({ id: "labour_gaps", label: "Labour entry gaps", status: weeksWithEntries === 0 ? "warning" : "ok", detail: weeksWithEntries === 0 ? "No labour entries found for this period." : `Labour logged in all ${weeksWithEntries} weeks${windowLabel}.` })
+        checks.push({ id: "labour_gaps", label: "Labour entry gaps", status: weeksWithEntries === 0 ? "warning" : "ok", detail: weeksWithEntries === 0 ? "No labour entries found for this period." : `Labour logged in all ${weeks(weeksWithEntries)}${windowLabel}.` })
       } else if (gaps.status === "warning") {
-        checks.push({ id: "labour_gaps", label: "Labour entry gaps", status: "warning", detail: `${missingWeeks} week${missingWeeks > 1 ? "s" : ""} with no labour entries${windowLabel} — may be intentional (holidays) or missing data.`, value: `${missingWeeks} weeks` })
+        checks.push({ id: "labour_gaps", label: "Labour entry gaps", status: "warning", detail: `${weeks(missingWeeks)} with no labour entries${windowLabel} — may be intentional (holidays) or missing data.`, value: weeks(missingWeeks) })
       } else {
         checks.push({ id: "labour_gaps", label: "Labour entry gaps", status: "error", detail: `${missingWeeks} of ${totalWeeks} weeks have no labour entries${windowLabel} — significant data gaps likely.`, value: `${missingWeeks}/${totalWeeks} weeks missing` })
       }

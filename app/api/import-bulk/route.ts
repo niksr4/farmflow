@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
@@ -12,16 +11,13 @@ import { csvToObjects } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { isLocationAccessError } from "@/lib/server/location-access"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
-import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { recomputeProcessingTotals, resolveBagWeightKg } from "@/lib/server/processing-utils"
 import {
   buildValidationErrors,
   CHUNK_SIZE,
   DATASET_MODULE_MAP,
   getField,
-  hashCsv,
   IMPORT_JOB_HELP,
-  isImportJobsUserColumnMissing,
   isImportJobTableMissing,
   isUuid,
   MAX_ROWS,
@@ -32,288 +28,25 @@ import {
   parseDate,
   parseNumber,
   toLocationCode,
-  VALIDATION_EXPIRY_MINUTES,
-  type ImportMode,
   type ImportValidationError,
 } from "@/lib/server/import-bulk-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-type ValidationImportJobRow = {
-  id: string
-  validation_expires_at: string | Date | null
-}
-
-type ValidationJobRecord = {
-  id: string
-  status: string
-  dataset: string
-  csv_text: string
-  row_count: number
-  validation_expires_at: string | Date | null
-  errors: unknown
-}
-
-type RequestBody = {
-  dataset: string
-  mode: ImportMode
-  validationToken: string
-  csv: string
-}
-
-type SqlQuery = Parameters<typeof runTenantQueries>[2][number]
-
-const getErrorMessage = (error: unknown, fallback: string) => sanitizeRouteError(error, fallback)
-
-const importBulkBodySchema = z.object({
-  dataset: z.string().trim().optional().default(""),
-  mode: z.union([z.literal("validate"), z.literal("commit")]).optional().default("commit"),
-  validationToken: z.string().trim().optional().default(""),
-  csv: z.string().optional().default(""),
-})
-
-async function createValidationImportJob(input: {
-  tenantId: string
-  role: string
-  requestedBy: string
-  requestedByUserId?: string | null
-  dataset: string
-  csvText: string
-  rowCount: number
-  errors: ImportValidationError[]
-}): Promise<ValidationImportJobRow | null> {
-  const tenantContext = normalizeTenantContext(input.tenantId, input.role)
-  try {
-    const rows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        INSERT INTO import_jobs (
-          tenant_id,
-          requested_by,
-          requested_by_user_id,
-          requested_role,
-          dataset,
-          mode,
-          status,
-          csv_sha256,
-          csv_text,
-          row_count,
-          imported_count,
-          skipped_count,
-          error_count,
-          errors,
-          metadata,
-          validation_expires_at
-        )
-        VALUES (
-          ${tenantContext.tenantId}::uuid,
-          ${input.requestedBy},
-          ${input.requestedByUserId || null}::uuid,
-          ${tenantContext.role},
-          ${input.dataset},
-          'validate',
-          ${input.errors.length ? "invalid" : "validated"},
-          ${hashCsv(input.csvText)},
-          ${input.csvText},
-          ${input.rowCount},
-          0,
-          ${input.errors.length},
-          ${input.errors.length},
-          ${JSON.stringify(input.errors)}::jsonb,
-          ${JSON.stringify({ validationRows: input.rowCount })}::jsonb,
-          NOW() + (${VALIDATION_EXPIRY_MINUTES} * INTERVAL '1 minute')
-        )
-        RETURNING id::text AS id, validation_expires_at
-      `,
-    )
-
-    return (rows?.[0] || null) as ValidationImportJobRow | null
-  } catch (error) {
-    if (!isImportJobsUserColumnMissing(error)) throw error
-
-    const rows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        INSERT INTO import_jobs (
-          tenant_id,
-          requested_by,
-          requested_role,
-          dataset,
-          mode,
-          status,
-          csv_sha256,
-          csv_text,
-          row_count,
-          imported_count,
-          skipped_count,
-          error_count,
-          errors,
-          metadata,
-          validation_expires_at
-        )
-        VALUES (
-          ${tenantContext.tenantId}::uuid,
-          ${input.requestedBy},
-          ${tenantContext.role},
-          ${input.dataset},
-          'validate',
-          ${input.errors.length ? "invalid" : "validated"},
-          ${hashCsv(input.csvText)},
-          ${input.csvText},
-          ${input.rowCount},
-          0,
-          ${input.errors.length},
-          ${input.errors.length},
-          ${JSON.stringify(input.errors)}::jsonb,
-          ${JSON.stringify({ validationRows: input.rowCount })}::jsonb,
-          NOW() + (${VALIDATION_EXPIRY_MINUTES} * INTERVAL '1 minute')
-        )
-        RETURNING id::text AS id, validation_expires_at
-      `,
-    )
-
-    return (rows?.[0] || null) as ValidationImportJobRow | null
-  }
-}
-
-async function resolveRequestedByUserId(input: { tenantId: string; role: string; username: string }) {
-  const tenantContext = normalizeTenantContext(input.tenantId, input.role)
-  const username = String(input.username || "").trim()
-  if (!username) return null
-  const rows = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      SELECT id::text AS id
-      FROM users
-      WHERE tenant_id = ${tenantContext.tenantId}::uuid
-        AND username = ${username}
-      LIMIT 1
-    `,
-  )
-  return rows?.[0]?.id ? String(rows[0].id) : null
-}
-
-async function loadValidatedImportJob(input: {
-  tenantId: string
-  role: string
-  requestedBy: string
-  requestedByUserId?: string | null
-  dataset: string
-  validationToken: string
-}): Promise<ValidationJobRecord | null> {
-  const tenantContext = normalizeTenantContext(input.tenantId, input.role)
-  if (input.requestedByUserId) {
-    try {
-      const rows = await runTenantQuery(
-        sql,
-        tenantContext,
-        sql`
-          SELECT
-            id::text AS id,
-            status,
-            dataset,
-            csv_text,
-            row_count,
-            validation_expires_at,
-            errors
-          FROM import_jobs
-          WHERE id = ${input.validationToken}::uuid
-            AND tenant_id = ${tenantContext.tenantId}::uuid
-            AND dataset = ${input.dataset}
-            AND (
-              requested_by_user_id = ${input.requestedByUserId}::uuid
-              OR (requested_by_user_id IS NULL AND requested_by = ${input.requestedBy})
-            )
-          LIMIT 1
-        `,
-      )
-      return (rows?.[0] || null) as ValidationJobRecord | null
-    } catch (error) {
-      if (!isImportJobsUserColumnMissing(error)) throw error
-    }
-  }
-
-  const fallbackRows = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      SELECT
-        id::text AS id,
-        status,
-        dataset,
-        csv_text,
-        row_count,
-        validation_expires_at,
-        errors
-      FROM import_jobs
-      WHERE id = ${input.validationToken}::uuid
-        AND tenant_id = ${tenantContext.tenantId}::uuid
-        AND requested_by = ${input.requestedBy}
-        AND dataset = ${input.dataset}
-      LIMIT 1
-    `,
-  )
-  return (fallbackRows?.[0] || null) as ValidationJobRecord | null
-}
-
-async function markImportJobCommitted(input: {
-  tenantId: string
-  role: string
-  jobId: string
-  imported: number
-  skipped: number
-  errors: ImportValidationError[]
-}) {
-  const tenantContext = normalizeTenantContext(input.tenantId, input.role)
-  await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      UPDATE import_jobs
-      SET
-        mode = 'commit',
-        status = 'committed',
-        imported_count = ${input.imported},
-        skipped_count = ${input.skipped},
-        error_count = ${input.errors.length},
-        errors = ${JSON.stringify(input.errors)}::jsonb,
-        committed_at = NOW(),
-        updated_at = NOW()
-      WHERE id = ${input.jobId}::uuid
-        AND tenant_id = ${tenantContext.tenantId}::uuid
-    `,
-  )
-}
-
-async function markImportJobFailed(input: {
-  tenantId: string
-  role: string
-  jobId: string
-  message: string
-}) {
-  const tenantContext = normalizeTenantContext(input.tenantId, input.role)
-  await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      UPDATE import_jobs
-      SET
-        mode = 'commit',
-        status = 'failed',
-        metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{failure}', ${JSON.stringify({
-          message: input.message,
-          at: new Date().toISOString(),
-        })}::jsonb, true),
-        updated_at = NOW()
-      WHERE id = ${input.jobId}::uuid
-        AND tenant_id = ${tenantContext.tenantId}::uuid
-    `,
-  )
-}
+import {
+  createValidationImportJob,
+  getErrorMessage,
+  importBulkBodySchema,
+  loadValidatedImportJob,
+  markImportJobCommitted,
+  markImportJobFailed,
+  resolveRequestedByUserId,
+  type RequestBody,
+  type SqlQuery,
+  type ValidationImportJobRow,
+  type ValidationJobRecord,
+} from "@/lib/server/import/validation-jobs"
 
 export async function POST(request: Request) {
   let commitJobId: string | null = null

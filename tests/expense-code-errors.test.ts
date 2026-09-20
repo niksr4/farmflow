@@ -26,7 +26,21 @@ import { describe, expect, it } from "vitest"
  * decision (auto-create the code, or make the field a picker) and is recorded in STATUS.md rather
  * than guessed at here. Until it is settled, the least this route can do is say which wall was hit.
  */
-const route = readFileSync(resolve(__dirname, "../app/api/expenses-neon/route.ts"), "utf8")
+/**
+ * The route AND the modules extracted out of it, read as one source.
+ *
+ * These assertions are about what the expenses implementation does, never about which file a
+ * string sits in. Splitting the route on 2026-09-17 moved the error predicates into
+ * lib/server/expenses/inventory-notes.ts and broke three tests that had pinned the file rather
+ * than the behaviour — so the fix is to stop pinning the file.
+ */
+const route = [
+  "../app/api/expenses-neon/route.ts",
+  "../lib/server/expenses/inventory-notes.ts",
+  "../lib/server/expenses/statements.ts",
+]
+  .map((path) => readFileSync(resolve(__dirname, path), "utf8"))
+  .join("\n")
 const migration = readFileSync(resolve(__dirname, "../scripts/148-expense-code-fits-a-word.sql"), "utf8")
 
 describe("the column fits the word the form asks for", () => {
