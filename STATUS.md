@@ -3,9 +3,42 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-09-02.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-09-18.** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
+
+---
+
+## Right now (2026-09-18)
+
+**Production is `main@885c8666`, deployed 2026-09-15. Nothing has shipped in three days**, while
+**seven PRs** have piled up behind it.
+
+⚠ **On this project, merging IS deploying.** Verified rather than assumed: every production
+deployment in the Vercel API corresponds to a `main` commit, and the 06:49/06:52 deploys on 09-15
+match exactly when #21 and #20 were merged. There is no staging gate and no manual promotion —
+a merge is live in about three minutes. So "merge now, deploy later" is not a thing here, and the
+code word applies to the *merge*.
+
+| PR | What | Size | Merge notes |
+|---|---|---|---|
+| **#28** | HoneyFarm punch times read IST, not the viewer's zone | 5 files | **the only live customer bug.** Merge first |
+| #23 | public repo carried a working owner password hash | 3 files | no conflicts |
+| #27 | scanner: invoice nullable-clear + dedupe | 3 files | `scanner/**` |
+| #24 | scanner: count-dependent copy | 4 files | `scanner/**`, conflicts with #26 |
+| #22 | scanner: billing cycle, PII, import dates | 10 files | `scanner/**` |
+| #25 | decomposition, 9 passes | 33 files | conflicts with #26 |
+| **#26** | dead-import CI gate + 78 removed | 46 files | **merge LAST** — absorbs both conflicts |
+
+Two real conflicts only: `#24 × #26` on `season-pl-tab.tsx`, `#25 × #26` on `inventory-system.tsx`.
+Putting #26 last means one branch to reconcile instead of two.
+
+⚠ **Every scanner PR after the first needs `git merge origin/main`.** `check-branch-base.mjs` sets
+`SCANNER_ALLOWANCE = 0`, so the moment `main` moves, the remaining `scanner/**` branches fail their
+base check. Human branches get an allowance of 40 and are unaffected. Three scanner PRs = two
+unavoidable re-merges.
+
+Rollback for any of it: `vercel alias set <previous-deployment-id> www.thefarmflow.in`.
 
 ---
 
@@ -15,7 +48,7 @@ before you act on it — `node scripts/dev/referential-audit.mjs prod` and the q
 |---|---|---|---|---|---|
 | **Medappa** | Citrus Grove 13, Tirtha 8 | one each | **live 19 Aug** | Gagan Rai | nothing. 30 workers all rated, 150 allocations, 5 of the last 7 days |
 | **Laxmi** | Laxmi, 5 blocks | 1 | **live 25 Aug** | Nandu | nothing. 21 workers all rated, **6 of the last 7 days** — the day-1 worry is closed |
-| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | 1 shared | **live 24 Aug** | Dad (`KAB123`) | nothing. 36 workers, every daily worker rated, 26 allocations |
+| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | 1 shared | **live 24 Aug** | Dad (`KAB123`) | 36 workers, every daily worker rated, 26 allocations. Punch times read shifted while he is abroad — fix in **PR #28**, see below |
 | **Seshagiri** | Seshagiri, 20 blocks / 94.1 ac | 1 | **live 24 Aug** | — | nothing technical. 27 workers, all fingerprinted — **has yet to record a day** |
 | greenvalley | — | — | — | — | one login ever, no records. Not a tenant |
 
@@ -280,6 +313,8 @@ per acre, and eventually agronomic advice. The short version:
 | Is any worker booked over one day? | `node scripts/dev/overbooked-batches.mjs` (prod env) |
 | Which tabs are actually alive? | count rows + `max(date)` per table — a March date is a dead tab |
 | Is the scanner still calling in? | `biometric_devices.last_seen_at`; punches land in `biometric_punches` |
+| Is a punch time wrong, or just displayed wrong? | `to_char(check_in_time AT TIME ZONE 'Asia/Kolkata','HH24:MI')` — if that reads right, the terminal is fine and it is a render bug |
+| Did that merge actually deploy? | Vercel `/v6/deployments?target=production` — match `meta.githubCommitSha` against `main` |
 | Does a rainfall change affect anyone? | compare `SUM` over `rainfall_records` vs `rainfall_daily` per tenant |
 
 There are ~45 harnesses in `scripts/dev/`. If you are about to hand-write a query to answer a
