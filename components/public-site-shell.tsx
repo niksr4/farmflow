@@ -70,7 +70,13 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
           <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px)", backgroundSize: "120px 120px" }} />
         </div>
       ) : null}
-      <header className="px-4 pt-4 sm:px-6 sm:pt-6">
+      {/* `relative z-10` is load-bearing, not tidying. The dark-theme background above is
+          `fixed`, so it paints over every static in-flow sibling. The nav card escaped that
+          only because `backdrop-blur` happens to promote it into the positioned layer; the
+          mobile link row below has no blur and was being painted underneath the background.
+          It still took its 30px of layout, so five navigation links were invisible on every
+          public page on a phone while looking perfectly correct in the DOM. */}
+      <header className="relative z-10 px-4 pt-4 sm:px-6 sm:pt-6">
         <nav
           className={`mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl px-3 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-4 transition-colors duration-300 ${
             navIsDark
@@ -83,7 +89,7 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
               <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-12 w-auto" priority />
             </Link>
             <p className={`${display.className} hidden text-sm sm:block ${navIsDark ? "text-stone-300" : "text-slate-600"}`}>
-              Coffee operations, without spreadsheet drift
+              Cherry to parchment to sale, in one book
             </p>
           </div>
           <div className={`hidden items-center gap-4 text-sm lg:flex ${navIsDark ? "text-stone-300/80" : "text-slate-600"}`}>
@@ -178,7 +184,7 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
         <div className={`mx-auto flex w-full max-w-6xl flex-col gap-4 text-sm sm:flex-row sm:items-center sm:justify-between ${isDark ? "text-stone-300/80" : "text-slate-600"}`}>
           <div>
             <p className={`${display.className} text-base ${isDark ? "text-stone-100" : "text-slate-900"}`}>FarmFlow</p>
-            <p className="mt-1">Built for coffee estates that need clean operational truth every day.</p>
+            <p className="mt-1">Built in Karnataka, on working coffee estates in Coorg and Chikmagalur.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/plans" className={isDark ? "hover:text-white" : "hover:text-slate-900"}>
@@ -192,6 +198,11 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
             </Link>
             <Link href="/trust" className={isDark ? "hover:text-white" : "hover:text-slate-900"}>
               {t("public.landing.navTrust")}
+            </Link>
+            {/* /standards is not in the top nav (the e2e spec pins that to five links), so the
+                footer is the only route to it. Without this the page is unreachable. */}
+            <Link href="/standards" className={isDark ? "hover:text-white" : "hover:text-slate-900"}>
+              What we stand for
             </Link>
             <Link href="/contact" className={isDark ? "hover:text-white" : "hover:text-slate-900"}>
               Contact

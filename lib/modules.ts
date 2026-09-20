@@ -53,7 +53,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "basic",
     label: "Starter",
-    description: "Replace your notebook and Excel. Log labour, expenses, and stock — with a live balance sheet and rainfall tracker. No harvest workflow needed.",
+    description: "For the estate that wants its notebook and its Excel sheet in one place. Labour, expenses, stock, a balance sheet that stays current, and the rain gauge. No harvest workflow.",
     modules: [
       "inventory",
       "transactions",
@@ -68,7 +68,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "core",
     label: "Operations",
-    description: "The full estate OS from picking season to bank payment. Adds processing, dispatch, sales, season P&L, and AI-powered weekly insights on top of Starter.",
+    description: "Picking season through to the bank payment. Adds pulping and drying records, dispatch, sales, the season P&L, and the Monday brief on top of Starter.",
     modules: [
       "inventory",
       "transactions",
@@ -93,7 +93,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "enterprise",
     label: "Enterprise",
-    description: "Everything in Operations, plus quality grading, curing records, receivables, compliance, and multi-estate oversight for large planters and estate groups.",
+    description: "Everything in Operations, plus quality grading, curing records, receivables, compliance and oversight across several estates. Built for planters running more than one property.",
     modules: MODULES.map((module) => module.id),
   },
 ]
