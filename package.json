@@ -8,6 +8,7 @@
     "dev": "next dev --hostname 0.0.0.0",
     "prepare": "git config core.hooksPath .githooks || true",
     "lint": "eslint .",
+    "lint:dead-imports": "node scripts/dev/check-dead-imports.mjs",
     "start": "next start",
     "audit:tenant": "node scripts/tenant-audit.js",
     "schema:check": "node scripts/check-schema-readiness.mjs",

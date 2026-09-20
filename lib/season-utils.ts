@@ -1,6 +1,6 @@
 "use client"
 
-import { getCurrentEstatePhase, getEstatePhaseForMonth, type EstateSeason } from "./coffee-estate-calendar"
+import { getCurrentEstatePhase, type EstateSeason } from "./coffee-estate-calendar"
 
 export type TabSeasonality = "always" | "harvest" | "post-harvest" | "analytics"
 

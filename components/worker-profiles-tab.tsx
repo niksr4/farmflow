@@ -25,7 +25,6 @@ import { WORKER_TYPES, workerTypeLabel, isPaidDaily, type WorkerType } from "@/l
 import { UNSET_FACET_VALUE } from "@/lib/list-controls"
 import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
-import { formatLocationLabel } from "@/lib/location-label"
 import WorkerMoneyPanel from "@/components/workers/worker-money-panel"
 import PayRuleForm from "@/components/workers/pay-rule-form"
 import type { PayRule } from "@/lib/pay-rules"
@@ -168,7 +167,6 @@ export default function WorkerProfilesTab() {
   const [showFingerIds, setShowFingerIds] = useState(false)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const locationById = new Map(locations.map((loc) => [loc.id, loc]))
   // Same "only show the estate picker for genuinely multi-estate tenants" convention as the
   // header estate selector (components/inventory-system.tsx's canSelectEstate) -- two locations
   // under the same single estate shouldn't surface this field.

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, Users, BookOpen, IndianRupee, CalendarRange, Fingerprint } from "lucide-react"
+import { Check, Users, IndianRupee, CalendarRange, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
 import AttendanceTab from "./attendance-tab"
 import WorkerProfilesTab from "./worker-profiles-tab"

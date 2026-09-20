@@ -134,8 +134,12 @@ export async function GET(request: Request) {
       // What the pickers can offer. Deliberately unfiltered by code/block, so choosing one does
       // not empty the list you chose it from.
       accountsSql`
+        -- name and code kept SEPARATE. COALESCE(l.name, l.code) threw the code away whenever a
+        -- name existed, which is exactly when it is needed: two blocks sharing a name are told
+        -- apart only by their codes, and the picker had nothing left to do it with.
         SELECT DISTINCT lc.activity_code AS code, l.id AS location_id,
-               COALESCE(l.name, l.code) AS location_name
+               COALESCE(l.name, l.code) AS location_name,
+               l.code AS location_code
         FROM labour_cost lc
         LEFT JOIN locations l ON l.id = lc.location_id
         WHERE lc.tenant_id = ${tenantContext.tenantId}
@@ -184,7 +188,14 @@ export async function GET(request: Request) {
           ...new Map(
             options
               .filter((r: any) => r.location_id)
-              .map((r: any) => [String(r.location_id), { id: String(r.location_id), name: String(r.location_name || "Block") }]),
+              .map((r: any) => [
+                String(r.location_id),
+                {
+                  id: String(r.location_id),
+                  name: String(r.location_name || "Block"),
+                  code: r.location_code ? String(r.location_code) : null,
+                },
+              ]),
           ).values(),
         ].sort((a: any, b: any) => a.name.localeCompare(b.name)),
       },

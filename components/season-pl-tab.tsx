@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, TrendingDown, IndianRupee, ChevronDown, Package, Users, BarChart2, Printer, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
+import { TrendingUp, TrendingDown, IndianRupee, ChevronDown, Package, BarChart2, Printer, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SeasonPLResponse } from "@/app/api/season-pl/route"
 

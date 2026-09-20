@@ -1,6 +1,5 @@
 "use client"
 
-import React from "react"
 import { Button } from "@/components/ui/button"
 import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 import LottieAnimation from "@/components/ui/lottie-animation"

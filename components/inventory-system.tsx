@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { createPortal } from "react-dom"
-import dynamic from "next/dynamic"
 import { useTheme } from "next-themes"
 import {
   AlertTriangle,
@@ -12,24 +11,16 @@ import {
   Check,
   CheckCircle2,
   CloudRain,
-  Coins,
   CreditCard,
   Download,
-  Droplets,
   Edit,
   Factory,
   FileText,
   History,
   Home,
-  Info,
   Leaf,
-  LifeBuoy,
   LineChart,
   List,
-  Loader2,
-  LogOut,
-  Menu,
-  Moon,
   Newspaper,
   NotebookPen,
   Plus,
@@ -37,13 +28,11 @@ import {
   RefreshCw,
   Scale,
   Search,
-  Settings,
   ShieldCheck,
   SortAsc,
   SortDesc,
   Sprout,
   Stethoscope,
-  Sun,
   Tag,
   Trash2,
   TrendingUp,
@@ -51,26 +40,11 @@ import {
   Upload,
   Users,
   Wheat,
-  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BrandLoading } from "@/components/ui/brand-loading"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useStandaloneMode } from "@/hooks/use-standalone-mode"
@@ -80,14 +54,11 @@ import { useRouter, useSearchParams } from "next/navigation"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import HomeTab from "@/components/home-tab"
 import UniversalSearch from "@/components/universal-search"
-import Link from "next/link"
-import Image from "next/image"
 import { isWithinLast24Hours, todayIso } from "@/lib/date-utils"
 import { kgFromBags } from "@/lib/inventory-units"
 import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
-import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import {
   buildTransactionPricing,
@@ -104,7 +75,6 @@ import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import type { WorkspaceHintAction } from "@/lib/tenant-guidance"
 import { cn } from "@/lib/utils"
 import AppSidebar from "@/components/app-sidebar"
-import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
 import {
@@ -126,8 +96,6 @@ import {
 import { buildHeroContent, type BuildHeroContentParams } from "@/lib/workspace-hero-content"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import {
-  EXPORT_DATASETS,
-  isExportDatasetId,
   TAB_DEFAULT_EXPORT_DATASET,
   type ExportDatasetId,
 } from "@/lib/data-tools"
@@ -148,11 +116,7 @@ import {
 } from "@/components/inventory-system/constants"
 import type {
   DrilldownOptions,
-  ExceptionSummaryAlert,
-  HeroChip,
   HeroContent,
-  HeroStat,
-  IntelligenceBrief,
   LocationOption,
   SmartNextStep,
   WorkspaceBootstrapPayload,
@@ -160,7 +124,6 @@ import type {
 import {
   buildTransactionDateFromInput,
   createDefaultTransaction,
-  formatDate,
   getTodayDateInputValue,
   parseCustomDateString,
   parseJsonResponse,
@@ -210,17 +173,12 @@ import ProcessingWorkspace from "@/components/inventory-system/processing-worksp
 import AiAnalysisCard from "@/components/inventory-system/ai-analysis-card"
 import HomeNavCard from "@/components/inventory-system/home-nav-card"
 import { useHeroTotals } from "@/hooks/use-hero-totals"
-import SimpleMarkdown from "@/components/ui/simple-markdown"
 import InventoryDrilldownPanel from "@/components/inventory-system/inventory-drilldown-panel"
 import SeasonProgressStrip from "@/components/inventory-system/season-progress-strip"
 import SeasonCompareCard from "@/components/inventory-system/season-compare-card"
 import PriorityAlertsCard from "@/components/inventory-system/priority-alerts-card"
 import HomeKpiCardsGrid from "@/components/inventory-system/home-kpi-cards-grid"
 import MobileBottomNav from "@/components/mobile-bottom-nav"
-import DailyPulseCard from "@/components/daily-pulse-card"
-import TodayGapsCard from "@/components/today-gaps-card"
-import QuickLogPanel from "@/components/quick-log-panel"
-import WeekBatchEntry from "@/components/week-batch-entry"
 import { getSeasonAwareTabOrder, getSeasonQuickActions } from "@/lib/season-utils"
 import { filterTabsForWriter } from "@/lib/writer-mode"
 import {

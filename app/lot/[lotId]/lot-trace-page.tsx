@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { CheckCircle, Leaf, Package, Clock, Award, MapPin, Copy, Check } from "lucide-react"
-import { cn } from "@/lib/utils"
 
 type LotData = {
   lotId: string

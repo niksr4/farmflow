@@ -1,6 +1,5 @@
 "use client"
 
-import React from "react"
 import { useLocale } from "@/components/locale-provider"
 import TodayGapsCard from "@/components/today-gaps-card"
 import QuickLogPanel from "@/components/quick-log-panel"
