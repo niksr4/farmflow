@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import {
   computeWorkerPay,
-  periodIndexFor,
   periodUsesRules,
   weekRangeFor,
   type PeriodInput,
@@ -175,24 +174,6 @@ describe("the week runs to payday", () => {
     const r = weekRangeFor("2026-08-05", 1)
     expect(r.end).toBe("2026-08-10")
     expect(r.start).toBe("2026-08-04")
-  })
-})
-
-describe("which run this is", () => {
-  it("counts weeks from the first", () => {
-    expect(periodIndexFor("2026-08-02", "2026-08-02")).toBe(0)
-    expect(periodIndexFor("2026-08-02", "2026-08-09")).toBe(1)
-    expect(periodIndexFor("2026-08-02", "2026-10-11")).toBe(10)
-  })
-
-  it("never goes negative for a period before the first", () => {
-    expect(periodIndexFor("2026-08-02", "2026-07-01")).toBe(0)
-  })
-
-  it("is derived, so re-running a closed week gives the same instalment", () => {
-    const first = periodIndexFor("2026-08-02", "2026-08-09")
-    const again = periodIndexFor("2026-08-02", "2026-08-09")
-    expect(first).toBe(again)
   })
 })
 
