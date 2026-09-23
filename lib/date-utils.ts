@@ -167,7 +167,52 @@ export function toLocalIso(dateInput?: DateInput): string {
   return `${year}-${month}-${day}`
 }
 
-/** Today's date as YYYY-MM-DD in the user's local timezone. */
+/**
+ * Today's date as YYYY-MM-DD **at the estate** — IST, not wherever the viewer is standing.
+ *
+ * THERE IS DELIBERATELY ONLY ONE OF THESE. It used to answer in the viewer's local zone, with the
+ * intention that an IST variant would sit beside it for "work day" dates. Classifying all 25 call
+ * sites on 2026-09-23 killed that plan: every one of them is a business date — a record written to
+ * the DB (sale_date, invoice_date, entry_date, expense date), a muster query, a payroll period, a
+ * pay rule's effectiveFrom, or a cutover comparison. Not one was a personal UI convenience. So the
+ * viewer-local semantic had no legitimate consumer, and two near-identically-named functions that
+ * differ by 5.5 hours is a trap rather than a choice.
+ *
+ * Every FarmFlow tenant farms in Coorg. "What day is it" has one answer no matter whose phone is
+ * open, and the one person who regularly opens the app from elsewhere is HoneyFarm's owner, for
+ * whom the local answer was always wrong — in September 2026 he ran it from Africa (IST - 3:30)
+ * and every local-zone date read a day early between midnight and 03:30 IST.
+ *
+ * Intl rather than `Date.now() + 5.5 * 3600_000`: the arithmetic version is correct only because
+ * IST happens to have no DST, which is a fact about India the code should not quietly rely on.
+ * This states the zone instead of encoding an offset.
+ *
+ * For formatting a Date you ALREADY HOLD, use toLocalIso(date) above — that is a different job and
+ * is unchanged. Just never call it as toLocalIso(new Date()) to mean "today".
+ */
 export function todayIso(): string {
-  return toLocalIso(new Date())
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
+}
+
+/**
+ * An instant rendered as an IST wall clock, "HH:MM".
+ *
+ * toLocaleTimeString() WITHOUT an explicit timeZone renders in the viewer's zone -- and passing a
+ * locale like "en-IN" does not fix that, because a locale chooses the format, not the offset.
+ * That confusion is what made the muster read 04:31 for an 08:01 punch on a phone in Africa.
+ */
+export function istClock(instant: DateInput): string {
+  const date = resolveDate(instant)
+  if (!date) return "--:--"
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date)
 }

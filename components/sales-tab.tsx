@@ -18,7 +18,6 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -26,7 +25,6 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { buildSalesCsv } from "@/lib/sales-export"
-import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 import OtherSalesTab from "@/components/other-sales-tab"
 import TaskGuideCard from "@/components/task-guide-card"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
@@ -39,100 +37,30 @@ import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import { formatLocationLabel, resolveLocationIdFromLabel as resolveLocationIdFromLabelValue } from "@/lib/location-label"
 
-interface SalesRecord {
-  id?: number
-  sale_date: string
-  batch_no: string
-  location_id?: string | null
-  location_name?: string | null
-  location_code?: string | null
-  estate?: string | null
-  lot_id?: string | null
-  coffee_type: string | null
-  bag_type: string | null
-  buyer_name?: string | null
-  bags_sold: number
-  price_per_bag: number
-  revenue: number
-  kgs_received?: number | null
-  kgs?: number | null
-  weight_kgs?: number | null
-  kgs_sent?: number | null
-  bank_account: string | null
-  notes: string | null
-}
-
-interface DispatchSummaryRow {
-  coffee_type: string
-  bag_type: string
-  bags_dispatched: number
-  kgs_received: number
-}
-
-interface SalesSummaryRow {
-  coffee_type: string
-  bag_type: string
-  bags_sold: number
-  kgs_sold?: number
-  revenue: number
-}
-
-interface LocationOption {
-  id: string
-  name: string
-  code: string
-}
-
-type LocationScope = "all" | "location" | "legacy_pool"
-type SalesTotals = { totalBagsSold: number; totalKgsSold: number; totalRevenue: number }
-
-type InventoryTotals = { bags: number; kgs: number }
-type InventoryBreakdown = { cherry: InventoryTotals; parchment: InventoryTotals; total: InventoryTotals }
-
-const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
-const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
-const LOCATION_ALL = "all"
-const STOCK_EPSILON = 0.0001
-const normalizeBagType = (value: string | null | undefined) =>
-  String(value || "").toLowerCase().includes("cherry") ? "cherry" : "parchment"
-const formatBagTypeLabel = (value: string | null | undefined) =>
-  normalizeBagType(value) === "cherry" ? "Dry Cherry" : "Dry Parchment"
-const normalizeCoffeeType = (value: string | null | undefined) => {
-  const normalized = String(value || "").toLowerCase()
-  if (normalized.includes("arabica")) return "arabica"
-  if (normalized.includes("robusta")) return "robusta"
-  return "other"
-}
-const ARABICA_LABEL = COFFEE_TYPES.find((type) => String(type || "").toLowerCase().includes("arabica")) || "Arabica"
-const ROBUSTA_LABEL = COFFEE_TYPES.find((type) => String(type || "").toLowerCase().includes("robusta")) || "Robusta"
-const toCanonicalCoffeeLabel = (value: string | null | undefined) => {
-  const normalized = normalizeCoffeeType(value)
-  if (normalized === "arabica") return ARABICA_LABEL
-  if (normalized === "robusta") return ROBUSTA_LABEL
-  const raw = String(value || "").trim()
-  return raw || "Unknown"
-}
-
-const resolveDispatchReceivedKgs = (
-  row: Pick<DispatchSummaryRow, "kgs_received" | "bags_dispatched">,
-  bagWeightKg: number,
-) => resolveDispatchReceivedKgsValue(row, bagWeightKg)
-
-const resolveSalesRecordKgs = (
-  record: Pick<SalesRecord, "kgs" | "kgs_received" | "weight_kgs" | "kgs_sent" | "bags_sold">,
-  bagWeightKg: number,
-) => resolveSalesKgs(record, bagWeightKg)
-
-type SalesTabProps = {
-  showDataToolsControls?: boolean
-  coffeeSalesEnabled?: boolean
-  otherSalesEnabled?: boolean
-  activeWorkspaceView?: SalesWorkspaceView
-  onWorkspaceViewChange?: (view: SalesWorkspaceView) => void
-}
-
-type SalesWorkspaceView = "coffee" | "other-sales"
-type OtherSalesTotals = { totalRevenue: number; totalCount: number }
+import {
+  BAG_TYPES,
+  COFFEE_TYPES,
+  LOCATION_ALL,
+  STOCK_EPSILON,
+  formatBagTypeLabel,
+  normalizeBagType,
+  normalizeCoffeeType,
+  resolveDispatchReceivedKgs,
+  resolveSalesRecordKgs,
+  toCanonicalCoffeeLabel,
+} from "@/components/sales/coffee-bags"
+import type {
+  DispatchSummaryRow,
+  InventoryBreakdown,
+  LocationOption,
+  LocationScope,
+  OtherSalesTotals,
+  SalesRecord,
+  SalesSummaryRow,
+  SalesTabProps,
+  SalesTotals,
+  SalesWorkspaceView,
+} from "@/components/sales/types"
 
 export default function SalesTab({
   showDataToolsControls = false,

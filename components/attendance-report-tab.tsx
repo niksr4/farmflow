@@ -11,6 +11,7 @@ import { averageWorkedHours, formatHoursHm, formatWorkedHours, shiftStatusLabel,
 import AttendanceMonthlyGrid from "@/components/attendance-monthly-grid"
 import AttendanceYearlySummary from "@/components/attendance-yearly-summary"
 import { workerTypeLabel, isPaidDaily } from "@/lib/worker-types"
+import { todayIso } from "@/lib/date-utils"
 
 /**
  * Attendance over a period — the counterpart to the payroll summary, and the thing an estate
@@ -69,11 +70,15 @@ type Totals = {
   openDays: number
 }
 
-const firstOfMonth = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
-}
-const today = () => new Date().toISOString().slice(0, 10)
+// Derived from the same todayIso() as today(), deliberately. This used to read getFullYear()/
+// getMonth() off a local Date while today() read UTC, so the two halves of one date range
+// disagreed about which month it was -- for three and a half hours a day, for a viewer abroad.
+const firstOfMonth = () => `${todayIso().slice(0, 7)}-01`
+// IST, not UTC and not the viewer's zone. toISOString().slice(0,10) returned the UTC date, so
+// every caller below read YESTERDAY between 00:00 and 05:30 IST -- which is exactly when an
+// estate office is open, because the muster is a dawn job. lib/date-utils.ts has said "never use
+// toISOString().slice(0,10) for calendar dates" since it was written; this file was the holdout.
+const today = () => todayIso()
 
 type ReportView = "grid" | "yearly" | "hours"
 

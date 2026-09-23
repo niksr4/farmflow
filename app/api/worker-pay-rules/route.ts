@@ -8,6 +8,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { resolveRuleForDate, type PayRule } from "@/lib/pay-rules"
+import { todayIso } from "@/lib/date-utils"
 
 /**
  * The pay rules an estate writes for itself: retention, overtime, PF.
@@ -120,7 +121,11 @@ export async function GET(request: Request) {
 
     // The whole history is returned, not just the current rule, because "why was I held Rs 120 in
     // June" is the question this table exists to answer.
-    const asOfDate = asOf && DATE.test(asOf) ? asOf : new Date().toISOString().slice(0, 10)
+    //
+    // todayIso() is IST. This used to slice a UTC ISO string, which on a UTC server is the previous
+    // IST day until 05:30 -- so a rate effective today resolved to YESTERDAY's rule for anyone
+    // asking before dawn, which is exactly when the muster is done.
+    const asOfDate = asOf && DATE.test(asOf) ? asOf : todayIso()
     return NextResponse.json({
       success: true,
       rules,

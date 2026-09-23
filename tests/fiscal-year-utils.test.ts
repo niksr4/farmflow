@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest"
 import {
   getCurrentFiscalYear,
   getAvailableFiscalYears,
-  isDateInFiscalYear,
   getFiscalYearDateRange,
   type FiscalYear,
 } from "@/lib/fiscal-year-utils"
@@ -20,26 +19,20 @@ describe("getCurrentFiscalYear", () => {
   })
 })
 
-describe("isDateInFiscalYear", () => {
-  it("includes the boundary dates", () => {
-    expect(isDateInFiscalYear("2025-04-01", FY)).toBe(true)
-    expect(isDateInFiscalYear("2026-03-31", FY)).toBe(true)
-  })
-  it("includes a mid-year date and excludes outside dates", () => {
-    expect(isDateInFiscalYear("2025-12-15", FY)).toBe(true)
-    expect(isDateInFiscalYear("2025-03-31", FY)).toBe(false)
-    expect(isDateInFiscalYear("2026-04-01", FY)).toBe(false)
-  })
-  it("accepts Date objects too", () => {
-    expect(isDateInFiscalYear(new Date("2025-06-01"), FY)).toBe(true)
-  })
-})
-
 describe("getAvailableFiscalYears", () => {
   it("leads with an 'All time' option covering everything", () => {
     const years = getAvailableFiscalYears()
     expect(years[0].label).toBe("All time")
-    expect(isDateInFiscalYear("2025-07-01", years[0])).toBe(true)
+    /**
+     * Compared as YYYY-MM-DD strings, which is how FiscalYear stores its bounds.
+     *
+     * This used to call isDateInFiscalYear(), which was deleted on 2026-09-23 -- dead code with a
+     * UTC/IST boundary bug. Its own tests hid the bug by only ever passing date-only strings, where
+     * both sides parse to UTC midnight and the error cancels. Lexical string comparison has no
+     * timezone to get wrong, so this asserts the same thing without the trap.
+     */
+    expect(years[0].startDate <= "2025-07-01").toBe(true)
+    expect(years[0].endDate >= "2025-07-01").toBe(true)
   })
   it("lists real fiscal years in descending order after 'All time'", () => {
     const years = getAvailableFiscalYears()

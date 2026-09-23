@@ -50,16 +50,22 @@ export function getAvailableFiscalYears(): FiscalYear[] {
   ]
 }
 
-/**
- * Check if a date falls within a fiscal year
+/*
+ * isDateInFiscalYear was deleted on 2026-09-23. It was dead -- nothing but its own test ever
+ * called it -- and it was wrong in a way that would have surfaced the moment it was adopted:
+ *
+ *   const checkDate = typeof date === "string" ? new Date(date) : date
+ *   return checkDate >= new Date(fy.startDate) && checkDate <= new Date(fy.endDate)
+ *
+ * new Date("2026-03-31") is UTC midnight, so passing a Date for any real moment on 31 March --
+ * say 10:00 IST, which is 04:30Z -- compares GREATER than the year's end and falls outside it.
+ * Every instant on the last day of the fiscal year after 05:30 IST was excluded. Its test only
+ * ever passed date-only STRINGS, where both sides parse to UTC midnight and the bug cancels out.
+ *
+ * If a fiscal-year membership check is wanted later, write it against YYYY-MM-DD strings and
+ * compare them lexically -- FiscalYear already stores its bounds that way, and string comparison
+ * has no timezone to get wrong. Do not reinstate this signature.
  */
-export function isDateInFiscalYear(date: string | Date, fiscalYear: FiscalYear): boolean {
-  const checkDate = typeof date === "string" ? new Date(date) : date
-  const startDate = new Date(fiscalYear.startDate)
-  const endDate = new Date(fiscalYear.endDate)
-
-  return checkDate >= startDate && checkDate <= endDate
-}
 
 /**
  * Get the start and end date for a fiscal year
