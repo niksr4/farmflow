@@ -86,28 +86,37 @@ export async function getAccessibleLocationIds(sessionUser?: SessionUser): Promi
   )
   const userId = userRows?.[0]?.id
 
+  // No `users` row for this session's username+tenant: fail CLOSED (no locations), never open.
+  // requireSessionUser() falls back to trusting the JWT's own claims when its fresh DB lookup finds
+  // no row (e.g. the account was deleted while a session was still live -- NextAuth JWTs are not
+  // revoked server-side). Leaving `result` at its `null` default here would hand that stale
+  // session "unrestricted, every location in the tenant" -- the opposite of what a user-role
+  // account with no backing row should get.
+  if (!userId) {
+    setCachedLocationIds(cacheKey, [])
+    return []
+  }
+
   let result: string[] | null = null
 
-  if (userId) {
-    try {
-      const rows = await runTenantQuery(
-        sql,
-        tenantContext,
-        sql`
-          SELECT location_id, enabled
-          FROM user_locations
-          WHERE user_id = ${userId}
-        `,
-      )
-      result = rows?.length
-        ? rows.filter((row: any) => Boolean(row.enabled)).map((row: any) => String(row.location_id))
-        : null
-    } catch (error) {
-      if (!isMissingRelation(error, "user_locations")) {
-        throw error
-      }
-      result = null
+  try {
+    const rows = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT location_id, enabled
+        FROM user_locations
+        WHERE user_id = ${userId}
+      `,
+    )
+    result = rows?.length
+      ? rows.filter((row: any) => Boolean(row.enabled)).map((row: any) => String(row.location_id))
+      : null
+  } catch (error) {
+    if (!isMissingRelation(error, "user_locations")) {
+      throw error
     }
+    result = null
   }
 
   setCachedLocationIds(cacheKey, result)

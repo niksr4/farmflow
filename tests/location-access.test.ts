@@ -127,7 +127,30 @@ describe("getAccessibleLocationIds", () => {
   })
 })
 
+describe("getAccessibleLocationIds -- no backing users row", () => {
+  it("fails closed ([] = zero locations) when the session's username has no users row, instead of returning null (unrestricted)", async () => {
+    // Reachable via requireSessionUser()'s stale-JWT fallback: an account deleted while its
+    // session is still live keeps a role:"user" session with no matching users row.
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
+    const result = await getAccessibleLocationIds(user({ id: "u-deleted" }))
+    expect(result).toEqual([])
+    // Only the users lookup ran -- user_locations was never consulted for a user that doesn't exist.
+    expect(runTenantQuery).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe("requireLocationAccess", () => {
+  it("rejects a session whose user no longer has a users row -- fail closed, not unrestricted", async () => {
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
+
+    expect.assertions(1)
+    try {
+      await requireLocationAccess("tirtha-block-1", user({ id: "u-deleted-require" }))
+    } catch (error) {
+      expect(isLocationAccessError(error)).toBe(true)
+    }
+  })
+
   it("lets owner through for any location without consulting the allow-list", async () => {
     await expect(requireLocationAccess("citrus-grove-block-1", user({ role: "owner", id: "owner-1" }))).resolves.toMatchObject({
       role: "owner",
