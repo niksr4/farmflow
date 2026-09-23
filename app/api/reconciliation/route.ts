@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { evaluateLabourGaps } from "@/lib/reconciliation-checks"
 import { summariseLedgerDrift } from "@/lib/inventory-ledger"
+import { istTodayParts, todayIso } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -31,8 +32,12 @@ export async function GET(request: NextRequest) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantId = tenantContext.tenantId
     const { searchParams } = new URL(request.url)
-    const start = searchParams.get("start") || new Date(new Date().getFullYear(), 3, 1).toISOString().split("T")[0]
-    const end = searchParams.get("end") || new Date().toISOString().split("T")[0]
+    // Both defaults on the ESTATE's calendar. `start` derived the fiscal-year April from the HOST's
+    // year and `end` was a UTC ISO slice, so on a UTC server before 05:30 IST the window ended
+    // yesterday — and either side of 1 April it reconciled against the wrong financial year.
+    const { year } = istTodayParts()
+    const start = searchParams.get("start") || `${year}-04-01`
+    const end = searchParams.get("end") || todayIso()
 
     const checks: ReconciliationCheck[] = []
 

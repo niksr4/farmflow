@@ -1,3 +1,4 @@
+import { istTodayParts } from "@/lib/date-utils"
 /**
  * CSV assembly for the operations export.
  *
@@ -172,7 +173,7 @@ export const buildRainfallMatrixCsv = (
   }
 
   const dataYears = [...valuesByYear.keys()].sort((a, b) => a - b)
-  const years = rangeYears.length ? rangeYears : dataYears.length ? dataYears : [new Date().getFullYear()]
+  const years = rangeYears.length ? rangeYears : dataYears.length ? dataYears : [istTodayParts().year]
   const csvRows: string[] = []
 
   years.forEach((year, index) => {

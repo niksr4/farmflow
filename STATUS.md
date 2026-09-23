@@ -406,8 +406,12 @@ question about production, look there first — it has probably been asked befor
   own claims when its `users` lookup returns nothing, so a deleted account keeps a valid session
   **with its role** until the token expires. Sessions are **30 days**, so that window is a month,
   not a page load. #32 stops such a session gaining *locations*; it does not stop it being a
-  session. Not yet exploited — `users` shows **0 deletion requests and 0 anonymizations** of 11
-  rows, so the branch has never been taken in production.
+  session. `users` shows **0 deletion requests and 0 anonymizations** of 11 rows — but **that does
+  not establish the fallback has never run.** It constrains one route to a missing row; a hard
+  delete, a tenant-id mismatch or an id that drifted would all reach the same branch and leave
+  those counters at zero. Nothing records whether `requireSessionUser()` has taken it. If you want
+  to know, instrument the fallback rather than inferring from these counts — this file asserted
+  "the branch has never been taken" on 2026-09-23 and had no evidence for it.
 - **Repo visibility is a GitHub cost, not a Vercel one.** Vercel Hobby deploys private repos at no
   charge — visibility appears nowhere in the Hobby/Pro comparison. Going private costs **$4/mo at
   GitHub**, because the `main is production` ruleset is only free on *public* repos, and private

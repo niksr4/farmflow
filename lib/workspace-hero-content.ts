@@ -16,6 +16,7 @@ import {
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { formatDate } from "@/components/inventory-system/utils"
 import type { HeroContent, HeroStat, HeroChip } from "@/components/inventory-system/types"
+import { istTodayParts } from "@/lib/date-utils"
 
 // ── Reusable sub-types ───────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
 
   // ── Rainfall stats ────────────────────────────────────────────────────────
   // Rainfall is tracked by calendar year (logbook convention), not fiscal year.
-  const currentCalendarYear = String(new Date().getFullYear())
+  const currentCalendarYear = String(istTodayParts().year)
   const showRainfallMetrics = enabledModuleIds.has("rainfall")
   const latestRainLabel = rainfallHeroTotals.latestDate ? formatDate(rainfallHeroTotals.latestDate) : "No logs"
   const rainErr = rainfallHeroTotals.loading || rainfallHeroTotals.error

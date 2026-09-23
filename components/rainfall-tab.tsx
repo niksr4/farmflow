@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useLocale } from "@/components/locale-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, istTodayParts } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
@@ -163,7 +163,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     window.addEventListener("farmflow:scroll-to-section", handler)
     return () => window.removeEventListener("farmflow:scroll-to-section", handler)
   }, [])
-  const [exportStart, setExportStart] = useState(() => `${new Date().getFullYear()}-01-01`)
+  const [exportStart, setExportStart] = useState(() => `${istTodayParts().year}-01-01`)
   const [exportEnd, setExportEnd] = useState(() => format(new Date(), "yyyy-MM-dd"))
   const [exporting, setExporting] = useState(false)
 
@@ -388,7 +388,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
   const exportToCSV = () => {
     const rainfallValuesByYear = new Map<number, Map<string, { display: string; value: number; n: number }>>()
-    const currentYear = new Date().getFullYear()
+    const currentYear = istTodayParts().year
     const yearsWithData = new Set<number>()
 
     records.forEach((record) => {
@@ -1718,7 +1718,7 @@ function RainfallHeatmap({
                             "h-8 w-8 rounded-md flex items-end justify-center pb-0.5 mx-auto transition-colors",
                             rainfallColor(val),
                             // grey out future months in current year
-                            year === currentYear && mi > new Date().getMonth() ? "opacity-30" : "",
+                            year === currentYear && mi > istTodayParts().month - 1 ? "opacity-30" : "",
                           ].join(" ")}
                         >
                           {val !== null && val > 0 && (

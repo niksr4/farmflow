@@ -20,6 +20,7 @@ import {
 import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
 import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
 import { formatCurrency } from "@/lib/format"
+import { istTodayParts } from "@/lib/date-utils"
 
 type DigestResult = {
   tenantId: string
@@ -315,7 +316,7 @@ function buildAdviceSection(params: { rainfall: RecentRainfallSummary; weather: 
     last7DaysRainInches: params.rainfall.last7DaysInches,
     next3DaysForecastMm: params.weather.next3DaysPrecipMm,
     next3DaysChancePct: params.weather.next3DaysChancePct,
-    monthIndex: new Date().getMonth(),
+    monthIndex: istTodayParts().month - 1,
   })
   if (farmAdvice) {
     lines.push(`- ${farmAdvice.title}: ${farmAdvice.body}`)

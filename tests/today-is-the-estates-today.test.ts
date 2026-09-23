@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { execSync } from "node:child_process"
-import { istClock, todayIso } from "@/lib/date-utils"
+import { istClock, istTodayParts, todayIso } from "@/lib/date-utils"
+import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 /**
  * "What day is it" has ONE answer at a FarmFlow estate, and it is not the viewer's.
@@ -47,6 +48,33 @@ describe("the estate's today", () => {
     expect(istClock(new Date("2026-09-20T20:00:00Z"))).toBe("01:30")
   })
 
+  it("gives calendar parts on the estate's clock, with month 1-12", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-20T20:00:00Z")) // 2026-09-21 01:30 IST
+    expect(istTodayParts()).toEqual({ year: 2026, month: 9, day: 21 })
+    // 1-12, deliberately: a helper whose job is preventing date mistakes must not ship an
+    // off-by-one of its own. Date.getMonth() would say 8 here.
+    expect(istTodayParts().month).not.toBe(new Date().getMonth())
+  })
+
+  /**
+   * The two Major defects CodeRabbit found on PR #33, asserted as behaviour.
+   *
+   * Both are DECISIONS rather than labels, which is why they mattered: one picks the financial
+   * year every money report defaults to, the other picks which coffee season you are looking at.
+   */
+  it("rolls the fiscal year on the estate's 1 April, not the host's", () => {
+    vi.useFakeTimers()
+    // 19:00 UTC on 31 March == 00:30 IST on 1 April. The estate is in FY 26/27.
+    vi.setSystemTime(new Date("2026-03-31T19:00:00Z"))
+    expect(getCurrentFiscalYear().label).toBe("FY 26/27")
+    expect(getCurrentFiscalYear().startDate).toBe("2026-04-01")
+
+    // And it must NOT roll early: 18:00 UTC is 23:30 IST on 31 March, still FY 25/26.
+    vi.setSystemTime(new Date("2026-03-31T18:00:00Z"))
+    expect(getCurrentFiscalYear().label).toBe("FY 25/26")
+  })
+
   it("survives a missing or unparseable instant instead of throwing", () => {
     expect(istClock(null as unknown as string)).toBe("--:--")
     expect(istClock("not a date")).toBe("--:--")
@@ -87,7 +115,25 @@ describe("the estate's today", () => {
  * nothing, and passed against a deliberately broken tree. It was caught by tamper-testing it, not
  * by reading it. If you edit this regex, break something and watch it fail before trusting it.
  */
-const UTC_TODAY_SHAPE = String.raw`new Date\(\)\.toISOString\(\)\.slice\(0,[[:space:]]*10\)`
+/**
+ * FOUR SIGNATURES, ONE BUG. The 2026-09-21 sweep looked for two of these and shipped three fixes;
+ * CodeRabbit then found two Major defects on 09-23 wearing the third, in code that sweep had
+ * touched. `getCurrentFiscalYear()` returned FY 25/26 at 2026-03-31T19:00Z when the estate was
+ * already in FY 26/27, and the Season P&L preset offered last year's whole coffee season to a
+ * viewer west of IST on 1 October. Sixteen occurrences existed; the sweep found none of them.
+ *
+ * The lesson is in the regex, not the fix: a guard that enumerates the shapes it has already seen
+ * will keep passing while the same defect arrives in a new one.
+ */
+const WRONG_CLOCK_SHAPES = [
+  // "now", converted to UTC, sliced to a date.
+  String.raw`new Date\(\)\.toISOString\(\)\.slice\(0,[[:space:]]*10\)`,
+  // The same thing via split — missed by the first version of this guard.
+  String.raw`new Date\(\)\.toISOString\(\)\.split\(`,
+  // "now", read on the HOST's calendar: browser for a client component, UTC on Vercel.
+  String.raw`new Date\(\)\.(getFullYear|getMonth|getDate)\(\)`,
+]
+const UTC_TODAY_SHAPE = WRONG_CLOCK_SHAPES.join("|")
 
 /**
  * Comment lines are stripped, for the same reason check-dead-imports strips import lines: a guard
@@ -119,6 +165,8 @@ const ACCEPTED: Record<string, string> = {
   "app/api/weather/rainfall-context/route.ts": "forecast context window, not a recorded figure",
   "app/api/yield-forecast/route.ts": "named todayUtc and compared only against other UTC-parsed dates; enterprise-tier, 0 rows",
   "components/tenant-settings-page.tsx": "date in a download filename",
+  "components/inventory-system.tsx": "dates in two CSV download filenames",
+  "components/admin/utils.ts": "DEFAULT_WEEKLY_START, an admin date-picker seed the operator immediately overrides",
 }
 
 describe("nobody reintroduces the UTC-date-for-today shape", () => {

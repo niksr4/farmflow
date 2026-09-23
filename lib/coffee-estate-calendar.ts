@@ -1,3 +1,4 @@
+import { istTodayParts } from "@/lib/date-utils"
 /**
  * South Indian coffee estate agronomic calendar.
  *
@@ -229,7 +230,7 @@ export function getEstatePhaseForMonth(month: number): EstatePhase {
  * Returns the current estate phase based on today's date.
  */
 export function getCurrentEstatePhase(): EstatePhase {
-  return getEstatePhaseForMonth(new Date().getMonth() + 1)
+  return getEstatePhaseForMonth(istTodayParts().month)
 }
 
 /**
