@@ -20,7 +20,6 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -38,72 +37,24 @@ import posthog from "posthog-js"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { formatLocationLabel, resolveLocationIdFromLabel as resolveLocationIdFromLabelValue } from "@/lib/location-label"
 
-interface DispatchRecord {
-  id?: number
-  dispatch_date: string
-  location_id?: string | null
-  location_name?: string | null
-  location_code?: string | null
-  estate?: string | null
-  lot_id?: string | null
-  coffee_type: string
-  bag_type: string
-  bags_dispatched: number
-  kgs_received?: number | null
-  price_per_bag?: number
-  buyer_name?: string
-  notes: string | null
-  created_by: string
-}
-
-interface DispatchSummaryRow {
-  coffee_type: string
-  bag_type: string
-  bags_dispatched: number
-  kgs_received: number
-}
-
-interface LocationOption {
-  id: string
-  name: string
-  code: string
-}
-
-interface BagTotals {
-  arabica_dry_parchment_bags: number
-  arabica_dry_cherry_bags: number
-  robusta_dry_parchment_bags: number
-  robusta_dry_cherry_bags: number
-}
-
-type LocationScope = "all" | "location" | "legacy_pool"
-
-const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
-const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
-const STOCK_EPSILON = 0.0001
-const emptyBagTotals: BagTotals = {
-  arabica_dry_parchment_bags: 0,
-  arabica_dry_cherry_bags: 0,
-  robusta_dry_parchment_bags: 0,
-  robusta_dry_cherry_bags: 0,
-}
-const normalizeBagTypeKey = (value: string) => {
-  const normalized = value.toLowerCase().trim()
-  if (normalized.includes("cherry")) return "dry_cherry"
-  return "dry_parchment"
-}
-const formatBagTypeLabel = (value: string) => (normalizeBagTypeKey(value) === "dry_cherry" ? "Dry Cherry" : "Dry Parchment")
-const resolveDispatchRecordNominalKgs = (record: Pick<DispatchRecord, "bags_dispatched">, bagWeightKg: number) =>
-  (Number(record.bags_dispatched) || 0) * bagWeightKg
-const resolveDispatchRecordReceivedKgs = (record: Pick<DispatchRecord, "kgs_received" | "bags_dispatched">, _bagWeightKg: number) => {
-  const kgsReceivedValue = Number(record.kgs_received) || 0
-  if (kgsReceivedValue > 0) return kgsReceivedValue
-  return 0
-}
-
-type DispatchTabProps = {
-  showDataToolsControls?: boolean
-}
+import {
+  BAG_TYPES,
+  COFFEE_TYPES,
+  STOCK_EPSILON,
+  emptyBagTotals,
+  formatBagTypeLabel,
+  normalizeBagTypeKey,
+  resolveDispatchRecordNominalKgs,
+  resolveDispatchRecordReceivedKgs,
+} from "@/components/dispatch/coffee-bags"
+import type {
+  BagTotals,
+  DispatchRecord,
+  DispatchSummaryRow,
+  DispatchTabProps,
+  LocationOption,
+  LocationScope,
+} from "@/components/dispatch/types"
 
 export default function DispatchTab({ showDataToolsControls = false }: DispatchTabProps) {
   const { user } = useAuth()

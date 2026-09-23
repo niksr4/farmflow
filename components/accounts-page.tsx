@@ -48,88 +48,15 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 
-interface AccountActivity {
-  code: string
-  reference: string
-  labor_count?: number
-  expense_count?: number
-  assignment_count?: number
-}
-
-interface Activity {
-  code: string
-  reference: string
-}
-
-interface ActivitySuggestion {
-  code: string
-  reference: string
-}
-
-interface IntelligenceCodePattern {
-  code: string
-  reference: string
-  totalAmount: number
-  entryCount: number
-}
-
-interface IntelligenceDayPattern {
-  date: string
-  totalAmount: number
-  entryCount: number
-}
-
-interface AccountsIntelligence {
-  accountsPatterns: {
-    totalLabor: number
-    totalExpenses: number
-    totalSpend: number
-    laborSharePct: number
-    expenseSharePct: number
-    topCostCodes: IntelligenceCodePattern[]
-    mostFrequentCodes: IntelligenceCodePattern[]
-    highestLaborDays: IntelligenceDayPattern[]
-    highestExpenseDays: IntelligenceDayPattern[]
-    laborTrendPct: number | null
-    expenseTrendPct: number | null
-  } | null
-  highlights: string[]
-}
-
-type AccountsTabValue = "labour" | "expenses" | "activities" | "picking"
-type AccountsView = AccountsTabValue | "dashboard" | "export"
-
-// Picking is now its own top-level tab (see components/inventory-system/tab-items.ts), so it is
-// no longer offered as an Accounts sub-tab -- one home, not two. The flag stays as a kill switch
-// for the sub-tab path only; the crash it was added for was a date-serialisation bug in
-// app/api/picking-records/route.ts, fixed and covered by tests/date-column-serialisation.test.ts.
-const PICKING_TAB_DISABLED = true
-
-const normalizeAccountsTab = (
-  initialTab: AccountsTabValue | undefined,
-  showLaborManagement: boolean,
-  showPickingLog: boolean,
-): AccountsView => {
-  if (!initialTab) {
-    return "dashboard"
-  }
-  if (PICKING_TAB_DISABLED && initialTab === "picking") {
-    return "dashboard"
-  }
-  if (!showPickingLog && !showLaborManagement && initialTab === "picking") {
-    return "dashboard"
-  }
-  return initialTab
-}
-
-type AccountsPageProps = {
-  showDataToolsControls?: boolean // kept for API compatibility
-  requestedExport?: { requestId: number; format: LegacyAccountsExportFormat } | null
-  onRequestedExportHandled?: (requestId: number) => void
-  initialTab?: AccountsTabValue
-  showLaborManagement?: boolean
-  showPickingLog?: boolean
-}
+import { PICKING_TAB_DISABLED, normalizeAccountsTab } from "@/components/accounts/tab-routing"
+import type {
+  AccountActivity,
+  AccountsIntelligence,
+  AccountsPageProps,
+  AccountsView,
+  Activity,
+  ActivitySuggestion,
+} from "@/components/accounts/types"
 
 export default function AccountsPage({
   showDataToolsControls: _showDataToolsControls = false,

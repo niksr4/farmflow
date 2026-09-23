@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { formatCurrency } from "@/lib/format"
+import { istClock } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 
@@ -402,7 +403,11 @@ export default function BalanceSheetTab() {
                   </div>
                 </div>
               ))}
-              <p className="pt-1 text-right text-[10px] text-stone-400">Checked {new Date(reconciliation.checkedAt).toLocaleTimeString("en-IN")}</p>
+              {/* istClock, not toLocaleTimeString("en-IN"): checkedAt is a UTC instant from the
+                  server, and a locale picks the FORMAT, not the offset. Without an explicit zone
+                  this rendered in the viewer's -- so the same reconciliation read three and a half
+                  hours early on a phone abroad. */}
+              <p className="pt-1 text-right text-[10px] text-stone-400">Checked {istClock(reconciliation.checkedAt)} IST</p>
             </div>
           ) : (
             <p className="text-sm text-stone-400">Reconciliation data unavailable.</p>

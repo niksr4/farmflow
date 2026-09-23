@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { toLocalIso } from "@/lib/date-utils"
+import { toLocalIso, todayIso } from "@/lib/date-utils"
 import InPageNav from "@/components/in-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -129,8 +129,10 @@ export default function SeasonPlTab() {
     {
       label: "Last 12 months",
       range: {
+        // todayIso(), not toLocalIso(new Date()): the latter is the same viewer-local "today" by
+        // another door, and this range labels an estate's trading year.
         start: toLocalIso(new Date(Date.now() - 365 * 86400_000)),
-        end: toLocalIso(new Date()),
+        end: todayIso(),
       },
     },
     {

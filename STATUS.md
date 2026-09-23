@@ -3,72 +3,81 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-09-18.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-09-21.** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
 
 ---
 
-## Right now (2026-09-18)
+## Right now (2026-09-21)
 
-**Production is `main@885c8666`, deployed 2026-09-15. Nothing has shipped in three days**, while
-**seven PRs** have piled up behind it.
+**Production is `main@7b5ea920` and converged — zero open PRs, nothing stranded.** The seven-PR
+pileup described here on 09-18 was merged in conflict order on 09-19; tests went 2,349 → 2,519.
 
 ⚠ **On this project, merging IS deploying.** Verified rather than assumed: every production
-deployment in the Vercel API corresponds to a `main` commit, and the 06:49/06:52 deploys on 09-15
-match exactly when #21 and #20 were merged. There is no staging gate and no manual promotion —
-a merge is live in about three minutes. So "merge now, deploy later" is not a thing here, and the
-code word applies to the *merge*.
+deployment in the Vercel API corresponds to a `main` commit. There is no staging gate and no manual
+promotion — a merge is live in about three minutes. So "merge now, deploy later" is not a thing
+here, and the code word applies to the *merge*.
 
-| PR | What | Size | Merge notes |
-|---|---|---|---|
-| **#28** | HoneyFarm punch times read IST, not the viewer's zone | 5 files | **the only live customer bug.** Merge first |
-| #23 | public repo carried a working owner password hash | 3 files | no conflicts |
-| #27 | scanner: invoice nullable-clear + dedupe | 3 files | `scanner/**` |
-| #24 | scanner: count-dependent copy | 4 files | `scanner/**`, conflicts with #26 |
-| #22 | scanner: billing cycle, PII, import dates | 10 files | `scanner/**` |
-| #25 | decomposition, 9 passes | 33 files | conflicts with #26 |
-| **#26** | dead-import CI gate + 78 removed | 46 files | **merge LAST** — absorbs both conflicts |
+What is actually pressing, in order:
 
-Two real conflicts only: `#24 × #26` on `season-pl-tab.tsx`, `#25 × #26` on `inventory-system.tsx`.
-Putting #26 last means one branch to reconcile instead of two.
+| | What | Why now |
+|---|---|---|
+| 1 | **Laxmi has stopped recording** | Logging in daily, last write 15 Sep. See the tenants section — this is a phone call, not a bug |
+| 2 | **Picking day-cap trigger** | `picking_records` is still 0 rows, so this is a schema change. After the first pick it becomes a data reconciliation. Harvest is ~6 weeks out |
+| 3 | **Vercel Hobby forbids commercial use** | Hobby is "non-commercial, personal use only" and we are a live multi-tenant SaaS. Enforcement is an account pause. Must be resolved before Razorpay goes live |
+| 4 | **Repo is public** | Not required by Vercel — private costs $0 there. It costs $4/mo at GitHub, because the `main is production` ruleset is only free on public repos. See the note under "Known and deliberately not fixed" |
+
+Rollback for anything: `vercel alias set <previous-deployment-id> www.thefarmflow.in`.
 
 ⚠ **Every scanner PR after the first needs `git merge origin/main`.** `check-branch-base.mjs` sets
 `SCANNER_ALLOWANCE = 0`, so the moment `main` moves, the remaining `scanner/**` branches fail their
-base check. Human branches get an allowance of 40 and are unaffected. Three scanner PRs = two
-unavoidable re-merges.
-
-Rollback for any of it: `vercel alias set <previous-deployment-id> www.thefarmflow.in`.
+base check. Human branches get an allowance of 40 and are unaffected. N scanner PRs = N−1 re-merges.
 
 ---
 
 ## The tenants
 
-| | Estates / blocks | Store | Muster | Writer | Waiting on |
+Usage measured against production **2026-09-21**. "Active days" counts distinct dates with any
+write across muster, labour, stock, expenses or rainfall — a better measure than row counts, which
+flatter whoever has the most workers.
+
+| | Estates / blocks | Writer | Active days Jul → Aug → Sep | Last write | State |
 |---|---|---|---|---|---|
-| **Medappa** | Citrus Grove 13, Tirtha 8 | one each | **live 19 Aug** | Gagan Rai | nothing. 30 workers all rated, 150 allocations, 5 of the last 7 days |
-| **Laxmi** | Laxmi, 5 blocks | 1 | **live 25 Aug** | Nandu | nothing. 21 workers all rated, **6 of the last 7 days** — the day-1 worry is closed |
-| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | 1 shared | **live 24 Aug** | Dad (`KAB123`) | 36 workers, every daily worker rated, 26 allocations. Punch times read shifted while he is abroad — fix in **PR #28**, see below |
-| **Seshagiri** | Seshagiri, 20 blocks / 94.1 ac | 1 | **live 24 Aug** | — | nothing technical. 27 workers, all fingerprinted — **has yet to record a day** |
-| greenvalley | — | — | — | — | one login ever, no records. Not a tenant |
+| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | Dad (`KAB123`) | 27 → 26 → 18 | **today** | The only tenant using FarmFlow as a farm system: muster, labour, stock, expenses, rainfall |
+| **Seshagiri** | Seshagiri, 20 blocks / 94.1 ac | — | 3 → 8 → **17** | **today** | **Started, and ramping.** 577 attendance, 543 allocations |
+| **Medappa** | Citrus Grove 13, Tirtha 8 | Gagan Rai | 1 → 29 → 17 | 19 Sep | Muster and labour only. 1,039 attendance, 816 allocations |
+| **Laxmi** | Laxmi, 5 blocks | Nandu | 28 → 24 → **12** | **15 Sep** | ⚠ **Stalling.** Logging in daily, writing nothing |
+| greenvalley | — | — | — | never | one login ever, no records. Not a tenant |
 
 `Estate Mock` is the demo tenant, not a customer.
 
 ### What is actually blocking what
 
-**All four are cut over, and three are recording.** Nothing is blocked on a customer any more —
-what is left is one tenant who has not started and a pile of our own work.
+**All four are cut over and all four are recording.** The legacy labour write path is dead
+everywhere — HoneyFarm stopped 22 Aug, Laxmi 24 Aug, Medappa 18 Aug — so **deleting it is now
+unblocked**, which it was not on 09-18.
 
-```
-Seshagiri: records a first day  ──▶  delete the old labour write path
-```
+⚠ **Laxmi is the live concern, and it is not a technical one.**
 
-**Seshagiri** is the only open question and it is not a technical one. They have 27 workers, every
-one with a fingerprint id, 20 blocks and 94.1 acres — the first real acreage in the product. They
-have recorded **zero** days. They were blocked on a roster for the two days after their 24 Aug
-cutover, which is on us, and that is now fixed; whether they use it is the thing to watch. Do not
-read the silence as a bug before checking `labour_assignments` — the muster works, nobody has
-opened it.
+- **109 logins in 60 days, the most of any tenant, last login today.**
+- Last actual write: **15 September.** Active days fell 28 → 24 → 12. Expenses stopped 26 Aug.
+- Someone opens the app daily and enters nothing. That is a stall, not dormancy.
+
+**The dormancy gate cannot see this.** `lib/server/agents/tenant-dormancy.ts` defines activity as
+"last login **OR** last human data write, whichever is newer" — deliberately, because sessions are
+30 days and gating on login alone misfired on Medappa in August. But the same rule means a tenant
+who logs in daily and writes nothing reads as fully active forever. The one tenant actually in
+trouble is the one the monitoring is structurally blind to. Do not add a "no writes" probe without
+re-reading why the OR is there; the answer is probably a separate signal, not a changed gate.
+
+**Seshagiri's "has yet to record a day" was true on 09-18 and is now wrong.** They went 3 → 8 → 17
+active days and wrote today. The thing to watch there has moved on: they still owe stock, a year of
+rainfall, and kg-per-bag (see "Owed to people").
+
+**Medappa's writer has not re-authenticated since 7 August** yet wrote through 19 September. The
+session has outlived the login trail. Harmless until it expires, at which point Gagan Rai hits a
+login wall with no warning — worth pre-empting rather than debugging live.
 
 **No daily worker anywhere is missing a rate.** Six people across HoneyFarm and Seshagiri have no
 `daily_rate` and all six are `staff`, `staff_pf` or `proprietor` — paid monthly, so a daily rate
@@ -84,33 +93,53 @@ Sidapur is an enrolment decision for the scanners; the app neither knows nor nee
 
 ## Where each tab stands
 
-Row counts are production, all tenants, **2026-09-02**. "Last" is the newest record, which is the
+Row counts are production, all tenants, **2026-09-21**. "Last" is the newest record, which is the
 only honest measure of whether a tab is alive — a tab with rows and a March date is a tab somebody
 used once.
 
 | Tab | Rows | Last | State |
 |---|---|---|---|
-| **Muster** | 1,789 attendance · 744 allocations | **today** | The load-bearing tab. Three tenants write it daily |
-| **Rain & Weather** | 464 | **yesterday** | Healthy. Per-estate recording added 2 Sep |
-| **Costs** (labour + expenses) | 550 expenses | 28 Aug | Healthy |
-| **Stock & Inventory** | 59 items · 466 moves | 29 Aug | Healthy |
-| **Scanner** (in Muster) | 64 punches | **today** | HoneyFarm's terminal live 1 Sep. First real estate |
-| **Picking Log** | **0** | never | Enabled for all tenants 2 Sep. Nobody has used it yet |
+| **Muster** | 3,222 attendance · 2,157 allocations | **today** | The load-bearing tab. **All four** tenants write it |
+| **Scanner** (in Muster) | 808 punches | **today** | HoneyFarm's terminal. 64 → 808 in three weeks |
+| **Costs** (labour + expenses) | 590 expenses | 18 Sep | Healthy, but HoneyFarm is ~all of it |
+| **Stock & Inventory** | 60 items · 502 moves | 18 Sep | Healthy, but HoneyFarm is ~all of it |
+| **Rain & Weather** | 469 | 10 Sep | Healthy. Gaps are dry days, not lapses — see below |
 | **Payroll** (in Muster) | — | — | Reads the four sources. Monthly salaries fixed 2 Sep |
-| Processing | 78 | **28 Jan** | Dormant seven months. Harvest will decide |
-| Dispatch | 20 | 23 Mar | Dormant |
-| Sales | 19 | 26 Mar | Dormant |
-| Other Sales | 2 | 18 Mar | Dormant |
+| **Picking Log** | **0** | never | **Never used, including last harvest.** Next season is its first test |
+| Processing | 78 | 28 Jan | Out of season, not dormant — see below |
+| Dispatch | 20 | 23 Mar | Out of season |
+| Sales | 19 | 26 Mar | Out of season |
+| Other Sales | 2 | 18 Mar | Out of season |
 | Journal | 1 | 9 May | Effectively unused |
 | Worker Ledger | **0** | never | **Not unadopted — the subtab was switched off.** Re-enabled 3 Sep |
 | Receivables | **0** | never | Enterprise tier, no tenant on it |
 | Curing · Quality · Documents | **0** | never | Enterprise tier. See "Built But Unadopted" in CLAUDE.md |
 
-**The shape of the year is in that table.** Everything with a date this week is people-and-money;
-everything dormant is crop-and-customer, and stopped in March when last season's harvest ended.
-That is seasonality, not abandonment — but it means **nothing downstream of the field has been
-exercised in seven months**, and the first estate to process a bag this year will be finding bugs
-nobody has hit since January. Worth a deliberate pass before the harvest rather than during it.
+### The crop half is out of season, not abandoned
+
+This file previously called Processing/Dispatch/Sales "dormant". The month-by-month shape says
+otherwise, and the distinction decides whether you investigate or wait:
+
+| | Oct 25 | Nov | Dec | Jan 26 | Feb | Mar | Apr–Sep |
+|---|---|---|---|---|---|---|---|
+| Processing | 1 | 18 | 29 | 30 | 0 | 0 | **0** |
+| Dispatch | 0 | 0 | 2 | 8 | 3 | 7 | **0** |
+| Sales | 0 | 0 | 2 | 8 | 3 | 6 | **0** |
+| Pepper | 0 | 0 | 0 | 3 | 19 | 0 | **0** |
+| **Picking** | **0** | **0** | **0** | **0** | **0** | **0** | **0** |
+
+That is the Coorg calendar exactly: harvest Nov–Jan, dispatch and sales Dec–Mar, pepper Jan–Feb.
+Nothing is broken; the season ended.
+
+**Two things follow, and only one of them can wait.**
+
+1. **Nothing downstream of the field has been exercised in eight months.** The first estate to
+   process a bag this year will be finding bugs nobody has hit since January. Worth a deliberate
+   pass *before* the harvest rather than during it.
+2. ⚠ **Picking has never been used at all** — zero rows in every month, including last season. Its
+   first real test is ~6 weeks away. **The day-cap trigger work is cheap only while the table is
+   empty**: today it is a schema change, after the first pick it is a data reconciliation. That
+   window closes in November and does not reopen.
 
 ### Per-tab, what is actually next
 
@@ -122,8 +151,13 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
   seeded in all five tenants and used **zero** times, because there is nowhere to mark it. This is
   what keeps the LOP/CL/PL/SL columns blank on HoneyFarm's monthly report (`lib/attendance-monthly.ts`
   says so at the top). Biggest remaining gap.
-- 135 worker-days across three estates are still booked over one day, 27 Aug – 1 Sep. Writers are
-  correcting them by hand; the red "2 days" badge on the row is how they find them.
+- **16 worker-days are still booked over one day** (Seshagiri 9, Medappa 7), all between 27 and 31
+  Aug. Down from 135 across three estates on 09-18 — writers are correcting them by hand and the
+  red "2 days" badge on the row is how they find them, so this is closing on its own. Re-count with
+  `node scripts/dev/overbooked-batches.mjs` rather than trusting this number.
+- **249 depletions are valued at ₹0** (HoneyFarm 221, Seshagiri 27, Estate Mock 1) — stock leaving
+  the store for free because the item was never priced. Related to the unpriced-inventory ask in
+  "Owed to people"; `node scripts/dev/unpriced-stock-report.mjs` lists them.
 - The muster's collapsed device panel is now a strict subset of the Scanner tab. Retire it.
 
 **Payroll** — three rules short of usable. Placement: [docs/PICKING-PAYROLL-PLAN.md](docs/PICKING-PAYROLL-PLAN.md).
@@ -167,6 +201,25 @@ Interior — retention, advances, the effective-dated rule model and the full sc
 - Per-estate recording, one figure a day however many gauges report, and nine consumers corrected.
 - Medappa's 29 existing records stay "whole property" at their request; 1 January is their start
   line for accounts and costing.
+- ⚠ **A missing day is not a recorded zero, and it is not evidence of one either.** Confirmed
+  against production 2026-09-21: **all 469 rainfall rows across all five tenants have a depth
+  greater than zero. Nobody has ever recorded a dry day**, and the UI does not ask them to.
+  **What that proves is one-directional.** It shows dry days are never written down. It does *not*
+  show that every date without a row was dry — a wet day nobody got round to entering has exactly
+  the same representation, which is none. So a gap is an **unknown**, and the two readings cannot
+  be told apart from inside the database.
+  Practically: treat a gap as zero when totalling, because that is the only arithmetic available
+  and it matches how the estates use the screen. Do **not** treat it as confirmation of the
+  weather. HoneyFarm going from 25 rows in August to none in September is *consistent with* the
+  monsoon ending and equally consistent with the writer stopping; September in Coorg still rains.
+  This file asserted the first reading on 2026-09-21 and was wrong to — the evidence never
+  supported it. Ask the estate, or check an outside source, before saying which it was.
+- **What that costs you: any per-day average must divide by calendar days, never by row count.**
+  Dividing a total by the number of rows returns the average of *rainy* days, which is a larger
+  number that looks plausible and is never right. `lib/rainfall.ts` is clean today —
+  `collapseRainfallByDate` averages **gauges on one date** (correct, rain is a depth, and
+  `gaugeCount` is the divisor), and `totalRainfallBetween` is a sum, which stays correct when dry
+  days are absent. The hazard is the next consumer, not the current ones.
 
 **Processing / Dispatch / Sales** — dormant, and the chain is not connected.
 - `processing_records.crop_today` is the picked weight and the head of the whole downstream chain,
@@ -193,9 +246,13 @@ for every possible input.
   27 people with fingerprint ids, 20 blocks with acres. Still open: current stock, the past year of
   rainfall, and **kg per bag** for their 5 bag items, which is the last thing holding `bags` in the
   schema.
-- **Seshagiri — what do they open it for?** Daily logins for months with nothing written. Now that
-  the roster and blocks are in, the same question decides whether they start recording or keep
-  reading; whatever they are looking at is probably the thing to build on.
+- ~~**Seshagiri — what do they open it for?**~~ **Answered 2026-09-21: they record now.** 3 → 8 →
+  17 active days across Jul/Aug/Sep, writing today. The roster and blocks landing is what did it.
+- ⚠ **Laxmi — what are they opening it for?** The same question, moved. 109 logins in 60 days,
+  last login today, **last write 15 September**. This is the most engaged tenant by login and the
+  least by output, which is either a person who has switched to reviewing, a writer who has changed,
+  or somebody stuck on a screen. Ask before building anything: the audit log will show which tabs
+  the sessions hit, which separates "stuck" from "just reading".
 - **Nandu — the crew shape.** Rs 650 to Rs 1,300 across six codes, with two different shade rates on
   one day. One crew pricing skilled work differently, or several crews? Decides one gang row or four.
 - **HoneyFarm / Laxmi — inventory prices.** Sheets on the Desktop in `farmflow-stabilization/`,
@@ -336,3 +393,25 @@ question about production, look there first — it has probably been asked befor
 - **Lot traceability is dormant** — 0 rows across all tenants. Check adoption before ranking any
   finding there.
 - **Migration 90** is recorded as applied on prod without its DELETE having run. Correct. Leave it.
+- ✅ ~~**Location access fails open for a session with no `users` row**~~ — **the location half is
+  FIXED**, PR #32, merged 2026-09-23. `getAccessibleLocationIds()` now returns `[]` (no access) for
+  a non-owner/admin session whose username has no tenant-scoped `users` row, instead of leaving
+  `result` at its `null` default. Owner and admin still return `null` (unrestricted) from an
+  earlier branch that never reaches the lookup, and a user who *does* have a row but no
+  `user_locations` entries still returns `null` — which matters, because that table has **0 rows
+  across all tenants**, so any fix that conflated the two would have locked out all three writers.
+  It does not.
+- ⚠ **The auth half is still open, and it is the more general defect.**
+  [`lib/auth-server.ts:157-183`](lib/auth-server.ts#L157-L183) falls through to trusting the JWT's
+  own claims when its `users` lookup returns nothing, so a deleted account keeps a valid session
+  **with its role** until the token expires. Sessions are **30 days**, so that window is a month,
+  not a page load. #32 stops such a session gaining *locations*; it does not stop it being a
+  session. Not yet exploited — `users` shows **0 deletion requests and 0 anonymizations** of 11
+  rows, so the branch has never been taken in production.
+- **Repo visibility is a GitHub cost, not a Vercel one.** Vercel Hobby deploys private repos at no
+  charge — visibility appears nowhere in the Hobby/Pro comparison. Going private costs **$4/mo at
+  GitHub**, because the `main is production` ruleset is only free on *public* repos, and private
+  repos also meter Actions (measured: ~1,068 min/month against a 2,000 Free / 3,000 Pro allowance).
+  Separately and more seriously, **Hobby is "non-commercial, personal use only"** per Vercel's own
+  fair-use guidelines, which a live multi-tenant SaaS is not. Enforcement is an account pause.
+  Resolve before Razorpay enforcement goes live.
