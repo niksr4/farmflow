@@ -149,7 +149,11 @@ const findVariableForm = (src: string): number[] => {
   const lines = src.split("\n")
   const out: number[] = []
   lines.forEach((line, i) => {
-    const decl = /\b(?:const|let|var)\s+(\w+)\s*=\s*new Date\(\)\s*$/.exec(line.trim().replace(/;$/, ""))
+    // The `: Date` is optional and load-bearing. Without it, `const now: Date = new Date()` slips
+    // past and the guard silently accepts the very access it exists to reject.
+    const decl = /\b(?:const|let|var)\s+(\w+)\s*(?::\s*Date\s*)?=\s*new Date\(\)\s*$/.exec(
+      line.trim().replace(/;$/, ""),
+    )
     if (!decl) return
     const name = decl[1]
     const window = lines.slice(i + 1, i + 15).join("\n")
@@ -193,16 +197,26 @@ const ACCEPTED: Record<string, string> = {
   "components/admin/utils.ts": "DEFAULT_WEEKLY_START, an admin date-picker seed the operator immediately overrides",
 }
 
-/** Same rule, variable form. THIS LIST MUST ONLY EVER SHRINK. */
-const VARIABLE_FORM_ACCEPTED = [
+/**
+ * Same rule, variable form — exempting OCCURRENCES, not files.
+ *
+ * A bare list of paths would wave through a *new* offender in an already-listed file, and the
+ * staleness twin would still pass because the original occurrence is untouched. That is the
+ * "hand-kept list of files is how the next instance hides" failure from CLAUDE.md, and the first
+ * version of this list had it. Counts are used rather than line numbers so the guard survives
+ * ordinary edits above the site while still failing the moment a file gains one more.
+ *
+ * THESE NUMBERS MUST ONLY EVER GO DOWN.
+ */
+const VARIABLE_FORM_ACCEPTED: Record<string, number> = {
   // Demo tenant only — never reaches a customer's books.
-  "app/api/admin/seed-tenant/route.ts",
+  "app/api/admin/seed-tenant/route.ts": 2,
   // Enterprise tier, 0 rows in production. Revisit the day a tenant is put on it.
-  "components/receivables-tab.tsx",
+  "components/receivables-tab.tsx": 1,
   // Billing is built but not enforcing; no invoice has ever been dated by this.
-  "lib/billing.ts",
+  "lib/billing.ts": 1,
   // Derives from a season end date that is already an explicit YYYY-MM-DD, not from "now".
-  "app/api/dashboard/season-projection/route.ts",
+  "app/api/dashboard/season-projection/route.ts": 1,
   /**
    * Correct, but only because of WHEN it runs. The cron fires Monday 02:00 UTC = 07:30 IST, so the
    * UTC weekday and the IST weekday agree at that instant and "last Monday" comes out right. It
@@ -210,8 +224,8 @@ const VARIABLE_FORM_ACCEPTED = [
    * than changed, because touching digest windowing to fix a bug that cannot currently fire is the
    * worse trade — but if you reschedule that cron, fix this first.
    */
-  "lib/server/agents/weekly-digest-agent.ts",
-]
+  "lib/server/agents/weekly-digest-agent.ts": 1,
+}
 
 describe("nobody reintroduces the UTC-date-for-today shape", () => {
   it("no NEW source file derives today by slicing a UTC ISO string", () => {
@@ -219,36 +233,39 @@ describe("nobody reintroduces the UTC-date-for-today shape", () => {
     expect(unexpected, "use todayIso() from lib/date-utils -- it is IST, see the docstring there").toEqual([])
   })
 
-  it("no NEW source file reads the host calendar off a `const now = new Date()`", () => {
+  const variableFormCounts = (): Record<string, number> => {
     const files = execSync(`git ls-files '*.ts' '*.tsx'`, { encoding: "utf8" })
       .trim()
       .split("\n")
       .filter((f) => !f.startsWith("tests/") && /^(app|components|lib|hooks)\//.test(f))
 
-    const offenders = files.flatMap((file) => {
-      const lines = findVariableForm(readFileSync(resolve(__dirname, "..", file), "utf8"))
-      return lines.map((line) => `${file}:${line}`)
-    })
+    const counts: Record<string, number> = {}
+    for (const file of files) {
+      const n = findVariableForm(readFileSync(resolve(__dirname, "..", file), "utf8")).length
+      if (n > 0) counts[file] = n
+    }
+    return counts
+  }
 
-    const unexpected = offenders.filter((hit) => !VARIABLE_FORM_ACCEPTED.some((f) => hit.startsWith(`${f}:`)))
-    expect(unexpected, "derive the date from istTodayParts() or todayIso() — lib/date-utils").toEqual([])
+  it("no source file reads the host calendar off a `const now = new Date()` beyond what is accepted", () => {
+    const counts = variableFormCounts()
+    const over = Object.entries(counts)
+      .filter(([file, n]) => n > (VARIABLE_FORM_ACCEPTED[file] ?? 0))
+      .map(([file, n]) => `${file}: ${n} (accepted ${VARIABLE_FORM_ACCEPTED[file] ?? 0})`)
+    expect(over, "derive the date from istTodayParts() or todayIso() — lib/date-utils").toEqual([])
   })
 
-  it("every VARIABLE-FORM exemption is still a real occurrence", () => {
-    // The twin of the check below, and it was missing until a tamper test went green that should
-    // have failed. An allowlist without an expiry is a permanent hole: fix the file, forget the
-    // entry, and the next genuine offender in it is silently waved through.
-    const stillThere = VARIABLE_FORM_ACCEPTED.filter((file) => {
-      try {
-        return findVariableForm(readFileSync(resolve(__dirname, "..", file), "utf8")).length > 0
-      } catch {
-        return false
-      }
-    })
-    expect(
-      VARIABLE_FORM_ACCEPTED.filter((f) => !stillThere.includes(f)),
-      "these no longer match — delete them from VARIABLE_FORM_ACCEPTED",
-    ).toEqual([])
+  it("every VARIABLE-FORM exemption is still needed, at the count claimed", () => {
+    // The twin of the check below. It was missing entirely until a tamper test went green that
+    // should have failed, and then it exempted whole FILES — so a second offender in an already
+    // listed file was accepted and the staleness check still passed, because the first one was
+    // untouched. Comparing counts closes both ends: fix one and this fails, add one and the
+    // check above fails.
+    const counts = variableFormCounts()
+    const stale = Object.entries(VARIABLE_FORM_ACCEPTED)
+      .filter(([file, n]) => (counts[file] ?? 0) < n)
+      .map(([file, n]) => `${file}: accepted ${n}, found ${counts[file] ?? 0}`)
+    expect(stale, "lower the number (or delete the entry) in VARIABLE_FORM_ACCEPTED").toEqual([])
   })
 
   it("every accepted entry is still a real occurrence", () => {
