@@ -11,6 +11,7 @@ import { getClaudeClient, isClaudeConfigured, CLAUDE_HAIKU } from "@/lib/server/
 import { fetchWithTimeout } from "@/lib/server/http"
 import { buildWeatherFarmAdvice } from "@/lib/coffee-agronomy"
 import { readResponseCache, writeResponseCache } from "@/lib/server/response-cache"
+import { istTodayParts } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -704,7 +705,7 @@ Respond ONLY with a JSON array, no prose, no markdown:
             weatherData?.forecast?.forecastday ?? []
           const precipMm = forecastDays.map((d) => d.day?.totalprecip_mm ?? 0)
           const chancePct = forecastDays.map((d) => d.day?.daily_chance_of_rain ?? 0)
-          const monthIndex = new Date().getMonth()
+          const monthIndex = istTodayParts().month - 1
           farmAdvice = buildWeatherFarmAdvice({
             last7DaysRainInches,
             next3DaysForecastMm: precipMm,

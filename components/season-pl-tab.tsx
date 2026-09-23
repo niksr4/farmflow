@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { toLocalIso, todayIso } from "@/lib/date-utils"
+import { istTodayParts, todayIso } from "@/lib/date-utils"
 import InPageNav from "@/components/in-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -79,18 +79,24 @@ function CostBar({ label, amount, pct }: { label: string; amount: number; pct: n
 
 type DateRange = { start: string; end: string }
 
+/**
+ * Which coffee season the estate is in — decided on the ESTATE's calendar.
+ *
+ * This read `now.getMonth()` off a host-local Date, so on 1 October at 00:30 IST a viewer west of
+ * IST was still on 30 September and got **last year's entire season**. A whole season wrong, not a
+ * day, because the month drives a branch rather than a label.
+ *
+ * The bounds are built as YYYY-MM-DD strings rather than Date objects on purpose: a Date carries a
+ * zone that has to be stripped again on the way out, and that round trip is what this function got
+ * wrong in the first place.
+ */
 function getCurrentSeasonRange(): DateRange {
-  const now = new Date()
-  const year = now.getFullYear()
-  // Coffee season in India: roughly Oct → Mar
-  const seasonStart = now.getMonth() >= 9
-    ? new Date(year, 9, 1)     // Oct this year
-    : new Date(year - 1, 9, 1) // Oct last year
-  const seasonEnd = new Date(seasonStart)
-  seasonEnd.setMonth(seasonEnd.getMonth() + 6)
+  const { year, month } = istTodayParts() // month is 1-12
+  // Coffee season in India: roughly Oct → Mar.
+  const startYear = month >= 10 ? year : year - 1
   return {
-    start: toLocalIso(seasonStart),
-    end: toLocalIso(seasonEnd),
+    start: `${startYear}-10-01`,
+    end: `${startYear + 1}-04-01`,
   }
 }
 
@@ -129,17 +135,21 @@ export default function SeasonPlTab() {
     {
       label: "Last 12 months",
       range: {
-        // todayIso(), not toLocalIso(new Date()): the latter is the same viewer-local "today" by
-        // another door, and this range labels an estate's trading year.
-        start: toLocalIso(new Date(Date.now() - 365 * 86400_000)),
+        // BOTH ends on the estate's calendar. The end was already todayIso() (IST) while the start
+        // was toLocalIso(new Date(...)) (viewer-local), so the pair could straddle two different
+        // "todays". Anchoring the subtraction to the IST date at T00:00:00Z keeps the zone out of
+        // the arithmetic entirely — the same UTC-anchored pattern lib/payroll-period.ts uses.
+        start: new Date(Date.parse(`${todayIso()}T00:00:00Z`) - 365 * 86400_000).toISOString().slice(0, 10),
         end: todayIso(),
       },
     },
     {
       label: "Calendar year",
       range: {
-        start: `${new Date().getFullYear()}-01-01`,
-        end: `${new Date().getFullYear()}-12-31`,
+        // istTodayParts(), not new Date().getFullYear(): on 1 January at 00:30 IST a viewer west of
+        // IST is still on 31 December and would be offered LAST year as "this calendar year".
+        start: `${istTodayParts().year}-01-01`,
+        end: `${istTodayParts().year}-12-31`,
       },
     },
   ]

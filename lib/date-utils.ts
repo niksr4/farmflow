@@ -200,6 +200,26 @@ export function todayIso(): string {
 }
 
 /**
+ * Today's year / month / day **at the estate**, as numbers.
+ *
+ * `month` is 1-12, not the 0-11 that Date.getMonth() returns. That is deliberate: a helper whose
+ * whole job is to stop timezone mistakes should not also carry a off-by-one trap.
+ *
+ * THE THIRD SIGNATURE OF THE SAME BUG. `new Date().getMonth()` / `.getFullYear()` reads the HOST's
+ * calendar — the browser's for a client component, UTC for anything on Vercel. It is the same
+ * defect as toISOString().slice(0,10) and toLocaleTimeString() without a zone, wearing different
+ * clothes, and a sweep for the other two on 2026-09-21 missed all 16 occurrences of this one.
+ *
+ * It bites hardest where the value is a DECISION rather than a label: getCurrentFiscalYear()
+ * returned FY 25/26 on a UTC host at 2026-03-31T19:00Z, when the estate was already in FY 26/27,
+ * and the Season P&L preset offered last year's coffee season to a viewer west of IST on 1 October.
+ */
+export function istTodayParts(): { year: number; month: number; day: number } {
+  const [year, month, day] = todayIso().split("-").map(Number)
+  return { year, month, day }
+}
+
+/**
  * An instant rendered as an IST wall clock, "HH:MM".
  *
  * toLocaleTimeString() WITHOUT an explicit timeZone renders in the viewer's zone -- and passing a

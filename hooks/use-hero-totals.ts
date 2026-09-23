@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { ExceptionSummaryAlert } from "@/components/inventory-system/types"
 import { collapseRainfallByDate } from "@/lib/rainfall"
+import { istTodayParts } from "@/lib/date-utils"
 
 type FiscalYear = { startDate: string; endDate: string }
 
@@ -402,7 +403,7 @@ export function useHeroTotals({
         const records = Array.isArray(json.records) ? json.records : []
         // Rainfall is tracked by calendar year (logbook convention), not fiscal year,
         // to match the Rain & Weather tab's "Annual total" figure.
-        const currentYear = String(new Date().getFullYear())
+        const currentYear = String(istTodayParts().year)
         // Days, not rows -- and each day counted once. The hero's "Annual total" has to agree with
         // the Rain & Weather tab, and the tab collapses two gauges into one figure (lib/rainfall.ts).
         const thisYear = collapseRainfallByDate(records).filter((d) => d.isoDate.startsWith(currentYear))

@@ -1,3 +1,5 @@
+import { istTodayParts } from "@/lib/date-utils"
+
 export interface FiscalYear {
   label: string
   startDate: string // YYYY-MM-DD
@@ -5,13 +7,17 @@ export interface FiscalYear {
 }
 
 /**
- * Get the current fiscal year based on today's date
+ * Get the current fiscal year based on the ESTATE's date
  * Fiscal year runs from April 1 to March 31
+ *
+ * IST, not the host's calendar. This read `new Date().getMonth()` / `.getFullYear()`, so at
+ * 2026-03-31T19:00:00Z — when the estate is already into 1 April and therefore FY 26/27 — a UTC
+ * server or any viewer west of IST still saw March and returned **FY 25/26**. That is the default
+ * financial year for the balance sheet, the P&L and the season reports, so the whole app would
+ * open on the wrong year for the 5.5 hours either side of the boundary.
  */
 export function getCurrentFiscalYear(): FiscalYear {
-  const today = new Date()
-  const currentMonth = today.getMonth() + 1 // 1-12
-  const currentYear = today.getFullYear()
+  const { year: currentYear, month: currentMonth } = istTodayParts() // month is 1-12
 
   // If we're in Jan-Mar, we're in the previous year's fiscal year
   // If we're in Apr-Dec, we're in the current year's fiscal year

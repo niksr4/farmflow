@@ -5,6 +5,7 @@ import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { CROP_LABEL, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 import { EXCLUDE_REVALUATION_SQL } from "@/lib/revaluation-notes"
+import { istTodayParts } from "@/lib/date-utils"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
 
@@ -245,7 +246,7 @@ async function fetchProcessingData(startDate: string, endDate: string, tenantCon
 
 async function fetchRainfallData(tenantContext: TenantContext) {
   try {
-    const currentYear = new Date().getFullYear()
+    const currentYear = istTodayParts().year
     const yearStart = `${currentYear}-01-01`
     const yearEnd = `${currentYear}-12-31`
     const tenantId = tenantContext.tenantId
