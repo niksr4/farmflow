@@ -48,8 +48,24 @@ This is the part worth internalising, because no amount of process fixes it dire
   That is ₹11,000 collected against ₹8,000 lent, written down as the expected answer. A test
   written from what the code does cannot catch what the code does wrong.
 
-So Greptile is not a nice-to-have here. On new code it is currently **the only adversarial reader**,
+So the AI reviewer is not a nice-to-have here. On new code it is **the only adversarial reader**,
 and the whole flow should be arranged so that it sees small, coherent diffs.
+
+> **The reviewer is CodeRabbit, as of 2026-09-23.** It replaced Greptile, whose trial credits ran
+> out: every "review" it posted on PRs #32, #33 and #34 was the same 50-credit-limit notice, one
+> per push, so it had become noise on every PR rather than a reader. The `greptile.json` config was
+> ported to `.coderabbit.yaml` in the same commit — **thirteen rules, each a production incident
+> with a cost attached.** That file is accumulated evidence, not configuration; add to it when
+> something new bites.
+>
+> CodeRabbit is free on public repositories, which is one more thing tied to this repo staying
+> public — see the note in STATUS.md before changing visibility.
+>
+> ⚠ **Read its findings by email or on github.com, never through the API.** CodeRabbit posts some
+> findings as *outside diff range* comments, which GitHub cannot render inline. Those are invisible
+> to `gh pr view`, `gh pr checks` **and** the GraphQL `reviewThreads` query. PR #33 was merged on
+> the belief that its review held three Minor items; the email carried two **Major** defects that
+> none of those commands showed.
 
 ## The flow
 
@@ -67,7 +83,7 @@ Rules, in priority order:
    through a reviewed, CI-green PR (see the gate below).
 2. **Nothing is pushed to `main` directly.** Enforced by the ruleset, not by discipline.
 3. **The scanner branches from freshly-fetched `main`.** Its PRs are then a few dozen lines, which
-   is what both CI and Greptile can judge properly.
+   is what both CI and the reviewer can judge properly.
 4. **Feature branches stay short.** 26 commits is how you end up with a PR nobody can review and a
    production deploy that bypasses the PR entirely.
 5. **Deploying still needs the human word.** The gate makes `main` safe to merge into; it does not
@@ -142,14 +158,14 @@ What it sets on `main`:
 
 | Rule | Why |
 |---|---|
-| Require a pull request | Every change gets a diff, a CI run, and a Greptile review before it is live |
+| Require a pull request | Every change gets a diff, a CI run, and a CodeRabbit review before it is live |
 | Required approvals: **0** | Solo maintainer — GitHub will not count a self-approval, and requiring one would make the branch unmergeable |
 | Require status check `quality` | Lint → typecheck → unit tests → build → public e2e, all green before merge |
 | Block force-push | `main` is production history; rewriting it rewrites what shipped |
 | Block deletion | — |
 
 Zero required approvals is not a weakened gate. The gate is **CI must pass and a PR must exist**;
-the PR is what Greptile reviews and what leaves a record. Requiring an approval nobody can give
+the PR is what CodeRabbit reviews and what leaves a record. Requiring an approval nobody can give
 would just push everyone back to force-pushing.
 
 ## Undoing it
