@@ -201,11 +201,19 @@ Interior — retention, advances, the effective-dated rule model and the full sc
 - Per-estate recording, one figure a day however many gauges report, and nine consumers corrected.
 - Medappa's 29 existing records stay "whole property" at their request; 1 January is their start
   line for accounts and costing.
-- ⚠ **A missing day means no rain, not a missed entry.** Confirmed against production 2026-09-21:
-  **all 469 rainfall rows across all five tenants have a depth greater than zero. Nobody has ever
-  recorded a dry day**, and the UI does not ask them to. So a gap in the record is data, not a
-  lapse — HoneyFarm's jump from 25 rows in August to none in September is the monsoon ending, and
-  reading it as a tenant going quiet is wrong. This file did exactly that before it was checked.
+- ⚠ **A missing day is not a recorded zero, and it is not evidence of one either.** Confirmed
+  against production 2026-09-21: **all 469 rainfall rows across all five tenants have a depth
+  greater than zero. Nobody has ever recorded a dry day**, and the UI does not ask them to.
+  **What that proves is one-directional.** It shows dry days are never written down. It does *not*
+  show that every date without a row was dry — a wet day nobody got round to entering has exactly
+  the same representation, which is none. So a gap is an **unknown**, and the two readings cannot
+  be told apart from inside the database.
+  Practically: treat a gap as zero when totalling, because that is the only arithmetic available
+  and it matches how the estates use the screen. Do **not** treat it as confirmation of the
+  weather. HoneyFarm going from 25 rows in August to none in September is *consistent with* the
+  monsoon ending and equally consistent with the writer stopping; September in Coorg still rains.
+  This file asserted the first reading on 2026-09-21 and was wrong to — the evidence never
+  supported it. Ask the estate, or check an outside source, before saying which it was.
 - **What that costs you: any per-day average must divide by calendar days, never by row count.**
   Dividing a total by the number of rows returns the average of *rainy* days, which is a larger
   number that looks plausible and is never right. `lib/rainfall.ts` is clean today —
@@ -385,20 +393,21 @@ question about production, look there first — it has probably been asked befor
 - **Lot traceability is dormant** — 0 rows across all tenants. Check adoption before ranking any
   finding there.
 - **Migration 90** is recorded as applied on prod without its DELETE having run. Correct. Leave it.
-- ⚠ **Location access fails open for a session with no `users` row** — latent, not live.
-  Raised by the scanner 2026-09-21 and **confirmed in code**, in two halves:
+- ✅ ~~**Location access fails open for a session with no `users` row**~~ — **the location half is
+  FIXED**, PR #32, merged 2026-09-23. `getAccessibleLocationIds()` now returns `[]` (no access) for
+  a non-owner/admin session whose username has no tenant-scoped `users` row, instead of leaving
+  `result` at its `null` default. Owner and admin still return `null` (unrestricted) from an
+  earlier branch that never reaches the lookup, and a user who *does* have a row but no
+  `user_locations` entries still returns `null` — which matters, because that table has **0 rows
+  across all tenants**, so any fix that conflated the two would have locked out all three writers.
+  It does not.
+- ⚠ **The auth half is still open, and it is the more general defect.**
   [`lib/auth-server.ts:157-183`](lib/auth-server.ts#L157-L183) falls through to trusting the JWT's
-  own claims when its `users` lookup returns nothing, and
-  [`lib/location-access.ts:87-114`](lib/location-access.ts#L87-L114) leaves `result` at `null` when
-  it cannot find the user — and `null` means *unrestricted*, per its own docstring. So a deleted
-  account with an unexpired session keeps its role and gets every location.
-  **Why it is not ranked higher:** `user_locations` has **0 rows across all tenants**, so every
-  `user`-role account already resolves to `null` through the normal path. The bug grants nothing
-  that is not already granted. And `users` shows **0 deletion requests and 0 anonymizations** of
-  11 rows, so the branch has never been taken. It goes live the day somebody scopes a user to a
-  location — fix it before that, not after. Note sessions are **30 days**, so the exposure window
-  for a deleted user is a month, not a page load. The auth half is the more general defect and is
-  worth fixing on its own terms.
+  own claims when its `users` lookup returns nothing, so a deleted account keeps a valid session
+  **with its role** until the token expires. Sessions are **30 days**, so that window is a month,
+  not a page load. #32 stops such a session gaining *locations*; it does not stop it being a
+  session. Not yet exploited — `users` shows **0 deletion requests and 0 anonymizations** of 11
+  rows, so the branch has never been taken in production.
 - **Repo visibility is a GitHub cost, not a Vercel one.** Vercel Hobby deploys private repos at no
   charge — visibility appears nowhere in the Hobby/Pro comparison. Going private costs **$4/mo at
   GitHub**, because the `main is production` ruleset is only free on *public* repos, and private
