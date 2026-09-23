@@ -10,6 +10,7 @@ import { StatTile } from "@/components/ui/stat-tile"
 import { cn } from "@/lib/utils"
 import type { MonthlyDay, MonthlyMark, MonthlyAttendanceRow } from "@/lib/attendance-monthly"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
+import { todayIso } from "@/lib/date-utils"
 
 /**
  * The monthly attendance grid, in the layout HoneyFarm's office already reads.
@@ -43,10 +44,9 @@ const MARK_STYLE: Record<MonthlyMark, string> = {
   "-": "text-stone-200 dark:text-stone-700",
 }
 
-const currentMonth = () => {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-}
+// The estate's month, not the viewer's. This grid is the muster sheet the office checks wages
+// against, so which month it opens on is not a cosmetic default.
+const currentMonth = () => todayIso().slice(0, 7)
 
 const formatDays = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1))
 

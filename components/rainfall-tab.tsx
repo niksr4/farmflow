@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useLocale } from "@/components/locale-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { formatDateOnly, istTodayParts } from "@/lib/date-utils"
+import { formatDateOnly, istTodayParts, todayIso } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
@@ -164,7 +164,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     return () => window.removeEventListener("farmflow:scroll-to-section", handler)
   }, [])
   const [exportStart, setExportStart] = useState(() => `${istTodayParts().year}-01-01`)
-  const [exportEnd, setExportEnd] = useState(() => format(new Date(), "yyyy-MM-dd"))
+  const [exportEnd, setExportEnd] = useState(() => todayIso())
   const [exporting, setExporting] = useState(false)
 
   const handleRangeExport = async (exportFormat: "csv" | "xlsx") => {
@@ -468,9 +468,16 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     })
   }
 
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonthIndex = now.getMonth()
+  /**
+   * ONE calendar basis for the whole tab, and it is the estate's.
+   *
+   * This read `new Date()` locally while the export range and the heatmap's future-month check had
+   * already moved to IST, so near a date boundary the totals, the allowed maximum and the greyed
+   * months could each be on a different day. Half-converting a file is worse than not starting:
+   * the disagreement is invisible and only shows up as two panels quoting different numbers.
+   */
+  const { year: currentYear, month: currentIstMonth } = istTodayParts()
+  const currentMonthIndex = currentIstMonth - 1
 
   /**
    * One figure per day, whatever number of gauges reported it.
@@ -574,8 +581,11 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   }, [drilldownMonthIndex, currentYear, dailyRainMap])
 
   const trendSeries = useMemo<RainfallTrendPoint[]>(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    // The ESTATE's date, built local-midnight to match parseRecordDate above -- normalizedRecords
+    // carry local-midnight Dates, and the window comparisons below are against those. Anchoring
+    // this to UTC instead would offset every comparison by the viewer's offset.
+    const { year: istY, month: istM, day: istD } = istTodayParts()
+    const today = new Date(istY, istM - 1, istD)
     const lookbackDays = 56
     const rollingWindow: number[] = []
     const series: RainfallTrendPoint[] = []
@@ -604,8 +614,11 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   }, [dailyRainMap])
 
   const insights = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    // The ESTATE's date, built local-midnight to match parseRecordDate above -- normalizedRecords
+    // carry local-midnight Dates, and the window comparisons below are against those. Anchoring
+    // this to UTC instead would offset every comparison by the viewer's offset.
+    const { year: istY, month: istM, day: istD } = istTodayParts()
+    const today = new Date(istY, istM - 1, istD)
     const start30 = new Date(today)
     start30.setDate(today.getDate() - 29)
     const start60 = new Date(today)
@@ -867,7 +880,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             <input
               type="date"
               value={format(selectedDate, "yyyy-MM-dd")}
-              max={format(new Date(), "yyyy-MM-dd")}
+              max={todayIso()}
               onChange={(e) => {
                 const d = new Date(e.target.value + "T12:00:00")
                 if (!isNaN(d.getTime())) {
@@ -1146,7 +1159,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                   type="date"
                   value={exportEnd}
                   min={exportStart}
-                  max={format(new Date(), "yyyy-MM-dd")}
+                  max={todayIso()}
                   onChange={(e) => setExportEnd(e.target.value)}
                   className="w-full h-11 rounded-xl border border-stone-200 px-3 text-sm font-semibold text-stone-800 bg-stone-50 focus:outline-none focus:ring-2 focus:ring-sky-400"
                 />
@@ -1496,7 +1509,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         </div>
       </div>
 
-      <RainfallHeatmap records={normalizedRecords} currentYear={currentYear} />
+      <RainfallHeatmap records={normalizedRecords} currentYear={currentYear} currentMonthIndex={currentMonthIndex} />
 
       <div className="flex justify-center">
         <button
@@ -1656,12 +1669,22 @@ function rainfallColor(inches: number | null): string {
   return "bg-sky-800"
 }
 
+/**
+ * currentMonthIndex arrives as a PROP rather than being re-derived here.
+ *
+ * The heatmap greys out months that have not happened yet, and the parent decides which year is
+ * current. Deriving "which month is it" separately is how the two came to disagree: the parent was
+ * on IST and this was on the browser, so for a viewer abroad the grid could grey out a month the
+ * totals above had already counted.
+ */
 function RainfallHeatmap({
   records,
   currentYear,
+  currentMonthIndex,
 }: {
   records: NormalizedRainfallRecord[]
   currentYear: number
+  currentMonthIndex: number
 }) {
   const monthlyByYear = useMemo(() => {
     const map = new Map<number, number[]>() // year → 12 monthly totals
@@ -1718,7 +1741,7 @@ function RainfallHeatmap({
                             "h-8 w-8 rounded-md flex items-end justify-center pb-0.5 mx-auto transition-colors",
                             rainfallColor(val),
                             // grey out future months in current year
-                            year === currentYear && mi > istTodayParts().month - 1 ? "opacity-30" : "",
+                            year === currentYear && mi > currentMonthIndex ? "opacity-30" : "",
                           ].join(" ")}
                         >
                           {val !== null && val > 0 && (

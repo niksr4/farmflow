@@ -5,7 +5,8 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { evaluateLabourGaps } from "@/lib/reconciliation-checks"
 import { summariseLedgerDrift } from "@/lib/inventory-ledger"
-import { istTodayParts, todayIso } from "@/lib/date-utils"
+import { todayIso } from "@/lib/date-utils"
+import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -32,11 +33,18 @@ export async function GET(request: NextRequest) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantId = tenantContext.tenantId
     const { searchParams } = new URL(request.url)
-    // Both defaults on the ESTATE's calendar. `start` derived the fiscal-year April from the HOST's
-    // year and `end` was a UTC ISO slice, so on a UTC server before 05:30 IST the window ended
-    // yesterday — and either side of 1 April it reconciled against the wrong financial year.
-    const { year } = istTodayParts()
-    const start = searchParams.get("start") || `${year}-04-01`
+    /**
+     * Both defaults on the ESTATE's calendar, and the fiscal year comes from the one function that
+     * knows the rule.
+     *
+     * `end` was a UTC ISO slice, so on a UTC server the window ended yesterday until 05:30 IST.
+     * `start` was `new Date(new Date().getFullYear(), 3, 1)` — April of the CURRENT calendar year,
+     * which from January to March is April of a year that has not started. In February that gave
+     * start=2026-04-01 with end=2026-02-14: start after end, so every query matched nothing and
+     * the reconciliation reported all-clear on an empty set. Deriving it from
+     * getCurrentFiscalYear() rather than re-implementing "month >= 4" for a third time.
+     */
+    const start = searchParams.get("start") || getCurrentFiscalYear().startDate
     const end = searchParams.get("end") || todayIso()
 
     const checks: ReconciliationCheck[] = []

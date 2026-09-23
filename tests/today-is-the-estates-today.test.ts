@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { execSync } from "node:child_process"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { istClock, istTodayParts, todayIso } from "@/lib/date-utils"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
@@ -133,6 +135,28 @@ const WRONG_CLOCK_SHAPES = [
   // "now", read on the HOST's calendar: browser for a client component, UTC on Vercel.
   String.raw`new Date\(\)\.(getFullYear|getMonth|getDate)\(\)`,
 ]
+
+/**
+ * The VARIABLE form of the shape above — `const now = new Date()` on one line, `now.getMonth()` on
+ * another. A single-line regex cannot see it, which is why it survived three separate sweeps: the
+ * 09-21 pass, the 09-23 pass that fixed the inline form, and the rainfall-tab fix inside that same
+ * pass, where converting the file HALF way left the totals on the browser's calendar while the
+ * export range and heatmap moved to IST. CodeRabbit caught that one as Major.
+ *
+ * Detected by parsing rather than grepping, because that is what the shape requires.
+ */
+const findVariableForm = (src: string): number[] => {
+  const lines = src.split("\n")
+  const out: number[] = []
+  lines.forEach((line, i) => {
+    const decl = /\b(?:const|let|var)\s+(\w+)\s*=\s*new Date\(\)\s*$/.exec(line.trim().replace(/;$/, ""))
+    if (!decl) return
+    const name = decl[1]
+    const window = lines.slice(i + 1, i + 15).join("\n")
+    if (new RegExp(String.raw`\b${name}\.(getFullYear|getMonth|getDate)\(\)`).test(window)) out.push(i + 1)
+  })
+  return out
+}
 const UTC_TODAY_SHAPE = WRONG_CLOCK_SHAPES.join("|")
 
 /**
@@ -169,10 +193,62 @@ const ACCEPTED: Record<string, string> = {
   "components/admin/utils.ts": "DEFAULT_WEEKLY_START, an admin date-picker seed the operator immediately overrides",
 }
 
+/** Same rule, variable form. THIS LIST MUST ONLY EVER SHRINK. */
+const VARIABLE_FORM_ACCEPTED = [
+  // Demo tenant only — never reaches a customer's books.
+  "app/api/admin/seed-tenant/route.ts",
+  // Enterprise tier, 0 rows in production. Revisit the day a tenant is put on it.
+  "components/receivables-tab.tsx",
+  // Billing is built but not enforcing; no invoice has ever been dated by this.
+  "lib/billing.ts",
+  // Derives from a season end date that is already an explicit YYYY-MM-DD, not from "now".
+  "app/api/dashboard/season-projection/route.ts",
+  /**
+   * Correct, but only because of WHEN it runs. The cron fires Monday 02:00 UTC = 07:30 IST, so the
+   * UTC weekday and the IST weekday agree at that instant and "last Monday" comes out right. It
+   * would break if the schedule ever moved earlier than 18:30 UTC on a Sunday. Left alone rather
+   * than changed, because touching digest windowing to fix a bug that cannot currently fire is the
+   * worse trade — but if you reschedule that cron, fix this first.
+   */
+  "lib/server/agents/weekly-digest-agent.ts",
+]
+
 describe("nobody reintroduces the UTC-date-for-today shape", () => {
   it("no NEW source file derives today by slicing a UTC ISO string", () => {
     const unexpected = scan().filter((line) => !Object.keys(ACCEPTED).some((file) => line.startsWith(`${file}:`)))
     expect(unexpected, "use todayIso() from lib/date-utils -- it is IST, see the docstring there").toEqual([])
+  })
+
+  it("no NEW source file reads the host calendar off a `const now = new Date()`", () => {
+    const files = execSync(`git ls-files '*.ts' '*.tsx'`, { encoding: "utf8" })
+      .trim()
+      .split("\n")
+      .filter((f) => !f.startsWith("tests/") && /^(app|components|lib|hooks)\//.test(f))
+
+    const offenders = files.flatMap((file) => {
+      const lines = findVariableForm(readFileSync(resolve(__dirname, "..", file), "utf8"))
+      return lines.map((line) => `${file}:${line}`)
+    })
+
+    const unexpected = offenders.filter((hit) => !VARIABLE_FORM_ACCEPTED.some((f) => hit.startsWith(`${f}:`)))
+    expect(unexpected, "derive the date from istTodayParts() or todayIso() — lib/date-utils").toEqual([])
+  })
+
+  it("every VARIABLE-FORM exemption is still a real occurrence", () => {
+    // The twin of the check below, and it was missing until a tamper test went green that should
+    // have failed. An allowlist without an expiry is a permanent hole: fix the file, forget the
+    // entry, and the next genuine offender in it is silently waved through.
+    const stillThere = VARIABLE_FORM_ACCEPTED.filter((file) => {
+      try {
+        return findVariableForm(readFileSync(resolve(__dirname, "..", file), "utf8")).length > 0
+      } catch {
+        return false
+      }
+    })
+    expect(
+      VARIABLE_FORM_ACCEPTED.filter((f) => !stillThere.includes(f)),
+      "these no longer match — delete them from VARIABLE_FORM_ACCEPTED",
+    ).toEqual([])
   })
 
   it("every accepted entry is still a real occurrence", () => {

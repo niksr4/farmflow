@@ -1,4 +1,4 @@
-import { formatDateForDisplay } from "@/lib/date-utils"
+import { formatDateForDisplay, todayIso } from "@/lib/date-utils"
 import type { ExportDatasetId } from "@/lib/data-tools"
 import { IMPORT_DATASET_MAP } from "@/lib/data-tools"
 import type { Transaction } from "@/lib/inventory-types"
@@ -66,10 +66,9 @@ export const parseJsonResponse = async (res: Response) => {
 
 const formatDatePart = (value: number) => value.toString().padStart(2, "0")
 
-export const getTodayDateInputValue = () => {
-  const today = new Date()
-  return `${today.getFullYear()}-${formatDatePart(today.getMonth() + 1)}-${formatDatePart(today.getDate())}`
-}
+// Seeds the date field on inventory and transaction forms, so it becomes a RECORD date the moment
+// somebody saves without touching it. The estate's day, not the browser's.
+export const getTodayDateInputValue = () => todayIso()
 
 export const transactionDateToInputValue = (transactionDate?: string | null) => {
   if (typeof transactionDate === "string") {
