@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { istClock, istTodayParts, todayIso } from "@/lib/date-utils"
+import { istClock, istNowParts, istTodayParts, todayIso } from "@/lib/date-utils"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 /**
@@ -77,6 +77,26 @@ describe("the estate's today", () => {
     expect(getCurrentFiscalYear().label).toBe("FY 25/26")
   })
 
+  it("gives the estate's weekday and hour, not the host's", () => {
+    /**
+     * The FIFTH signature. lib/season-utils.ts decided when to show the "Ready to log this week's
+     * work?" prompt from new Date().getDay() and .getHours(), against windows that are estate
+     * times (Mon 10-1, Fri 4-6, Sat 9-11 IST). The guard shipped on 09-23 enumerated
+     * getFullYear/getMonth/getDate and so could not see it; the scanner found it the next day.
+     */
+    vi.useFakeTimers()
+    // Sunday 2026-09-20 20:00 UTC == MONDAY 01:30 IST. The weekday itself differs, not just the hour.
+    vi.setSystemTime(new Date("2026-09-20T20:00:00Z"))
+    expect(istNowParts().weekday).toBe(1) // Monday at the estate
+    expect(new Date().getUTCDay()).toBe(0) // still Sunday in UTC
+    expect(istNowParts().hour).toBe(1)
+
+    // Midnight IST must be hour 0, not 24 — en-GB with hour12:false emits "24" and that would
+    // silently fail every `hour >= 9 && hour <= 11` style window.
+    vi.setSystemTime(new Date("2026-09-20T18:30:00Z")) // 00:00 IST
+    expect(istNowParts().hour).toBe(0)
+  })
+
   it("survives a missing or unparseable instant instead of throwing", () => {
     expect(istClock(null as unknown as string)).toBe("--:--")
     expect(istClock("not a date")).toBe("--:--")
@@ -118,7 +138,7 @@ describe("the estate's today", () => {
  * by reading it. If you edit this regex, break something and watch it fail before trusting it.
  */
 /**
- * FOUR SIGNATURES, ONE BUG. The 2026-09-21 sweep looked for two of these and shipped three fixes;
+ * FIVE SIGNATURES, ONE BUG. The 2026-09-21 sweep looked for two of these and shipped three fixes;
  * CodeRabbit then found two Major defects on 09-23 wearing the third, in code that sweep had
  * touched. `getCurrentFiscalYear()` returned FY 25/26 at 2026-03-31T19:00Z when the estate was
  * already in FY 26/27, and the Season P&L preset offered last year's whole coffee season to a
@@ -126,6 +146,10 @@ describe("the estate's today", () => {
  *
  * The lesson is in the regex, not the fix: a guard that enumerates the shapes it has already seen
  * will keep passing while the same defect arrives in a new one.
+ *
+ * Proven twice more since: the VARIABLE form (const now = new Date() on one line, now.getMonth() on
+ * another) survived three sweeps, and getDay/getHours was not in the list at all until the scanner
+ * found lib/season-utils.ts on 09-24 — one day after this guard shipped.
  */
 const WRONG_CLOCK_SHAPES = [
   // "now", converted to UTC, sliced to a date.
@@ -133,7 +157,7 @@ const WRONG_CLOCK_SHAPES = [
   // The same thing via split — missed by the first version of this guard.
   String.raw`new Date\(\)\.toISOString\(\)\.split\(`,
   // "now", read on the HOST's calendar: browser for a client component, UTC on Vercel.
-  String.raw`new Date\(\)\.(getFullYear|getMonth|getDate)\(\)`,
+  String.raw`new Date\(\)\.(getFullYear|getMonth|getDate|getDay|getHours|getMinutes)\(\)`,
 ]
 
 /**
@@ -157,7 +181,7 @@ const findVariableForm = (src: string): number[] => {
     if (!decl) return
     const name = decl[1]
     const window = lines.slice(i + 1, i + 15).join("\n")
-    if (new RegExp(String.raw`\b${name}\.(getFullYear|getMonth|getDate)\(\)`).test(window)) out.push(i + 1)
+    if (new RegExp(String.raw`\b${name}\.(getFullYear|getMonth|getDate|getDay|getHours|getMinutes)\(\)`).test(window)) out.push(i + 1)
   })
   return out
 }
