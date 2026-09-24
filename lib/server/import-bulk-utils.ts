@@ -126,10 +126,25 @@ export const normalizeBagType = (value: string | null | undefined) => {
   return "Dry Parchment"
 }
 
+/**
+ * Words that can only mean stock came IN. Anything else still defaults to "deplete" (the historic
+ * behaviour, and what a blank column means) -- but that default used to swallow "Purchase" and
+ * "Bought" too, so a spreadsheet of purchases imported as a spreadsheet of usage and took the
+ * stock DOWN by exactly what should have been added.
+ */
+const RESTOCK_WORDS = /\b(restock\w*|purchase[ds]?|bought|buy|received?|stock[\s-]?in|opening)\b/
+const DEPLETE_WORDS = /\b(deplete\w*|use[ds]?|usage|consume[ds]?|consumption|issue[ds]?|stock[\s-]?out|applied|sold)\b/
+
 export const normalizeTransactionType = (value: string | null | undefined) => {
   const raw = String(value || "").trim().toLowerCase()
-  if (raw.includes("restock")) return "restock"
+  if (RESTOCK_WORDS.test(raw)) return "restock"
   return "deplete"
+}
+
+/** True when a non-blank transaction_type was not recognised and fell through to "deplete". */
+export const isUnrecognisedTransactionType = (value: string | null | undefined) => {
+  const raw = String(value || "").trim().toLowerCase()
+  return Boolean(raw) && !RESTOCK_WORDS.test(raw) && !DEPLETE_WORDS.test(raw)
 }
 
 export const getField = (row: Record<string, string>, keys: string[]) => {
@@ -242,7 +257,11 @@ export const buildValidationErrors = (dataset: string, records: Array<Record<str
         fail("Missing transaction_date, item_type, or quantity")
         continue
       }
-      const transactionType = normalizeTransactionType(getField(row, ["transaction_type", "type"]))
+      const rawTransactionType = getField(row, ["transaction_type", "type"])
+      const transactionType = normalizeTransactionType(rawTransactionType)
+      if (isUnrecognisedTransactionType(rawTransactionType)) {
+        warn(`Transaction type "${rawTransactionType}" is not recognised and will be recorded as a depletion (stock out). Use "restock" or "deplete".`)
+      }
       const price = parseNumber(getField(row, ["price", "unit_price", "price_per_unit"])) || 0
       if (transactionType === "restock" && price <= 0) {
         warn(`Restock of "${itemType}" has no price — average cost will be skewed toward zero until corrected.`)

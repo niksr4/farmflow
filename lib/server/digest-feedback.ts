@@ -51,7 +51,11 @@ export async function createDigestFeedbackLinks(tenantId: string, weekStart: str
   }
 }
 
-/** Records a thumbs up/down for the digest the token was issued for. Returns false if the token is unknown or expired. */
+/**
+ * Records a thumbs up/down for the digest the token was issued for. Returns false if the token is
+ * unknown -- including one replaced by a later createDigestFeedbackLinks for the same week. Tokens
+ * carry no expiry of their own: a vote is harmless and re-voting simply overwrites the rating.
+ */
 export async function recordDigestFeedback(token: string, rating: DigestFeedbackRating): Promise<boolean> {
   if (!sql) return false
   try {

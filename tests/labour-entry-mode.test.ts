@@ -50,6 +50,23 @@ describe("getLabourCutover", () => {
   })
 })
 
+describe("getLabourCutover failures other than a missing table", () => {
+  it("rethrows instead of reporting 'not switched' -- that answer lets a post-cutover Accounts write through", async () => {
+    runTenantQuery.mockRejectedValueOnce(Object.assign(new Error("Connection terminated unexpectedly"), { code: "57P01" }))
+    await expect(getLabourCutover(tenantContext)).rejects.toThrow("Connection terminated")
+  })
+
+  it("treats SQLSTATE 42P01 as the missing-table case", async () => {
+    runTenantQuery.mockRejectedValueOnce(Object.assign(new Error("undefined table"), { code: "42P01" }))
+    expect(await getLabourCutover(tenantContext)).toBeNull()
+  })
+
+  it("makes the Accounts write guard fail closed on a transient error", async () => {
+    runTenantQuery.mockRejectedValueOnce(new Error("fetch failed"))
+    await expect(blockedByLabourCutover(tenantContext, "2026-09-01")).rejects.toThrow("fetch failed")
+  })
+})
+
 describe("blockedByLabourCutover (Accounts-entry write guard)", () => {
   it("returns null without touching the database for an unparseable date", async () => {
     const result = await blockedByLabourCutover(tenantContext, "not-a-date")

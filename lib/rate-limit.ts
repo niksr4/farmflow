@@ -115,14 +115,10 @@ const LIMITS: Record<RateLimitKey, { limit: number; windowMs: number }> = {
  * heartbeats, and each paid four sequential trips to Neon in ap-southeast-1 before doing any work.
  * Sentry raised it as "Consecutive HTTP POST".
  *
- * One INSERT with several VALUES rows settles every bucket at once. The counting, the window
- * arithmetic and the fail-open/fail-closed behaviour are identical to checkRateLimit — this is the
- * same statement with more rows, not a second implementation of rate limiting.
+ * One INSERT with several VALUES rows settles every bucket at once. Buckets may have different
+ * windows; each row carries its own window_start and window_ms, so mixing a 60-second limit with a
+ * five-minute one is fine.
  *
- * Buckets may have different windows; each row carries its own window_start and window_ms, so
- * mixing a 60-second limit with a five-minute one is fine.
- */
-/**
  * The rate-limit upsert as a STATEMENT plus a way to read its rows — for callers that need to
  * batch it with something else.
  *
@@ -141,6 +137,9 @@ export function buildRateLimitBatch(checks: readonly { key: RateLimitKey; identi
     return { key, dbKey: `${key}:${identifier}`, windowStart: Math.floor(now / windowMs) * windowMs, windowMs }
   })
 
+  // PLACEHOLDERS, NEVER INTERPOLATION. `identifier` is attacker-supplied — a device serial or a
+  // client IP — and on the biometric path it has not been validated yet, because rate limiting
+  // deliberately runs BEFORE validation.
   const params: (string | number)[] = []
   const values = rows
     .map((r) => {
@@ -169,72 +168,6 @@ export function buildRateLimitBatch(checks: readonly { key: RateLimitKey; identi
       }
       return out
     },
-  }
-}
-
-export async function checkRateLimits(
-  checks: readonly { key: RateLimitKey; identifier: string }[],
-): Promise<Map<RateLimitKey, RateLimitResult>> {
-  const out = new Map<RateLimitKey, RateLimitResult>()
-  if (!checks.length) return out
-
-  const now = Date.now()
-  const rowsToWrite = checks.map(({ key, identifier }) => {
-    const { windowMs } = LIMITS[key]
-    return { key, dbKey: `${key}:${identifier}`, windowStart: Math.floor(now / windowMs) * windowMs, windowMs }
-  })
-
-  const allow = (key: RateLimitKey, count: number, windowStart: number, windowMs: number): RateLimitResult => ({
-    success: count <= LIMITS[key].limit,
-    limit: LIMITS[key].limit,
-    remaining: Math.max(0, LIMITS[key].limit - count),
-    reset: windowStart + windowMs,
-  })
-
-  try {
-    /**
-     * PLACEHOLDERS, NEVER INTERPOLATION. `identifier` is attacker-supplied — a device serial
-     * number or a client IP — and on the biometric path the serial has not even been validated
-     * yet, because rate limiting deliberately runs BEFORE validation. Building this VALUES list by
-     * hand-escaping quotes into the string would put unvalidated input into SQL text; the escaping
-     * might well be right, and it is not a thing to be right about by hand.
-     */
-    const params: (string | number)[] = []
-    const values = rowsToWrite
-      .map((r) => {
-        params.push(r.dbKey, r.windowStart, r.windowMs)
-        return `($${params.length - 2}, $${params.length - 1}, $${params.length}, 1)`
-      })
-      .join(", ")
-    const rows = toRows(
-      await dbSql.query(
-        `INSERT INTO rate_limit_counters (key, window_start, window_ms, count)
-         VALUES ${values}
-         ON CONFLICT (key, window_start) DO UPDATE
-           SET count = rate_limit_counters.count + 1
-         RETURNING key, count`,
-        params,
-      ),
-    )
-
-    const countByKey = new Map(rows.map((r: any) => [String(r.key), Number(r.count ?? 1)]))
-    for (const r of rowsToWrite) {
-      out.set(r.key, allow(r.key, countByKey.get(r.dbKey) ?? 1, r.windowStart, r.windowMs))
-    }
-
-    // Same 1% purge as the single-key path, so the table stays bounded whichever one is used.
-    if (Math.random() < 0.01) {
-      const cutoff = now - 24 * 60 * 60 * 1000
-      dbSql`DELETE FROM rate_limit_counters WHERE window_start < ${cutoff}`.catch(() => {})
-    }
-    return out
-  } catch (error) {
-    // A sensitive bucket in the batch makes the whole batch fail closed, matching checkRateLimit:
-    // the caller cannot tell which bucket failed, so the strictest rule has to win.
-    const sensitive = checks.find(({ key }) => isSensitiveRateLimitKey(key))
-    if (sensitive) throw new RateLimitUnavailableError(sensitive.key, error)
-    for (const r of rowsToWrite) out.set(r.key, allow(r.key, 1, r.windowStart, r.windowMs))
-    return out
   }
 }
 

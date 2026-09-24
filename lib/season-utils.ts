@@ -22,7 +22,7 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
   "harvest-peak": [
     "home", "attendance", "accounts", "picking", "processing", "dispatch", "sales", "pepper",
     "inventory", "rainfall", "season", "season-pl", "balance-sheet",
-    "yield-forecast", "ai-analysis", "quality", "curing", "picking",
+    "yield-forecast", "ai-analysis", "quality", "curing",
     "activity-log", "plant-health", "news", "market-pricing",
     "resources", "documents", "journal", "compliance", "receivables", "billing",
   ],
@@ -30,7 +30,7 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
     "home", "attendance", "accounts", "picking", "processing", "inventory", "season", "rainfall",
     "dispatch", "sales", "season-pl", "balance-sheet", "yield-forecast",
     "ai-analysis", "activity-log", "plant-health", "news", "market-pricing",
-    "resources", "documents", "journal", "quality", "curing", "picking",
+    "resources", "documents", "journal", "quality", "curing",
     "compliance", "receivables", "billing",
   ],
   "post-harvest-pruning": [
@@ -38,14 +38,14 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
     "inventory", "rainfall", "season", "season-pl", "balance-sheet",
     "activity-log", "ai-analysis", "quality", "curing", "yield-forecast",
     "plant-health", "news", "market-pricing", "resources", "documents",
-    "journal", "picking", "compliance", "receivables", "billing",
+    "journal", "compliance", "receivables", "billing",
   ],
   // Off-season (berry-formation, monsoon, blossom) — labour & maintenance dominant
   "default": [
     "home", "attendance", "accounts", "picking", "rainfall", "inventory", "season", "balance-sheet",
     "season-pl", "ai-analysis", "activity-log", "plant-health", "news",
     "market-pricing", "yield-forecast", "resources", "documents", "journal",
-    "processing", "dispatch", "sales", "pepper", "quality", "curing", "picking",
+    "processing", "dispatch", "sales", "pepper", "quality", "curing",
     "compliance", "receivables", "billing",
   ],
 }
@@ -59,9 +59,11 @@ export const ALWAYS_PRIMARY_TABS = new Set(["home", "attendance", "accounts", "p
 export function getSeasonAwareTabOrder(availableTabs: string[]): string[] {
   const phase = getCurrentEstatePhase()
   const order = SEASON_TAB_ORDER[phase.season] ?? SEASON_TAB_ORDER["default"]
-  const ordered = order.filter((t) => availableTabs.includes(t))
+  // Deduplicated on the way out: every phase list once carried "picking" twice, so a tenant with
+  // picking enabled got two Picking tabs (and a duplicate React key) in the nav.
+  const ordered = [...new Set(order)].filter((t) => availableTabs.includes(t))
   const extras = availableTabs.filter((t) => !ordered.includes(t))
-  return [...ordered, ...extras]
+  return [...new Set([...ordered, ...extras])]
 }
 
 // Mobile quick-action tiles on home screen — max 6, season-prioritised
