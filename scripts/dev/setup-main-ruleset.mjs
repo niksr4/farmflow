@@ -69,7 +69,7 @@ const REMOVE = process.argv.includes("--remove")
  * There is one maintainer, and GitHub does not count a self-approval — so requiring one would make
  * `main` permanently unmergeable, and the reliable consequence of an unmergeable branch is that
  * somebody turns the rule off and force-pushes. The gate that matters is "a PR must exist and CI
- * must be green": the PR is what Greptile reviews, what CI runs against, and what leaves a record.
+ * must be green": the PR is what CodeRabbit reviews, what CI runs against, and what leaves a record.
  */
 const ruleset = {
   name: NAME,
