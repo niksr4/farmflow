@@ -49,6 +49,69 @@ describe("sendPasswordResetEmail", () => {
     expect(body.to).toEqual(["person@example.com"])
   })
 
+  /**
+   * THE RESET LINK MUST NOT BE BCC'd ANYWHERE.
+   *
+   * Every other send in this app copies EMAIL_BCC_MONITORING, because bodies are not persisted and
+   * that copy is the only archive of what went out. This email is the exception: the link is a
+   * working account-takeover credential for an hour, and BCCing it parked one in a shared support
+   * mailbox for every reset ever sent.
+   *
+   * These tests exist because the five already in this file did NOT notice when the bcc was
+   * removed — they asserted `body.to` and never `body.bcc`, so the field could have gone either
+   * way without failing anything. Raised by the QA scanner 2026-09-25.
+   */
+  it("does not BCC the reset link to the monitoring mailbox", async () => {
+    process.env.RESEND_API_KEY = "test_key"
+    process.env.AUTH_EMAIL_FROM = "FarmFlow <hello@farmflow.app>"
+    process.env.AUTH_EMAIL_PREVIEW_DIR = ""
+    const fetchMock = stubResendFetch()
+
+    await sendPasswordResetEmail({ email: "person@example.com", username: "priya", token: "tok-123" })
+
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    expect(body.bcc, "a reset link in a shared inbox is an account takeover").toBeUndefined()
+  })
+
+  it("still records that a reset was sent, without putting the token in that record", async () => {
+    process.env.RESEND_API_KEY = "test_key"
+    process.env.AUTH_EMAIL_FROM = "FarmFlow <hello@farmflow.app>"
+    process.env.AUTH_EMAIL_PREVIEW_DIR = ""
+    const fetchMock = stubResendFetch()
+
+    await sendPasswordResetEmail({ email: "person@example.com", username: "priya", token: "tok-123" })
+
+    // Two sends: the user's, then the monitoring record.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const monitoring = JSON.parse(fetchMock.mock.calls[1][1].body as string)
+    expect(monitoring.to).toEqual(["support@thefarmflow.in"])
+    // The whole point: the record names the recipient, never the credential.
+    expect(JSON.stringify(monitoring)).not.toContain("tok-123")
+    expect(JSON.stringify(monitoring)).toContain("person@example.com")
+  })
+
+  it("reports the reset as sent even if the monitoring copy fails", async () => {
+    process.env.RESEND_API_KEY = "test_key"
+    process.env.AUTH_EMAIL_FROM = "FarmFlow <hello@farmflow.app>"
+    process.env.AUTH_EMAIL_PREVIEW_DIR = ""
+    // First call (the user's email) succeeds; the monitoring copy rejects.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "{}" })
+      .mockRejectedValueOnce(new Error("monitoring mailbox unreachable"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await sendPasswordResetEmail({
+      email: "person@example.com",
+      username: "priya",
+      token: "tok-123",
+    })
+
+    // A bounced internal notification must never turn a successful reset into a reported failure.
+    expect(result).toEqual({ sent: true, provider: "resend", statusCode: 200 })
+  })
+
   // Fixed by the 2026-08-10 code scan (lib/server/password-reset-email.ts now escapes
   // `input.username` via lib/html-escape's `escapeHtml` before interpolating it into the HTML
   // body), the same fix applied to lib/server/onboarding/email.ts and lib/server/email-change-email.ts.

@@ -199,6 +199,34 @@ export async function resetPasswordWithToken(input: {
     `,
   )
 
+  /**
+   * EVERY OTHER OUTSTANDING LINK DIES WITH THIS ONE.
+   *
+   * Only the token just used was being consumed, so somebody who clicked "forgot password" twice
+   * left the first link live for its full hour after recovering the account with the second. Each
+   * unused link is a standing account-takeover credential sitting in an inbox, and the window does
+   * not close when the account is recovered -- it closes on a timer.
+   *
+   * This has already happened on production: one user was issued two tokens on 2026-08-04.
+   *
+   * Runs AFTER the password update, not before, so a failure here cannot leave the account
+   * unrecoverable -- the reset has already succeeded by this point and the worst case is that the
+   * old links live out their hour, which is exactly today's behaviour.
+   *
+   * idx_password_reset_tokens_user_active (scripts/101) was built for this lookup and had no
+   * reader until now.
+   */
+  await runTenantQuery(
+    sql,
+    ownerContext,
+    sql`
+      UPDATE password_reset_tokens
+      SET consumed_at = CURRENT_TIMESTAMP
+      WHERE user_id = ${record.user_id}
+        AND consumed_at IS NULL
+    `,
+  )
+
   await logSecurityEvent({
     tenantId: record.tenant_id,
     actorUserId: record.user_id,
