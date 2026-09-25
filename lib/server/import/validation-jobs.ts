@@ -8,6 +8,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import {
   hashCsv,
   isImportJobsUserColumnMissing,
+  isUuid,
   VALIDATION_EXPIRY_MINUTES,
   type ImportMode,
   type ImportValidationError,
@@ -194,6 +195,9 @@ export async function loadValidatedImportJob(input: {
   dataset: string
   validationToken: string
 }): Promise<ValidationJobRecord | null> {
+  // The token is client-supplied and cast with ::uuid below; a malformed one made Postgres raise
+  // 22P02 and the commit answered 500. It is simply a token that matches no job.
+  if (!isUuid(String(input.validationToken || "").trim())) return null
   const tenantContext = normalizeTenantContext(input.tenantId, input.role)
   if (input.requestedByUserId) {
     try {

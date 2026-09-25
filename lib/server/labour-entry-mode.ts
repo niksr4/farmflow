@@ -30,11 +30,23 @@ export const getLabourCutover = async (tenantContext: TenantContext): Promise<st
     )
     const value = (rows?.[0] as { from_date?: string } | undefined)?.from_date
     return value ? String(value).slice(0, 10) : null
-  } catch {
+  } catch (error) {
     // The table only exists from migration 116. On an instance without it nobody has switched,
     // so the honest answer is "not switched" rather than a 500 on every labour write.
-    return null
+    //
+    // ONLY that case. This used to swallow every error, and "not switched" is the permissive
+    // answer for blockedByLabourCutover below: a transient database failure let an Accounts
+    // labour entry dated after the cutover through -- saved, shown in the list, and counted in no
+    // total anywhere, which is the one outcome this file exists to prevent. Anything else throws,
+    // and the write fails loudly instead.
+    if (isMissingLabourEntryModeTable(error)) return null
+    throw error
   }
+}
+
+const isMissingLabourEntryModeTable = (error: unknown) => {
+  if (String((error as { code?: unknown })?.code || "") === "42P01") return true
+  return String((error as Error)?.message || "").includes('relation "tenant_labour_entry_mode" does not exist')
 }
 
 /**

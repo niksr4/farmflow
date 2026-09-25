@@ -99,3 +99,16 @@ describe("staying quiet when it should", () => {
     expect(checkRestockCost(5000, Number.NaN, 100).level).toBe("ok")
   })
 })
+
+describe("the high-side message", () => {
+  it("never suggests a corrected total it cannot justify, even for a fractional quantity", () => {
+    // Until 2026-09-24 a 'total looks like one unit's price' hint could only fire when quantity was
+    // under ~0.45, and then offered usual x qty as the total — unrelated to what was typed.
+    const r = checkRestockCost(1300, 0.3, 1000, "kg")
+    expect(r.level).toBe("warn")
+    if (r.level !== "warn") return
+    expect(r.direction).toBe("high")
+    expect(r.message).toContain("Check the amount.")
+    expect(r.message).not.toMatch(/the total for/)
+  })
+})

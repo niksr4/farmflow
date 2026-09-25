@@ -67,6 +67,21 @@ const normalizeBagType = (value: string | null | undefined) =>
 const formatBagTypeLabel = (value: string | null | undefined) =>
   normalizeBagType(value) === "cherry" ? "Dry Cherry" : "Dry Parchment"
 
+/**
+ * A sale_date as the CSV should print it. A calendar date (`2026-09-24`) or a Postgres `date`
+ * serialised to UTC midnight (`2026-09-24T00:00:00.000Z`) is printed as the date it names --
+ * never re-read through the local clock, which puts it a day early anywhere west of Greenwich (the
+ * same trap lib/date-utils.ts readDateParts documents). Anything unparseable is passed through
+ * as-is rather than thrown: date-fns `format` throws RangeError on an Invalid Date, and one bad
+ * row used to fail the entire export.
+ */
+const formatExportDate = (value: string | null | undefined) => {
+  const raw = String(value ?? "").trim()
+  if (/^\d{4}-\d{2}-\d{2}(T00:00:00(\.0+)?Z)?$/.test(raw)) return raw.slice(0, 10)
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? raw : format(parsed, "yyyy-MM-dd")
+}
+
 const csvEscape = (value: string | number | null | undefined) => `"${String(value ?? "").replace(/"/g, '""')}"`
 const csvRow = (values: Array<string | number | null | undefined>) => values.map(csvEscape).join(",")
 
@@ -127,7 +142,7 @@ export const buildSalesCsv = (recordsInput: SalesExportRecord[], bagWeightKg: nu
   ]
 
   const toDetailRow = (record: SalesExportRecord) => [
-    format(new Date(record.sale_date), "yyyy-MM-dd"),
+    formatExportDate(record.sale_date),
     record.batch_no || "",
     resolveSalesEstateDisplay(record),
     record.coffee_type || "",

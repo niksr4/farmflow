@@ -15,6 +15,14 @@ const toRows = <T = any>(value: unknown): T[] => {
   return Array.isArray(candidate) ? (candidate as T[]) : []
 }
 
+/**
+ * The estate a row is attributed to, normalised the same way fetchTenantEstateNames trims its
+ * list. Grouping on raw `l.estate` split "Tirtha" from "Tirtha " (and NULL from ''), and the
+ * stray group was then dropped from the email because it matched no name in the list -- that
+ * estate's activity silently disappeared from the digest.
+ */
+const ESTATE_KEY_SQL = "COALESCE(NULLIF(BTRIM(l.estate), ''), 'Unassigned')"
+
 export type EstateActivityBreakdown = {
   estate: string
   processingKg: number
@@ -31,12 +39,10 @@ export async function fetchTenantEstateNames(tenantId: string): Promise<string[]
   if (!sql) return []
   try {
     const rows = await sql.query(
-      `SELECT DISTINCT estate FROM locations WHERE tenant_id = $1 AND estate IS NOT NULL AND estate <> '' ORDER BY estate`,
+      `SELECT DISTINCT BTRIM(estate) AS estate FROM locations WHERE tenant_id = $1 AND NULLIF(BTRIM(estate), '') IS NOT NULL ORDER BY 1`,
       [tenantId],
     )
-    return toRows<any>(rows)
-      .map((r) => String(r.estate || "").trim())
-      .filter(Boolean)
+    return [...new Set(toRows<any>(rows).map((r) => String(r.estate || "").trim()).filter(Boolean))]
   } catch {
     return []
   }
@@ -59,38 +65,38 @@ export async function fetchActivityByEstate(
   try {
     const [processingRows, laborRows, expenseRows, dispatchRows, salesRows] = await Promise.all([
       sql.query(
-        `SELECT COALESCE(l.estate, 'Unassigned') AS estate, COALESCE(SUM(pr.crop_today), 0) AS value
+        `SELECT ${ESTATE_KEY_SQL} AS estate, COALESCE(SUM(pr.crop_today), 0) AS value
          FROM processing_records pr LEFT JOIN locations l ON l.id = pr.location_id
          WHERE pr.tenant_id = $1 AND pr.process_date BETWEEN $2::date AND $3::date
-         GROUP BY l.estate`,
+         GROUP BY 1`,
         [tenantId, startDate, endDate],
       ),
       sql.query(
-        `SELECT COALESCE(l.estate, 'Unassigned') AS estate, COALESCE(SUM(lt.total_cost), 0) AS value
+        `SELECT ${ESTATE_KEY_SQL} AS estate, COALESCE(SUM(lt.total_cost), 0) AS value
          FROM labour_cost lt LEFT JOIN locations l ON l.id = lt.location_id
          WHERE lt.tenant_id = $1 AND lt.work_date BETWEEN $2::date AND $3::date
-         GROUP BY l.estate`,
+         GROUP BY 1`,
         [tenantId, startDate, endDate],
       ),
       sql.query(
-        `SELECT COALESCE(l.estate, 'Unassigned') AS estate, COALESCE(SUM(et.total_amount), 0) AS value
+        `SELECT ${ESTATE_KEY_SQL} AS estate, COALESCE(SUM(et.total_amount), 0) AS value
          FROM expense_transactions et LEFT JOIN locations l ON l.id = et.location_id
          WHERE et.tenant_id = $1 AND et.entry_date BETWEEN $2::date AND $3::date
-         GROUP BY l.estate`,
+         GROUP BY 1`,
         [tenantId, startDate, endDate],
       ),
       sql.query(
-        `SELECT COALESCE(l.estate, 'Unassigned') AS estate, COALESCE(SUM(dr.bags_dispatched), 0) AS value
+        `SELECT ${ESTATE_KEY_SQL} AS estate, COALESCE(SUM(dr.bags_dispatched), 0) AS value
          FROM dispatch_records dr LEFT JOIN locations l ON l.id = dr.location_id
          WHERE dr.tenant_id = $1 AND dr.dispatch_date BETWEEN $2::date AND $3::date
-         GROUP BY l.estate`,
+         GROUP BY 1`,
         [tenantId, startDate, endDate],
       ),
       sql.query(
-        `SELECT COALESCE(l.estate, 'Unassigned') AS estate, COALESCE(SUM(sr.revenue), 0) AS value
+        `SELECT ${ESTATE_KEY_SQL} AS estate, COALESCE(SUM(sr.revenue), 0) AS value
          FROM sales_records sr LEFT JOIN locations l ON l.id = sr.location_id
          WHERE sr.tenant_id = $1 AND sr.sale_date BETWEEN $2::date AND $3::date
-         GROUP BY l.estate`,
+         GROUP BY 1`,
         [tenantId, startDate, endDate],
       ),
     ])
@@ -104,11 +110,11 @@ export async function fetchActivityByEstate(
       return byEstate.get(key)!
     }
     for (const name of estateNames) ensure(name)
-    for (const row of toRows<any>(processingRows)) ensure(String(row.estate)).processingKg = Number(row.value) || 0
-    for (const row of toRows<any>(laborRows)) ensure(String(row.estate)).laborCost = Number(row.value) || 0
-    for (const row of toRows<any>(expenseRows)) ensure(String(row.estate)).expenseTotal = Number(row.value) || 0
-    for (const row of toRows<any>(dispatchRows)) ensure(String(row.estate)).dispatchBags = Number(row.value) || 0
-    for (const row of toRows<any>(salesRows)) ensure(String(row.estate)).salesRevenue = Number(row.value) || 0
+    for (const row of toRows<any>(processingRows)) ensure(String(row.estate)).processingKg += Number(row.value) || 0
+    for (const row of toRows<any>(laborRows)) ensure(String(row.estate)).laborCost += Number(row.value) || 0
+    for (const row of toRows<any>(expenseRows)) ensure(String(row.estate)).expenseTotal += Number(row.value) || 0
+    for (const row of toRows<any>(dispatchRows)) ensure(String(row.estate)).dispatchBags += Number(row.value) || 0
+    for (const row of toRows<any>(salesRows)) ensure(String(row.estate)).salesRevenue += Number(row.value) || 0
 
     const ordered = estateNames.map((name) => byEstate.get(name)!)
     const unassigned = byEstate.get("Unassigned")

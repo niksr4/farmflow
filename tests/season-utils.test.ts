@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
-import { isTabOffSeason, getMobileBottomNavTabs, SEASONAL_TABS } from "../lib/season-utils"
+import { isTabOffSeason, getMobileBottomNavTabs, getSeasonAwareTabOrder, SEASONAL_TABS } from "../lib/season-utils"
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
@@ -85,5 +85,30 @@ describe("getMobileBottomNavTabs", () => {
       expect(tabs).toHaveLength(4)
       expect(new Set(tabs).size).toBe(4)
     }
+  })
+})
+
+describe("getSeasonAwareTabOrder", () => {
+  // One date per phase list, so every SEASON_TAB_ORDER entry is exercised.
+  const dates = ["2026-01-10T06:00:00Z", "2026-03-10T06:00:00Z", "2026-06-05T06:00:00Z", "2026-10-20T06:00:00Z", "2026-12-10T06:00:00Z"]
+  const all = [
+    "home", "attendance", "accounts", "picking", "processing", "dispatch", "sales", "pepper",
+    "inventory", "rainfall", "season", "season-pl", "balance-sheet", "yield-forecast", "ai-analysis",
+    "quality", "curing", "activity-log", "plant-health", "news", "market-pricing", "resources",
+    "documents", "journal", "compliance", "receivables", "billing", "some-new-tab",
+  ]
+
+  it.each(dates)("never lists a tab twice (%s)", (iso) => {
+    // Every phase list once carried "picking" twice: HoneyFarm got two Picking tabs.
+    vi.setSystemTime(new Date(iso))
+    const tabs = getSeasonAwareTabOrder(all)
+    expect(new Set(tabs).size).toBe(tabs.length)
+    expect(tabs.filter((t) => t === "picking")).toHaveLength(1)
+    expect([...tabs].sort()).toEqual([...all].sort())
+  })
+
+  it("keeps tabs it has no opinion on, at the end", () => {
+    vi.setSystemTime(new Date("2026-06-05T06:00:00Z"))
+    expect(getSeasonAwareTabOrder(["some-new-tab", "home"])).toEqual(["home", "some-new-tab"])
   })
 })

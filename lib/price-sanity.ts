@@ -26,12 +26,6 @@
 /** Beyond this multiple of the item's usual unit price -- or below its reciprocal -- say something. */
 export const PRICE_OUTLIER_RATIO = 3
 
-/**
- * How close a hypothesis has to land before we name it as the likely cause. Wide, because prices
- * genuinely drift between purchases: Seshagiri's MOP was 3% out, Urea 9%.
- */
-export const HYPOTHESIS_TOLERANCE = 0.35
-
 export type PriceCheck =
   | { level: "ok" }
   | {
@@ -73,18 +67,18 @@ export function checkRestockCost(
 
   if (derivedUnitPrice >= usual * PRICE_OUTLIER_RATIO) {
     const ratio = derivedUnitPrice / usual
-    // The classic old-form mistake: the figure entered is itself the per-unit rate, so the "total"
-    // is really rate x quantity. Test it by asking what the total would be if it were per-unit.
-    const looksLikeUnitRateInTotalBox = Math.abs(total - usual) / usual <= HYPOTHESIS_TOLERANCE
+    // No "you probably meant X" hint here, unlike the low branch. A per-unit rate typed into the
+    // total box can only ever make the derived price LOWER (for any quantity above one), so there is
+    // no single typo this direction reliably points at -- a wrong quantity, a stray zero, the old
+    // per-unit habit in reverse. (Until 2026-09-24 this branch carried a "total looks like one
+    // unit's price" hypothesis that could only fire for quantities under 0.45, and then suggested
+    // usual x qty as the total -- a figure unrelated to what was typed.)
     return {
       level: "warn",
       derivedUnitPrice,
       ratio,
       direction: "high",
-      message: looksLikeUnitRateInTotalBox
-        ? `That works out to ${money(derivedUnitPrice)} per ${unit}, about ${ratio.toFixed(0)}× the ${money(usual)} you usually pay. ` +
-          `If ${money(total)} is the price of one ${unit}, the total for ${qty} is ${money(usual * qty)}.`
-        : `That works out to ${money(derivedUnitPrice)} per ${unit}, about ${ratio.toFixed(0)}× the ${money(usual)} you usually pay. Check the amount.`,
+      message: `That works out to ${money(derivedUnitPrice)} per ${unit}, about ${ratio.toFixed(0)}× the ${money(usual)} you usually pay. Check the amount.`,
     }
   }
 

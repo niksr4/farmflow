@@ -96,3 +96,31 @@ describe("sales export helper", () => {
     expect(csv).toContain('"Dry Cherry"')
   })
 })
+
+describe("sales export dates", () => {
+  const row = (sale_date: string) => ({
+    sale_date,
+    location_code: "MV",
+    coffee_type: "Arabica",
+    bag_type: "Dry Parchment",
+    bags_sold: 1,
+    revenue: 1,
+  })
+  const firstDataRow = (csv: string) => csv.split("\n")[2]
+
+  it("prints a Postgres date serialised to UTC midnight as the date it names", () => {
+    // Re-reading it through the local clock put it a day early anywhere west of Greenwich.
+    expect(firstDataRow(buildSalesCsv([row("2026-09-24T00:00:00.000Z")], 50))).toMatch(/^"2026-09-24",/)
+  })
+
+  it("prints a bare calendar date unchanged", () => {
+    expect(firstDataRow(buildSalesCsv([row("2026-09-24")], 50))).toMatch(/^"2026-09-24",/)
+  })
+
+  it("does not fail the whole export on one unparseable date", () => {
+    // date-fns format() throws RangeError on an Invalid Date; one bad row used to kill the export.
+    const csv = buildSalesCsv([row("not-a-date"), row("2026-09-24")], 50)
+    expect(csv).toContain('"not-a-date"')
+    expect(csv).toContain('"2026-09-24"')
+  })
+})

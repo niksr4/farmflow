@@ -81,7 +81,7 @@ describe("the gate is one round trip, and it is live every time", () => {
      * thing to be right about by hand.
      */
     const fn = rateLimit.slice(rateLimit.indexOf("export function buildRateLimitBatch"))
-    const body = fn.slice(0, fn.indexOf("export async function checkRateLimits"))
+    const body = fn.slice(0, fn.indexOf("export async function checkRateLimit("))
     expect(body).toMatch(/params\.push\(r\.dbKey, r\.windowStart, r\.windowMs\)/)
     expect(body, "hand-escaped quotes are back").not.toMatch(/replace\(\/'\/g/)
   })

@@ -8,6 +8,7 @@ import {
   normalizeBagType,
   normalizeCoffeeType,
   normalizeImportMode,
+  isUnrecognisedTransactionType,
   normalizeTransactionType,
   parseDate,
   parseNumber,
@@ -92,6 +93,35 @@ describe("import bulk utils — field normalization", () => {
     expect(normalizeTransactionType("deplete")).toBe("deplete")
     expect(normalizeTransactionType("something else")).toBe("deplete")
     expect(normalizeTransactionType(undefined)).toBe("deplete")
+  })
+
+  it("reads purchase words as restock -- they used to import as depletions and take stock DOWN", () => {
+    for (const word of ["Purchase", "purchased", "Bought", "buy", "Received", "Stock In", "stock-in", "Opening"]) {
+      expect(normalizeTransactionType(word), word).toBe("restock")
+    }
+    for (const word of ["Used", "usage", "Consumed", "Issue", "Stock out", "applied", "sold", "Deplete"]) {
+      expect(normalizeTransactionType(word), word).toBe("deplete")
+    }
+    // Word boundaries: "buy" inside another word is not a purchase, and falls to the default.
+    expect(normalizeTransactionType("buyback-adjustment")).toBe("deplete")
+    expect(isUnrecognisedTransactionType("buyback-adjustment")).toBe(true)
+  })
+
+  it("flags a non-blank type it does not recognise, so validation can warn before it defaults to deplete", () => {
+    expect(isUnrecognisedTransactionType("transfer")).toBe(true)
+    expect(isUnrecognisedTransactionType("something else")).toBe(true)
+    expect(isUnrecognisedTransactionType("")).toBe(false)
+    expect(isUnrecognisedTransactionType(undefined)).toBe(false)
+    expect(isUnrecognisedTransactionType("restock")).toBe(false)
+    expect(isUnrecognisedTransactionType("used")).toBe(false)
+  })
+
+  it("warns in validation when a transaction type falls through to deplete", () => {
+    const { warnings, errors } = buildValidationErrors("transactions", [
+      { transaction_date: "2026-09-01", item_type: "Urea", quantity: "10", transaction_type: "transfer" },
+    ]) as any
+    expect(errors).toHaveLength(0)
+    expect(JSON.stringify(warnings)).toContain("not recognised")
   })
 
   it("reads the first matching, non-empty field by a list of header aliases", () => {
