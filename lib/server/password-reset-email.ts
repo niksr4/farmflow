@@ -102,7 +102,21 @@ export async function sendPasswordResetEmail(input: PasswordResetEmailInput): Pr
       body: JSON.stringify({
         from,
         to: [input.email],
-        bcc: [EMAIL_BCC_MONITORING],
+        /**
+         * NO BCC ON THIS ONE. Every other email in the app copies EMAIL_BCC_MONITORING, because
+         * bodies are not persisted anywhere and that copy is the only archive of what was actually
+         * sent. A password reset is the exception: the link IS an account-takeover credential, and
+         * BCCing it parked a working one in a shared support mailbox for its full hour, for every
+         * reset ever sent. Anyone with access to that inbox could take over any account without
+         * needing the user's password or mailbox.
+         *
+         * The monitoring record is kept by the separate notification below, which says a reset was
+         * sent and to whom, and carries no link. That preserves what the BCC was for -- evidence
+         * the mail went out -- without shipping the credential.
+         *
+         * Raised by the QA scanner 2026-09-25 as consistent-with-convention rather than a new bug,
+         * which is exactly why it had survived: it looked like every other send in the file.
+         */
         subject,
         text,
         html,
@@ -123,6 +137,30 @@ export async function sendPasswordResetEmail(input: PasswordResetEmailInput): Pr
         statusCode: response.status,
       }
     }
+
+    /**
+     * The monitoring record, with no link in it. Deliberately fire-and-forget: the user's reset
+     * email has already been accepted by Resend at this point, and failing the whole call because
+     * an internal notification bounced would turn a successful reset into a reported failure.
+     */
+    void fetchWithTimeout("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [EMAIL_BCC_MONITORING],
+        subject: `[monitoring] Password reset link sent to ${input.username || input.email}`,
+        text: [
+          `A password reset link was sent to ${input.email} (username: ${input.username || "unknown"}).`,
+          "",
+          "The link itself is deliberately not included here — it is a working account-takeover",
+          "credential for one hour, and this mailbox is not where one should sit.",
+        ].join("\n"),
+      }),
+      timeoutMs: 10_000,
+    }).catch(() => {
+      // Monitoring must never be able to fail a password reset.
+    })
 
     return { sent: true, provider: "resend", statusCode: response.status }
   } catch (error: any) {
