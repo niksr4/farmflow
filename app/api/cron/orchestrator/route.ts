@@ -16,6 +16,7 @@ import { sql } from "@/lib/server/db"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { istNowParts } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -46,7 +47,10 @@ async function handleCronInvocation(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const isMonday = new Date().getDay() === 1
+    // The ESTATE's Monday. This read new Date().getDay() on a UTC server, which happens to agree
+    // because the cron fires 02:00 UTC = 07:30 IST — but "correct only because of the hour it runs"
+    // is a landmine, and this one is a straight swap with no window arithmetic behind it.
+    const isMonday = istNowParts().weekday === 1
 
     // Guard: skip weekly digest if a successful run already completed this calendar week.
     // Prevents double-sends on Vercel cron retries or manual re-triggers on Monday.

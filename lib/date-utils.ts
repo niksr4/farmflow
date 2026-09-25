@@ -220,6 +220,33 @@ export function istTodayParts(): { year: number; month: number; day: number } {
 }
 
 /**
+ * The estate's weekday and hour right now.
+ *
+ * `weekday` is 0=Sunday … 6=Saturday, matching Date.getDay(), because every caller is comparing
+ * against that convention already and a second numbering would be its own bug.
+ *
+ * THE FIFTH SIGNATURE. `new Date().getDay()` / `.getHours()` reads the HOST's clock, exactly like
+ * .getMonth() and .getFullYear() do. The guard written on 2026-09-23 enumerated
+ * (getFullYear|getMonth|getDate) and therefore could not see this one — the scanner found an
+ * instance the following day, in lib/season-utils.ts, that the guard had passed over.
+ */
+export function istNowParts(): { weekday: number; hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date())
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ""
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  // "24" is what en-GB hour12:false emits for midnight; Date.getHours() calls that 0.
+  const hour = Number(get("hour")) % 24
+  return { weekday: days.indexOf(get("weekday")), hour, minute: Number(get("minute")) }
+}
+
+/**
  * An instant rendered as an IST wall clock, "HH:MM".
  *
  * toLocaleTimeString() WITHOUT an explicit timeZone renders in the viewer's zone -- and passing a

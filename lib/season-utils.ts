@@ -1,6 +1,7 @@
 "use client"
 
 import { getCurrentEstatePhase, type EstateSeason } from "./coffee-estate-calendar"
+import { istNowParts } from "@/lib/date-utils"
 
 export type TabSeasonality = "always" | "harvest" | "post-harvest" | "analytics"
 
@@ -152,10 +153,17 @@ export function getMobileBottomNavTabs(availableTabs: string[]): string[] {
 
 // Peak logging hours from HoneyFarm data: Mon 11am-12pm, Fri 5pm, Sat 10am
 // Used to show contextual prompts ("Ready to log this week's work?")
+/**
+ * The windows below are ESTATE times — Monday morning, Friday evening, Saturday morning, chosen
+ * around when a writer is actually near the office. They were read off the VIEWER's clock, so the
+ * prompt appeared at the wrong hour for anyone not in India and, for a viewer far enough east or
+ * west, on the wrong day entirely.
+ *
+ * Raised by the QA scanner 2026-09-24. Worth noting the IST guard added the day before did not
+ * catch it: it enumerated getFullYear/getMonth/getDate and this reads getDay/getHours.
+ */
 export function isBatchLoggingWindow(): boolean {
-  const now = new Date()
-  const dow = now.getDay() // 0=Sun 1=Mon...6=Sat
-  const hour = now.getHours()
+  const { weekday: dow, hour } = istNowParts() // 0=Sun 1=Mon...6=Sat, IST
   if (dow === 6 && hour >= 9 && hour <= 11) return true   // Sat 9-11am
   if (dow === 1 && hour >= 10 && hour <= 13) return true  // Mon 10am-1pm
   if (dow === 5 && hour >= 16 && hour <= 18) return true  // Fri 4-6pm
