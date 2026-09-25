@@ -370,16 +370,3 @@ export function weekRangeFor(date: string, weekEndsOn = 6): { start: string; end
   start.setUTCDate(end.getUTCDate() - 6)
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
 }
-
-/**
- * How many payroll runs have elapsed between the first one and this one.
- *
- * Advances recover per run, so an instalment needs an ordinal. Derived from the advance's own start
- * rather than stored, so re-running a closed week gives the same instalment it gave the first time.
- */
-export function periodIndexFor(firstPeriodStart: string, thisPeriodStart: string, periodDays = 7): number {
-  const a = Date.parse(`${firstPeriodStart}T00:00:00Z`)
-  const b = Date.parse(`${thisPeriodStart}T00:00:00Z`)
-  if (!Number.isFinite(a) || !Number.isFinite(b) || periodDays <= 0) return 0
-  return Math.max(0, Math.floor((b - a) / (periodDays * 86400000)))
-}

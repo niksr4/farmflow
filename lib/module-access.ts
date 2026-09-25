@@ -145,6 +145,17 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
 
   let result: string[]
 
+  // A user-role session with no `users` row for its username+tenant gets NO modules (fail closed),
+  // never the tenant-wide default. requireSessionUser() falls back to trusting the JWT's own claims
+  // when its DB lookup finds no row (an account hard-deleted while a session was still live --
+  // NextAuth JWTs are not revoked server-side), so falling through to `tenantEnabled` here would
+  // hand that stale session every module the tenant has, ignoring any per-user user_modules
+  // restrictions the account had. Mirrors getAccessibleLocationIds() in lib/location-access.ts.
+  if (user.role !== "admin" && !userId) {
+    setCachedModules(cacheKey, [])
+    return []
+  }
+
   if (user.role === "admin") {
     result = tenantEnabled
   } else if (userId) {
@@ -173,6 +184,8 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
       result = filterUserBlockedModules(tenantEnabled)
     }
   } else {
+    // Unreachable for user-role sessions (the missing-userId case returned above); kept so
+    // `result` is definitely assigned for any future role value.
     result = filterUserBlockedModules(tenantEnabled)
   }
 
