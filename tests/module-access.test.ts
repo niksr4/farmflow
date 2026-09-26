@@ -85,13 +85,16 @@ describe("getEnabledModules", () => {
   it("fails closed (no modules) when a user-role session has no users row, instead of the tenant-wide default", async () => {
     // requireSessionUser() trusts the JWT's own claims when the account's row is gone (hard-deleted
     // with a live session). The tenant-wide fallback would ignore any user_modules restriction.
-    runTenantQuery
-      .mockResolvedValueOnce([]) // users lookup: no row
-      .mockResolvedValueOnce([]) // tenant_modules
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
     const result = await getEnabledModules(user({ id: "u-deleted" }))
     expect(result).toEqual([])
-    // Never reached user_modules: users + tenant_modules only.
-    expect(runTenantQuery).toHaveBeenCalledTimes(2)
+    /**
+     * ONE query, not two. This asserted 2 because the fail-closed branch used to sit below the
+     * tenant_modules read, so a deleted account paid for a tenant-modules lookup whose answer was
+     * then thrown away. Moving the branch up -- needed so the cache check could sit after it without
+     * paying for three queries first -- also made the deleted-account path cheaper.
+     */
+    expect(runTenantQuery, "nothing is read for an account that does not exist").toHaveBeenCalledTimes(1)
   })
 
   it("still gives an admin the tenant's modules without needing a user_modules lookup", async () => {
@@ -101,6 +104,59 @@ describe("getEnabledModules", () => {
     const result = await getEnabledModules(user({ id: "admin-1", role: "admin" }))
     expect(result).toContain("inventory")
     expect(result).toContain("balance-sheet")
+  })
+})
+
+describe("no cached module list is served before the account is known to exist", () => {
+  /**
+   * SWEPT, not reported. CodeRabbit found this shape in lib/location-access.ts on PRs #32 and #47;
+   * getEnabledModules had it too, and fixing only the reported instance is half the job.
+   *
+   * The `users` lookup is the fail-closed check that gives a deleted account nothing, and the cache
+   * read sat above it -- so for the 30s TTL a deleted user's live session kept the module list
+   * computed while the account existed. DELETE /api/admin/users does not invalidate MODULE_CACHE and
+   * NextAuth JWTs are not revoked server-side, which is what lets the session outlive the row.
+   *
+   * Milder than the location-access version, and worth stating precisely rather than calling it
+   * equivalent: a stale module list grants the tabs that account already had, where a stale location
+   * `null` granted every location in the tenant. But "milder" is not "correct" -- it is still an
+   * access decision served to a principal whose existence was never checked, which is exactly the
+   * reasoning that was wrong on #47.
+   */
+  it("re-checks the users row even when a module list is cached", async () => {
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "db-user-10" }]) // users lookup
+      .mockResolvedValueOnce([{ module: "inventory", enabled: true }]) // tenant_modules
+      .mockResolvedValueOnce([]) // user_modules
+    expect(await getEnabledModules(user({ id: "u-cached-modules" }))).toContain("inventory")
+
+    // Account deleted, session still live.
+    runTenantQuery.mockReset()
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
+    const afterDeletion = await getEnabledModules(user({ id: "u-cached-modules" }))
+
+    expect(runTenantQuery, "existence is checked before any cached value is served").toHaveBeenCalled()
+    expect(afterDeletion, "a deleted account gets nothing, not the tabs it used to have").toEqual([])
+  })
+
+  it("still uses the cache to skip the tenant_modules and user_modules reads", async () => {
+    // The cache is moved, not removed. A second call within the TTL costs one indexed users lookup
+    // instead of three queries -- pinned so the fix cannot degrade into querying everything.
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "db-user-11" }])
+      .mockResolvedValueOnce([{ module: "inventory", enabled: true }])
+      .mockResolvedValueOnce([])
+    expect(await getEnabledModules(user({ id: "u-cache-kept" }))).toContain("inventory")
+    const firstCallCount = runTenantQuery.mock.calls.length
+
+    runTenantQuery.mockResolvedValueOnce([{ id: "db-user-11" }]) // users lookup only
+    const second = await getEnabledModules(user({ id: "u-cache-kept" }))
+
+    expect(second).toContain("inventory")
+    expect(
+      runTenantQuery.mock.calls.length - firstCallCount,
+      "the second call re-checks existence and nothing else",
+    ).toBe(1)
   })
 })
 
