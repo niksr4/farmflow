@@ -157,7 +157,20 @@ const DEPLETE_WORDS = /\b(deplete\w*|use[ds]?|usage|consume[ds]?|consumption|iss
  * historic "deplete" default and is FLAGGED, because guessing a direction on an import that moves
  * real stock is how a spreadsheet silently moves the quantity the wrong way twice over.
  */
-const RETURN_WORDS = /\b(returns?|returned)\b/
+/**
+ * ONE SPELLING OF "RETURN", shared by the detector and the direction prefix below.
+ *
+ * They were two separate literals and they disagreed: this one matched `returned`, the prefix did
+ * not. So "Returned from Supplier" entered the return branch, missed tier 0, fell to the
+ * counterparty tier and recorded a depletion when the goods are arriving. "Returned to Customer"
+ * had the mirror error. Raised by CodeRabbit on PR #44 -- the fifth finding on this classifier, and
+ * the first that was not a new sentence shape but two patterns for one word drifting apart.
+ *
+ * Derived from a single source now, so a spelling added here reaches both and they cannot diverge
+ * again. A test asserts they agree on the same inputs.
+ */
+const RETURN_WORD_SOURCE = String.raw`return(?:s|ed)?`
+const RETURN_WORDS = new RegExp(String.raw`\b${RETURN_WORD_SOURCE}\b`)
 
 /**
  * TWO TIERS, because WHO is handing the goods over outranks WHAT the original transaction was.
@@ -212,7 +225,7 @@ const RETURN_WORDS = /\b(returns?|returned)\b/
  * Separators allow a colon, comma or dash as well as spaces, because a hand-written CSV column does
  * that and the direction it states is not in doubt.
  */
-const RETURN_PREFIX = String.raw`\breturns?\b[\s:,\-]*`
+const RETURN_PREFIX = `\\b${RETURN_WORD_SOURCE}\\b[\\s:,\\-]*`
 const RETURN_COUNTERPARTY_NOUN = String.raw`(?:the[\s:,\-]+)?(?:supplier|vendor|customer|buyer)\b`
 const RETURN_LEAVING_US = new RegExp(`${RETURN_PREFIX}to[\\s:,\\-]+${RETURN_COUNTERPARTY_NOUN}`)
 const RETURN_ARRIVING_TO_US = new RegExp(`${RETURN_PREFIX}from[\\s:,\\-]+${RETURN_COUNTERPARTY_NOUN}`)

@@ -176,6 +176,28 @@ describe("import bulk utils — field normalization", () => {
       }
     })
 
+    it("spells 'return' the same way in the detector and the direction rule", () => {
+      /**
+       * They were two separate literals and they disagreed: the detector matched `returned`, the
+       * direction prefix did not. So "Returned from Supplier" entered the return branch, missed
+       * tier 0, fell to the counterparty tier and recorded a DEPLETION when the goods are arriving.
+       * "Returned to Customer" had the mirror error.
+       *
+       * Raised by CodeRabbit on PR #44 -- the fifth finding on this classifier, and the first that
+       * was not a new sentence shape but two patterns for one word drifting apart. Both now derive
+       * from RETURN_WORD_SOURCE.
+       *
+       * Derived, not a fixed pair: every spelling is run through both directions, so adding one to
+       * the source without teaching the prefix about it fails here.
+       */
+      for (const spelling of ["Return", "Returns", "Returned"]) {
+        expect(normalizeTransactionType(`${spelling} from Supplier`), `${spelling} from`).toBe("restock")
+        expect(normalizeTransactionType(`${spelling} to Customer`), `${spelling} to`).toBe("deplete")
+        // And the bare word still refuses to guess, whichever spelling it is.
+        expect(isUnrecognisedTransactionType(spelling), `bare ${spelling}`).toBe(true)
+      }
+    })
+
     it("reads a direction written with punctuation", () => {
       // A hand-written CSV column does "Return from: Supplier", and a bare \s+ separator missed it
       // -- so tier 1 saw `supplier` and sent stock OUT when the phrase says it is arriving.
