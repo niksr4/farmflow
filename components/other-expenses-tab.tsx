@@ -561,67 +561,11 @@ export default function OtherExpensesTab({
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="expense-amount" className="text-base">
-                    {stockCost.derived !== null ? "Amount (₹) — from stock" : "Amount (₹)"}
-                  </Label>
-                  <Input
-                    id="expense-amount"
-                    type="number" inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    value={numericInputValue(formData.amount)}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, amount: Number.parseFloat(e.target.value) || 0 }))
-                    }
-                    required
-                    /* Read-only rather than hidden: the number is the point of the form, and an
-                       amount that vanishes when you link an item looks like a bug. Read-only says
-                       "this is computed", which is the honest description. */
-                    readOnly={stockCost.derived !== null}
-                    aria-describedby="expense-amount-help"
-                    className={cn("h-11", stockCost.derived !== null && "bg-muted text-muted-foreground")}
-                  />
-                  {stockCost.derived === null && stockCost.unpriced.length === 0 && (
-                    /**
-                     * SAYS THE STOCK PATH EXISTS, BEFORE YOU TYPE.
-                     *
-                     * The form reads top to bottom as "enter an amount (required), and optionally
-                     * also deduct stock" — so for a cost that is purely stock coming out of the
-                     * store, you meet the Amount box first, type a figure into it, and only find
-                     * out further down that the number is worked out for you. The effect at the
-                     * top of this file then silently replaces what you typed.
-                     *
-                     * Nothing was wrong with the result, but the first required field was wasted
-                     * work and nobody told you. This is the cheapest honest fix: mention the other
-                     * path at the moment you are deciding whether to type.
-                     */
-                    <p id="expense-amount-help" className="text-xs text-muted-foreground">
-                      What you paid. If this cost came out of your own store, add the item under
-                      &ldquo;Deduct from stock&rdquo; below and the amount works itself out.
-                    </p>
-                  )}
-                  {stockCost.derived !== null && (
-                    /* Shows its working. "Rs 4,000" alone invites the question this answers. */
-                    <p id="expense-amount-help" className="text-xs text-muted-foreground">
-                      {stockCost.working} — the average cost this stock was bought in at. Change the
-                      quantity below to change the amount.
-                    </p>
-                  )}
-                  {stockCost.unpriced.length > 0 && (
-                    /* The case that used to pass silently: unpriced stock means the server keeps
-                       whatever was typed, so the expense and the stock it consumed can disagree
-                       by any amount. Saying so here is the difference between a number someone
-                       chose and a number nobody checked. */
-                    <p id="expense-amount-help" className="text-xs text-amber-600">
-                      {stockCost.unpriced.join(", ")} {stockCost.unpriced.length === 1 ? "has" : "have"} no
-                      cost recorded, so the amount can&apos;t be worked out from stock. Price the stock
-                      under Inventory, or enter the amount yourself and know it isn&apos;t derived.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
+                {/* Full width: Amount used to sit beside this, and the pair was the problem --
+                    see the comment above the Amount field for why it now comes last. The search
+                    box also carries a suggestion list, an unmatched warning and a helper row, none
+                    of which fit in half a row on a phone. */}
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="expense-code" className="text-base">
                     Type of cost
                   </Label>
@@ -729,20 +673,6 @@ export default function OtherExpensesTab({
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="expense-notes" className="text-base">
-                  Notes
-                </Label>
-                <Textarea
-                  id="expense-notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="What was this expense for?"
-                  rows={3}
-                  className="text-base"
-                />
-              </div>
-
               {selectedTracksInventory && (
                 <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-800">
                   <span className="mt-0.5 shrink-0">📦</span>
@@ -756,7 +686,13 @@ export default function OtherExpensesTab({
                 <div className="space-y-3 border rounded-md p-3 bg-background">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-muted-foreground">
-                      Deduct from stock{" "}<span className="font-normal">(optional — only if this cost used supplies already in your inventory)</span>
+                      {/* Says what linking an item DOES, not just that it is allowed. The old
+                          parenthetical ("optional, only if this cost used supplies already in your
+                          inventory") described when to use the section but never mentioned that it
+                          fills in the amount for you -- which is the entire reason the Amount box
+                          below might not be yours to type. Laxmi's writer asked why the cost box
+                          was there at all when the amount comes from the quantity. */}
+                      Deduct from stock{" "}<span className="font-normal">(only if this cost used supplies from your own store. Link an item and the amount below works itself out.)</span>
                     </p>
                     {supportsMultiInventoryItems && (
                       <Button
@@ -854,6 +790,92 @@ export default function OtherExpensesTab({
                   )}
                 </div>
               )}
+
+              {/**
+               * AMOUNT COMES LAST, BECAUSE IT IS THE ONLY FIELD THAT MIGHT NOT BE YOURS TO FILL.
+               *
+               * It used to be the third field, directly above "Type of cost" and well above the
+               * stock section. That put the one required number the form asks for BEFORE the
+               * question that decides whether the writer should be typing a number at all. For a
+               * cost that is purely supplies coming out of the store, you met a required Amount
+               * box, typed a figure, and the effect at the top of this file silently replaced it
+               * with the derived cost further down. The result was right; the work was wasted and
+               * nothing said so. Laxmi asked why the Cost box was there at all when the amount
+               * comes from the quantity, which is the same confusion from the other end.
+               *
+               * The form now reads in the order the decision actually happens:
+               *
+               *   Date -> Where it belongs -> Type of cost -> Did this come out of your store?
+               *   -> Amount
+               *
+               * By the time you reach this box, it is either already filled in and read-only
+               * (stock answered it) or genuinely waiting for what you paid. The field stops
+               * asking a question whose answer it was about to overwrite.
+               */}
+              <div className="space-y-2">
+                <Label htmlFor="expense-amount" className="text-base">
+                  {stockCost.derived !== null ? "Amount (₹) — from stock" : "Amount (₹)"}
+                </Label>
+                <Input
+                  id="expense-amount"
+                  type="number" inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={numericInputValue(formData.amount)}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, amount: Number.parseFloat(e.target.value) || 0 }))
+                  }
+                  required
+                  /* Read-only rather than hidden: the number is the point of the form, and an
+                     amount that vanishes when you link an item looks like a bug. Read-only says
+                     "this is computed", which is the honest description. */
+                  readOnly={stockCost.derived !== null}
+                  aria-describedby="expense-amount-help"
+                  className={cn("h-11", stockCost.derived !== null && "bg-muted text-muted-foreground")}
+                />
+                {stockCost.derived === null && stockCost.unpriced.length === 0 && (
+                  /* Still worth saying, even with the stock section now above: somebody who
+                     scrolled past it needs to know the box is theirs to fill, and that there was
+                     another way. "above" and "below" both have to track the field order -- this
+                     line said "below" for exactly as long as the stock section was below. */
+                  <p id="expense-amount-help" className="text-xs text-muted-foreground">
+                    What you paid. If this cost came out of your own store, link the item under
+                    &ldquo;Deduct from stock&rdquo; above and the amount works itself out.
+                  </p>
+                )}
+                {stockCost.derived !== null && (
+                  /* Shows its working. "Rs 4,000" alone invites the question this answers. */
+                  <p id="expense-amount-help" className="text-xs text-muted-foreground">
+                    {stockCost.working} — the average cost this stock was bought in at. Change the
+                    quantity above to change the amount.
+                  </p>
+                )}
+                {stockCost.unpriced.length > 0 && (
+                  /* The case that used to pass silently: unpriced stock means the server keeps
+                     whatever was typed, so the expense and the stock it consumed can disagree
+                     by any amount. Saying so here is the difference between a number someone
+                     chose and a number nobody checked. */
+                  <p id="expense-amount-help" className="text-xs text-amber-600">
+                    {stockCost.unpriced.join(", ")} {stockCost.unpriced.length === 1 ? "has" : "have"} no
+                    cost recorded, so the amount can&apos;t be worked out from stock. Price the stock
+                    under Inventory, or enter the amount yourself and know it isn&apos;t derived.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="expense-notes" className="text-base">
+                  Notes
+                </Label>
+                <Textarea
+                  id="expense-notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="What was this expense for?"
+                  rows={3}
+                  className="text-base"
+                />
+              </div>
 
               <div className={cn(
                 "flex flex-col sm:flex-row gap-2",
