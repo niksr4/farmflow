@@ -135,6 +135,36 @@ describe("import bulk utils — field normalization", () => {
       expect(isUnrecognisedTransactionType("Sales Return")).toBe(false)
     })
 
+    it("lets a named counterparty outrank the transaction word", () => {
+      /**
+       * "Customer Purchase Return" contains BOTH `customer` and `purchase`. The first version of
+       * this fix checked supplier-ish words first, so it matched `purchase` and sent stock OUT --
+       * when a customer returning a purchase brings stock IN. Four phrases contained words from both
+       * groups and all four resolved the same wrong way, with no unrecognised-type warning.
+       *
+       * Raised by CodeRabbit on PR #44. "Customer" tells you which way the goods are moving whatever
+       * else the phrase says; "purchase" only tells you which way the ORIGINAL transaction went,
+       * which a return then reverses.
+       */
+      for (const type of ["Customer Purchase Return", "Buyer Purchase Return", "Customer Return of Purchase"]) {
+        expect(normalizeTransactionType(type), type).toBe("restock")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+      for (const type of ["Supplier Sales Return", "Vendor Sold Return"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+    })
+
+    it("flags a phrase that contradicts itself rather than picking a side", () => {
+      // Both counterparties, or both transaction directions. Neither reading is defensible, and on
+      // an import that moves real stock a warning beats a coin flip.
+      for (const type of ["Customer Supplier Return", "Purchase Sales Return", "Vendor Buyer Returns"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(true)
+      }
+    })
+
     it("refuses to guess a bare return, and says so", () => {
       /**
        * "Return" names no counterparty, so its direction is genuinely unknown -- it could be going

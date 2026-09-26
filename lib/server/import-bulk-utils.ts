@@ -158,8 +158,31 @@ const DEPLETE_WORDS = /\b(deplete\w*|use[ds]?|usage|consume[ds]?|consumption|iss
  * real stock is how a spreadsheet silently moves the quantity the wrong way twice over.
  */
 const RETURN_WORDS = /\b(returns?|returned)\b/
-const RETURN_TO_SUPPLIER = /\b(purchase[ds]?|bought|buy|supplier|vendor)\b/
-const RETURN_FROM_CUSTOMER = /\b(sale[sd]?|sold|customer|buyer|issue[ds]?)\b/
+
+/**
+ * TWO TIERS, because WHO is handing the goods over outranks WHAT the original transaction was.
+ *
+ * The first version of this put the counterparty and the transaction words in one alternation and
+ * checked supplier-ish before customer-ish. "Customer Purchase Return" then matched `purchase` and
+ * was classified as stock going OUT -- when a customer returning a purchase brings stock IN. Four
+ * phrases contained words from both groups and all four resolved the same wrong way, confidently and
+ * with no unrecognised-type warning. Raised by CodeRabbit on PR #44, quoting .coderabbit.yaml back
+ * at it: "its characteristic failure is NOT a crash, it is a confident wrong answer."
+ *
+ * A named counterparty settles the direction on its own. "Customer" tells you the goods are coming
+ * back to you whatever the rest of the phrase says; "Purchase" only tells you which way the ORIGINAL
+ * transaction went, which a return then reverses. So the counterparty is consulted first and the
+ * transaction words are the fallback for phrases that name no one.
+ *
+ * When both sides of a tier match ("Customer Supplier Return", "Purchase Sales Return") the phrase
+ * genuinely contradicts itself and is flagged rather than guessed -- same rule as a bare "Return".
+ */
+const RETURN_COUNTERPARTY_SUPPLIER = /\b(supplier|vendor)\b/
+const RETURN_COUNTERPARTY_CUSTOMER = /\b(customer|buyer)\b/
+/** We bought it, so returning it sends stock OUT. */
+const RETURN_OF_A_PURCHASE = /\b(purchase[ds]?|bought|buy)\b/
+/** We sold or issued it, so returning it brings stock IN. */
+const RETURN_OF_A_SALE = /\b(sale[sd]?|sold|issue[ds]?)\b/
 
 type TransactionTypeReading = { type: "restock" | "deplete"; recognised: boolean }
 
@@ -173,8 +196,21 @@ const readTransactionType = (value: string | null | undefined): TransactionTypeR
   if (!raw) return { type: "deplete", recognised: true }
 
   if (RETURN_WORDS.test(raw)) {
-    if (RETURN_TO_SUPPLIER.test(raw)) return { type: "deplete", recognised: true }
-    if (RETURN_FROM_CUSTOMER.test(raw)) return { type: "restock", recognised: true }
+    // Tier 1: a named counterparty settles it, whatever else the phrase contains.
+    const toSupplier = RETURN_COUNTERPARTY_SUPPLIER.test(raw)
+    const fromCustomer = RETURN_COUNTERPARTY_CUSTOMER.test(raw)
+    if (toSupplier !== fromCustomer) return { type: toSupplier ? "deplete" : "restock", recognised: true }
+
+    // Tier 2: nobody named, so fall back to which way the original transaction went.
+    if (!toSupplier && !fromCustomer) {
+      const ofAPurchase = RETURN_OF_A_PURCHASE.test(raw)
+      const ofASale = RETURN_OF_A_SALE.test(raw)
+      if (ofAPurchase !== ofASale) return { type: ofAPurchase ? "deplete" : "restock", recognised: true }
+    }
+
+    // Both counterparties, both transaction words, or neither: the phrase contradicts itself or says
+    // nothing. Keep the historic deplete default and FLAG it -- a warning beats a coin flip on an
+    // import that moves real stock.
     return { type: "deplete", recognised: false }
   }
 
