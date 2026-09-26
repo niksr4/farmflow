@@ -16,12 +16,31 @@ const toRows = <T = any>(value: unknown): T[] => {
 }
 
 /**
- * The estate a row is attributed to, normalised the same way fetchTenantEstateNames trims its
- * list. Grouping on raw `l.estate` split "Tirtha" from "Tirtha " (and NULL from ''), and the
- * stray group was then dropped from the email because it matched no name in the list -- that
- * estate's activity silently disappeared from the digest.
+ * ONE NORMALIZATION, SHARED BY THE GROUPING KEY AND THE NAME LIST.
+ *
+ * ⚠ BTRIM WITH NO SECOND ARGUMENT TRIMS SPACES ONLY. JS `.trim()` trims all whitespace. The two
+ * sides of this file used one each, so they agreed on "Tirtha " and disagreed on "\tTirtha\t":
+ *
+ *   BTRIM(E'\tTirtha\t')                 -> "\tTirtha\t"   (8 chars, tabs untouched)
+ *   BTRIM(E'\tTirtha\t', E' \t\n\r\f\v') -> "Tirtha"       (6)
+ *   "\tTirtha\t".trim()                  -> "Tirtha"       (6)
+ *
+ * So a tab-padded estate name produced the key "\tTirtha\t" and the list entry "Tirtha". The key
+ * matched no name, and fetchActivityByEstate emits a zero row for every name in the list -- so the
+ * estate appeared in the digest with all zeros while its real activity was dropped. That is the
+ * SAME bug the comment here used to describe as fixed, for a different whitespace character.
+ *
+ * Caught by CodeRabbit on PR #37.
+ *
+ * Trimming the same character class on both sides is necessary but not sufficient: the real fix is
+ * that there is now one expression and both readers use it, so they cannot drift apart again. A
+ * character JS trims and this class does not (a non-breaking space, say) now yields a slightly ugly
+ * label on both sides rather than a silently dropped estate -- matching keys are worth more than a
+ * tidy label, because one is a wrong number and the other is a cosmetic one.
  */
-const ESTATE_KEY_SQL = "COALESCE(NULLIF(BTRIM(l.estate), ''), 'Unassigned')"
+const ESTATE_TRIM_CHARS = "E' \\t\\n\\r\\f\\v'"
+const trimEstateSql = (column: string) => `BTRIM(${column}, ${ESTATE_TRIM_CHARS})`
+const ESTATE_KEY_SQL = `COALESCE(NULLIF(${trimEstateSql("l.estate")}, ''), 'Unassigned')`
 
 export type EstateActivityBreakdown = {
   estate: string
@@ -39,10 +58,13 @@ export async function fetchTenantEstateNames(tenantId: string): Promise<string[]
   if (!sql) return []
   try {
     const rows = await sql.query(
-      `SELECT DISTINCT BTRIM(estate) AS estate FROM locations WHERE tenant_id = $1 AND NULLIF(BTRIM(estate), '') IS NOT NULL ORDER BY 1`,
+      `SELECT DISTINCT ${trimEstateSql("estate")} AS estate FROM locations WHERE tenant_id = $1 AND NULLIF(${trimEstateSql("estate")}, '') IS NOT NULL ORDER BY 1`,
       [tenantId],
     )
-    return [...new Set(toRows<any>(rows).map((r) => String(r.estate || "").trim()).filter(Boolean))]
+    // NO JS .trim() HERE. That extra trim was the divergence: it normalised more than the SQL did,
+    // so the name and the grouping key could describe the same estate differently. The shared
+    // expression above is the only normalization, which is what keeps them equal by construction.
+    return [...new Set(toRows<any>(rows).map((r) => String(r.estate || "")).filter(Boolean))]
   } catch {
     return []
   }
