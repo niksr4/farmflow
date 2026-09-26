@@ -122,8 +122,9 @@ describe("an activity code must already exist", () => {
   it("submits through the decision function rather than reimplementing it inline", () => {
     /**
      * Not a tidiness assertion. Both versions of this logic were wrong while it lived inline, and
-     * the scan guarding it could not see either failure -- so the contract below is only worth
-     * anything if the form actually routes through the thing the contract tests.
+     * the scan guarding it could not see either failure -- so the contract in
+     * tests/expense-code-decision.ts is only worth anything if the form routes through the thing it
+     * tests.
      *
      * A CALL, not a mention: import lines stripped, and matched with an open paren. This repo has
      * a live example of the weaker form, where a test asserted toContain("formatLocationLabel")
@@ -135,6 +136,65 @@ describe("an activity code must already exist", () => {
       .filter((line) => !/^\s*import\b/.test(line))
       .join("\n")
     expect(/decideExpenseCode\s*\(/.test(withoutImports)).toBe(true)
+  })
+
+  it("stops before saving when the decision is a refusal", () => {
+    /**
+     * CALLING the decision and OBEYING it are two different claims, and the test above only makes
+     * the first. A caller that read the refusal and then persisted anyway would satisfy it, which
+     * is the whole failure mode: the decision function is now well tested, so the remaining place
+     * a wrong code can reach the database is a caller that ignores the answer.
+     *
+     * Keyed on `.outcome === "refuse"` and on the persistence calls, because those are the
+     * function's contract and the data boundary respectively. Deliberately NOT keyed on
+     * `codeDecision` or `matchingActivity`: those are local names I chose today, and pinning to
+     * them is the identifier fragility that broke the previous version of this file's guard.
+     *
+     * Raised by CodeRabbit on PR #41.
+     */
+    const src = read("components/other-expenses-tab.tsx")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+
+    /**
+     * BRACE-MATCHED, not regex-matched. Two earlier attempts at this were vacuous:
+     *
+     *   /if\s*\([^)]*\.outcome === "refuse"[\s\S]*?\breturn\b/
+     *
+     * `[^)]*` swallows anything before the comparison, so `if (false && d.outcome === "refuse")`
+     * still matched -- a branch that can never run read as a branch that returns. And `[\s\S]*?`
+     * finds the next `return` ANYWHERE below, so deleting the branch's own return matched a later
+     * one instead. A regex cannot express "this block returns"; walking the braces can.
+     */
+    const condition = /if\s*\(\s*(\w+)\.outcome\s*===\s*["']refuse["']\s*\)\s*\{/.exec(src)
+    expect(condition, "the refusal must be branched on directly, with nothing gating it").not.toBeNull()
+
+    const openBrace = src.indexOf("{", condition!.index)
+    let depth = 0
+    let closeBrace = -1
+    for (let i = openBrace; i < src.length; i += 1) {
+      if (src[i] === "{") depth += 1
+      else if (src[i] === "}") {
+        depth -= 1
+        if (depth === 0) {
+          closeBrace = i
+          break
+        }
+      }
+    }
+    expect(closeBrace, "could not find the end of the refusal branch").toBeGreaterThan(openBrace)
+    expect(
+      /\breturn\b/.test(src.slice(openBrace, closeBrace)),
+      "the refusal branch must return, or submit carries on and writes the committed code",
+    ).toBe(true)
+
+    const persistence = ["addDeployment", "updateDeployment"]
+      .map((name) => src.indexOf(`${name}(`))
+      .filter((index) => index >= 0)
+    expect(persistence, "expected at least one persistence call to bound the refusal against").not.toHaveLength(0)
+    expect(closeBrace, "the refusal has to be decided before anything is written").toBeLessThan(
+      Math.min(...persistence),
+    )
   })
 
   it("abandons a scheduled blur commit when the form is reset", () => {

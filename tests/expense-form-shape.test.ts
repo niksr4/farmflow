@@ -140,7 +140,17 @@ describe("the form asks in the order the decision happens", () => {
      * Caught by CodeRabbit on PR #41, citing "a test must assert what the code SHOULD do, not what
      * it currently does" -- the first version of the test above pinned the over-promise in place.
      */
-    const label = body.slice(body.indexOf("Deduct from stock"))
+    /**
+     * Bounded to the stock label's own <span>. Unbounded, the slice ran past it and a later
+     * matching "(only if ...)" anywhere below would satisfy this after the stock qualification was
+     * deleted -- the guard surviving the removal of the thing it guards.
+     *
+     * Third time this exact shape has bitten in one day: CodeRabbit caught it in the placeholder
+     * assertion on PR #40, I bounded that one, and then wrote a fresh unbounded slice here. An
+     * indexOf with no end is the default, and the default is wrong.
+     */
+    const stockStart = at("Deduct from stock")
+    const label = body.slice(stockStart, body.indexOf("</span>", stockStart))
     const parenthetical = /\(only if[^)]*\)/.exec(label)?.[0] ?? ""
     expect(parenthetical, "the stock label must still explain itself").not.toBe("")
     expect(
