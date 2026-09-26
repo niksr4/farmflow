@@ -91,13 +91,57 @@ describe("an activity code must already exist", () => {
     ).toBe(false)
   })
 
+  it("an unmatched search cannot fall back to the code it replaced", () => {
+    /**
+     * THE BUG THE FIRST VERSION OF THIS FIX INTRODUCED.
+     *
+     * Select 136. Type "fertilizer". Look away. The warning appears — but formData.code is still
+     * 136 and codeQuery has been cleared, so submit resolved to 136 and saved the expense under a
+     * code the writer had visibly replaced. A valid-but-unintended code is worse than a refused
+     * one: nothing downstream can tell it was not meant.
+     *
+     * Asserts the guard runs BEFORE the fallback. Ordering is the whole property — the same check
+     * placed after `effectiveCode` is computed would never be reached, because the fallback has
+     * already produced a code that matches.
+     */
+    const src = read("components/other-expenses-tab.tsx")
+    const submit = src.slice(src.indexOf("handleSubmitUnguarded"))
+    const unmatchedGuard = submit.search(/if\s*\(\s*unmatchedCodeQuery\s*&&\s*!\s*pendingCodeResolution\s*\)/)
+    const fallback = submit.search(/const\s+effectiveCode\s*=/)
+
+    expect(unmatchedGuard, "submit must refuse a typed code that matched nothing").toBeGreaterThan(-1)
+    expect(fallback).toBeGreaterThan(-1)
+    expect(unmatchedGuard, "the refusal must come before the fallback, or it never fires").toBeLessThan(fallback)
+  })
+
+  it("the unmatched warning does not outlive the thing it warns about", () => {
+    // Picking a valid code answers the warning; resetForm starts a new entry. Neither cleared it,
+    // so "fertilizer is not one of your cost codes" sat above a correctly-filled field, and then
+    // above the next expense too.
+    const src = read("components/other-expenses-tab.tsx")
+    for (const fn of ["const handleCodeChange", "const resetForm"]) {
+      const body = src.slice(src.indexOf(fn), src.indexOf(fn) + 400)
+      expect(body, `${fn} must clear unmatchedCodeQuery`).toMatch(/setUnmatchedCodeQuery\(\s*null\s*\)/)
+    }
+  })
+
   it("the placeholder does not invite a word that cannot be a code", () => {
     // "e.g. Fertiliser, Fuel" is what taught two estates to type a plain English word. Neither
     // "Fertiliser" nor "Fuel" is an activity code in any tenant.
+    /**
+     * Bounded to THIS input's closing tag. Unbounded, the slice ran to end-of-file, so deleting
+     * the cost-code placeholder entirely would have found the Notes field's placeholder further
+     * down and passed — the guard would have survived the thing it exists to prevent.
+     *
+     * My tamper test missed it because I changed the placeholder's VALUE and never removed it.
+     * Caught by CodeRabbit on PR #40, quoting this repo's own rule back at it: "A guard must be
+     * tamper-tested: break the thing it guards and watch it fail."
+     */
     const src = read("components/other-expenses-tab.tsx")
-    const codeInput = src.slice(src.indexOf('id="expense-code"'))
+    const fromInput = src.slice(src.indexOf('id="expense-code"'))
+    const codeInput = fromInput.slice(0, fromInput.indexOf("/>") + 2)
     const placeholder = /placeholder="([^"]*)"/.exec(codeInput)?.[1] ?? ""
+    expect(placeholder.length, "the cost-code box still needs to say what it wants").toBeGreaterThan(0)
     expect(placeholder).not.toMatch(/fertilis|fertiliz|fuel/i)
-    expect(placeholder.length, "the box still needs to say what it wants").toBeGreaterThan(0)
   })
 })

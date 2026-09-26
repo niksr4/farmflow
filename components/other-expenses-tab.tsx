@@ -216,6 +216,8 @@ export default function OtherExpensesTab({
 
   // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
+    // Picking a real code answers the warning, so it must not outlive the choice.
+    setUnmatchedCodeQuery(null)
     setFormData((prev) => ({ ...prev, code }))
     const matchingActivity = activities.find((activity) => activity.code.toLowerCase() === code.toLowerCase())
     if (matchingActivity) {
@@ -276,6 +278,7 @@ export default function OtherExpensesTab({
   const visibleActivities = showAllCodes ? sortedActivities : usedActivities
 
   const resetForm = () => {
+    setUnmatchedCodeQuery(null)
     setFormData({
       date: todayIso(),
       code: "",
@@ -312,6 +315,25 @@ export default function OtherExpensesTab({
      * straight after typing does not race the field's own 150ms blur commit.
      */
     const pendingCodeResolution = codeQuery !== null ? resolveActivityFromQuery(codeQuery, activities) : null
+
+    /**
+     * AN UNMATCHED SEARCH MUST NOT FALL BACK TO THE CODE IT REPLACED.
+     *
+     * Select 136, then type "fertilizer" and look away: the warning appears, but formData.code is
+     * still 136 and codeQuery has been cleared, so this used to resolve to 136 and save the
+     * expense under a code the writer had visibly replaced. A valid but unintended cost code is
+     * worse than a refused one, because nothing downstream can tell it was not meant.
+     *
+     * Caught by CodeRabbit on PR #40, citing the "prefer a figure that could be quietly wrong
+     * over a style concern" instruction in .coderabbit.yaml.
+     */
+    if (unmatchedCodeQuery && !pendingCodeResolution) {
+      toast.error(
+        `"${unmatchedCodeQuery}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`,
+      )
+      return
+    }
+
     const effectiveCode = (pendingCodeResolution?.code ?? formData.code).trim()
     const matchingActivity = activities.find((a) => a.code.toLowerCase() === effectiveCode.toLowerCase())
     if (!matchingActivity) {
@@ -355,7 +377,7 @@ export default function OtherExpensesTab({
     try {
       const result = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
       if (result.ok) {
-        if (isMobile && !editingId) setSavedConfirm({ reference: formData.reference, total: formData.amount })
+        if (isMobile && !editingId) setSavedConfirm({ reference: effectiveReference, total: formData.amount })
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
