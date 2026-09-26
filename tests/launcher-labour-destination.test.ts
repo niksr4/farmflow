@@ -57,7 +57,29 @@ describe("the flag means today, not ever", () => {
 
 describe("the shell is told which way the tenant records labour", () => {
   it("bootstrap reports it", () => {
-    expect(bootstrap).toContain("labourCutover: await getLabourCutover(tenantContext)")
+    /**
+     * Keyed on WHAT the route does, not HOW it fetches it.
+     *
+     * This asserted the literal `labourCutover: await getLabourCutover(tenantContext)`, which broke
+     * the moment that read moved into a Promise.all alongside the other two independent reads --
+     * a change that did not alter this property at all. The endpoint still calls getLabourCutover
+     * and still puts the result on the response; only the round-trip shape changed.
+     *
+     * An assertion pinned to the call's position is the identifier-fragility CLAUDE.md warns about:
+     * it argues against a performance fix while proving nothing extra about correctness.
+     */
+    const code = bootstrap
+      .split("\n")
+      .filter((line) => {
+        const t = line.trim()
+        return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
+      })
+      .join("\n")
+    // It is fetched...
+    expect(code, "the route must read the cutover").toMatch(/getLabourCutover\s*\(\s*tenantContext\s*\)/)
+    // ...and it reaches the response body, under that name.
+    const responseBody = code.slice(code.indexOf("return NextResponse.json({", code.indexOf("const tenantId")))
+    expect(responseBody, "and it must appear on the bootstrap response").toMatch(/\blabourCutover\b/)
   })
 
   it("reports it on the owner short-circuit too, rather than leaving it undefined", () => {
