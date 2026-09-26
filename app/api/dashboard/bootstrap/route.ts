@@ -47,24 +47,56 @@ export async function GET() {
     const tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
-    const [tenantRows, locationRows, userModuleRows] = await runTenantQueries(sql, tenantContext, [
-      sql`
-        SELECT module, enabled
-        FROM tenant_modules
-        WHERE tenant_id = ${tenantId}
-      `,
-      sql`
-        SELECT id, name, code, estate, area_acres, kind, latitude, longitude
-        FROM locations
-        WHERE tenant_id = ${tenantId}
-        ORDER BY name ASC
-      `,
-      sql`
-        SELECT module, enabled
-        FROM user_modules
-        WHERE user_id = ${sessionUser.id}
-      `,
+    /**
+     * THREE INDEPENDENT READS, ISSUED TOGETHER. This is the endpoint every page load blocks on, and
+     * it ran four round trips back to back: the batch below, then the plan, then the location
+     * allow-list, then the labour cutover. Sentry logged it 30 times as "Consecutive HTTP" on
+     * `executing api route (app) /api/dashboard/bootstrap` (JAVASCRIPT-NEXTJS-Z).
+     *
+     * Only resolveTenantPlanId genuinely depends on one of these -- it reads tenantRows -- so it
+     * stays behind. getAccessibleLocationIds needs the session user and getLabourCutover needs the
+     * tenant context, both of which exist already. Four trips become two.
+     *
+     * Error behaviour is unchanged. Both helpers rethrow anything that is not a missing table, and
+     * both were previously awaited in a position where a throw failed the request -- getLabourCutover
+     * inside the response literal, getAccessibleLocationIds just above it. Promise.all rejects on
+     * the first failure, which produces the same 500 from the same catch.
+     *
+     * Safe to run concurrently under RLS: runTenantQuery/runTenantQueries each set app.tenant_id
+     * with set_config(..., true), which is transaction-local, and these are separate transactions
+     * over separate HTTP requests. No shared session state to race.
+     */
+    const [batchRows, accessibleLocationIds, labourCutover] = await Promise.all([
+      runTenantQueries(sql, tenantContext, [
+        sql`
+          SELECT module, enabled
+          FROM tenant_modules
+          WHERE tenant_id = ${tenantId}
+        `,
+        sql`
+          SELECT id, name, code, estate, area_acres, kind, latitude, longitude
+          FROM locations
+          WHERE tenant_id = ${tenantId}
+          ORDER BY name ASC
+        `,
+        sql`
+          SELECT module, enabled
+          FROM user_modules
+          WHERE user_id = ${sessionUser.id}
+        `,
+      ]),
+      // Same per-user location restriction /api/locations applies (lib/location-access.ts) --
+      // this is the primary source of the client's `locations` state on a normal page load
+      // (loadWorkspaceBootstrap() in inventory-system.tsx), so leaving it unfiltered here let a
+      // restricted user's location pickers/estate list show locations outside their allow-list,
+      // even though writes against them were still correctly blocked server-side.
+      getAccessibleLocationIds(sessionUser),
+      // Which way this tenant records labour. Null means they have not switched and everything is
+      // still typed into Accounts. The shell needs it to aim the "Log today" button somewhere the
+      // work can actually be recorded -- see the comment on that button.
+      getLabourCutover(tenantContext),
     ])
+    const [tenantRows, locationRows, userModuleRows] = batchRows
 
     const planId = await resolveTenantPlanId({
       db: sql,
@@ -86,12 +118,6 @@ export async function GET() {
         ? cappedTenantEnabled.filter((moduleId) => (userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true))
         : cappedTenantEnabled
 
-    // Same per-user location restriction /api/locations applies (lib/location-access.ts) --
-    // this is the primary source of the client's `locations` state on a normal page load
-    // (loadWorkspaceBootstrap() in inventory-system.tsx), so leaving it unfiltered here let a
-    // restricted user's location pickers/estate list show locations outside their allow-list,
-    // even though writes against them were still correctly blocked server-side.
-    const accessibleLocationIds = await getAccessibleLocationIds(sessionUser)
     const visibleLocationRows =
       accessibleLocationIds === null
         ? locationRows || []
@@ -104,10 +130,7 @@ export async function GET() {
       planId,
       plans: MODULE_BUNDLES,
       trialDaysRemaining,
-      // Which way this tenant records labour. Null means they have not switched and everything is
-      // still typed into Accounts. The shell needs it to aim the "Log today" button somewhere the
-      // work can actually be recorded -- see the comment on that button.
-      labourCutover: await getLabourCutover(tenantContext),
+      labourCutover,
     })
   } catch (error) {
     console.error("Error loading workspace bootstrap:", error)
