@@ -103,7 +103,7 @@ used once.
 | **Scanner** (in Muster) | 808 punches | **today** | HoneyFarm's terminal. 64 → 808 in three weeks |
 | **Costs** (labour + expenses) | 590 expenses | 18 Sep | Healthy, but HoneyFarm is ~all of it |
 | **Stock & Inventory** | 60 items · 502 moves | 18 Sep | Healthy, but HoneyFarm is ~all of it |
-| **Rain & Weather** | 469 | 10 Sep | Healthy. Gaps are dry days, not lapses — see below |
+| **Rain & Weather** | 469 | 10 Sep | Healthy. A gap is an unknown, not a dry day. See below |
 | **Payroll** (in Muster) | — | — | Reads the four sources. Monthly salaries fixed 2 Sep |
 | **Picking Log** | **0** | never | **Never used, including last harvest.** Next season is its first test |
 | Processing | 78 | 28 Jan | Out of season, not dormant — see below |

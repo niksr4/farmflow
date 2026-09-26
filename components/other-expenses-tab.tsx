@@ -29,7 +29,7 @@ import { toast } from "sonner"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { deleteWithUndo } from "@/lib/undo-delete"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { resolveActivityFromQuery } from "@/lib/activity-code-match"
+import { decideExpenseCode, resolveActivityFromQuery } from "@/lib/activity-code-match"
 import ActivitySuggestList, { filterActivitySuggestions } from "@/components/activity-suggest-list"
 import { formatLocationLabel } from "@/lib/location-label"
 import { numericInputValue } from "@/lib/number-input"
@@ -132,6 +132,26 @@ export default function OtherExpensesTab({
    * type "fertilizer", look away, and the box is empty with no explanation.
    */
   const [unmatchedCodeQuery, setUnmatchedCodeQuery] = useState<string | null>(null)
+
+  /**
+   * The blur commit is deferred 150ms so that clicking a suggestion registers before the query is
+   * cleared. That timer was not cancellable, and an uncancellable write into form state outlives
+   * the form session it belongs to: type a resolvable code, hit Cancel, and 150ms later the
+   * callback called handleCodeChange and put that code into the NEXT expense. An unmatched query
+   * likewise restored its own warning over a freshly reset form.
+   *
+   * Holding it in a ref makes the commit abandonable, which is the only thing that was missing.
+   * Caught by CodeRabbit on PR #40.
+   */
+  const blurCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelBlurCommit = useCallback(() => {
+    if (blurCommitRef.current === null) return
+    clearTimeout(blurCommitRef.current)
+    blurCommitRef.current = null
+  }, [])
+  // Unmounting is the other way a form session ends. Switching tabs mid-type should not leave a
+  // timer holding a setState on a component that is gone.
+  useEffect(() => cancelBlurCommit, [cancelBlurCommit])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [supportsMultiInventoryItems, setSupportsMultiInventoryItems] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -278,6 +298,10 @@ export default function OtherExpensesTab({
   const visibleActivities = showAllCodes ? sortedActivities : usedActivities
 
   const resetForm = () => {
+    // Before clearing anything: a blur commit scheduled 150ms ago would otherwise land AFTER this
+    // reset and repopulate the code, or restore the unmatched warning, on the next expense.
+    cancelBlurCommit()
+    setCodeQuery(null)
     setUnmatchedCodeQuery(null)
     setFormData({
       date: todayIso(),
@@ -311,11 +335,9 @@ export default function OtherExpensesTab({
      * (components/labor-deployment-tab.tsx); expenses never did, so an unknown code travelled all
      * the way to Postgres and came back as a foreign-key violation after the form was complete.
      *
-     * Resolve any still-open search synchronously first, the same way labour does, so submitting
+     * Any still-open search is resolved synchronously, the same way labour does, so submitting
      * straight after typing does not race the field's own 150ms blur commit.
      */
-    const pendingCodeResolution = codeQuery !== null ? resolveActivityFromQuery(codeQuery, activities) : null
-
     /**
      * AN UNMATCHED SEARCH MUST NOT FALL BACK TO THE CODE IT REPLACED.
      *
@@ -326,24 +348,40 @@ export default function OtherExpensesTab({
      *
      * Caught by CodeRabbit on PR #40, citing the "prefer a figure that could be quietly wrong
      * over a style concern" instruction in .coderabbit.yaml.
+     *
+     * ⚠ THE FIRST VERSION OF THIS GUARD READ ONLY `unmatchedCodeQuery`, AND THAT WAS HALF A FIX.
+     *
+     * unmatchedCodeQuery is written by the blur callback, 150ms after the field loses focus. Save
+     * can win that race: type "fertilizer" and hit Save before the timer fires and codeQuery is
+     * still "fertilizer" while unmatchedCodeQuery is still null, so the guard did not run and the
+     * fallback saved the previously selected code anyway. On a phone, tapping Save straight from
+     * the open keyboard is the normal way to submit, so 150ms is not a hard race to win.
+     *
+     * The settled value and the one still in the box both have to count. Caught by CodeRabbit on
+     * PR #40 as well -- posted one minute before that PR was merged, so it shipped.
+     *
+     * THE WHOLE DECISION NOW LIVES IN decideExpenseCode, in lib/activity-code-match.ts, because
+     * both versions of this logic were wrong here and the tests guarding it could not see either
+     * one. They scanned this handler's source, and the second scan was satisfied by the
+     * `codeQuery !== null` on the line above -- green with the fix deleted. A pure function can be
+     * asked what it decides instead of being grepped for how it looks.
      */
-    if (unmatchedCodeQuery && !pendingCodeResolution) {
+    const codeDecision = decideExpenseCode({
+      liveQuery: codeQuery,
+      settledUnmatched: unmatchedCodeQuery,
+      committedCode: formData.code,
+      activities,
+    })
+    if (codeDecision.outcome === "refuse") {
       toast.error(
-        `"${unmatchedCodeQuery}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`,
-      )
-      return
-    }
-
-    const effectiveCode = (pendingCodeResolution?.code ?? formData.code).trim()
-    const matchingActivity = activities.find((a) => a.code.toLowerCase() === effectiveCode.toLowerCase())
-    if (!matchingActivity) {
-      toast.error(
-        effectiveCode
-          ? `"${effectiveCode}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`
+        codeDecision.typed
+          ? `"${codeDecision.typed}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`
           : "Pick a type of cost from the list.",
       )
       return
     }
+    const matchingActivity = codeDecision.activity
+    const effectiveCode = matchingActivity.code
     trackClick(editingId ? "expense_update" : "expense_save")
     setIsSubmitting(true)
 
@@ -561,67 +599,11 @@ export default function OtherExpensesTab({
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="expense-amount" className="text-base">
-                    {stockCost.derived !== null ? "Amount (₹) — from stock" : "Amount (₹)"}
-                  </Label>
-                  <Input
-                    id="expense-amount"
-                    type="number" inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    value={numericInputValue(formData.amount)}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, amount: Number.parseFloat(e.target.value) || 0 }))
-                    }
-                    required
-                    /* Read-only rather than hidden: the number is the point of the form, and an
-                       amount that vanishes when you link an item looks like a bug. Read-only says
-                       "this is computed", which is the honest description. */
-                    readOnly={stockCost.derived !== null}
-                    aria-describedby="expense-amount-help"
-                    className={cn("h-11", stockCost.derived !== null && "bg-muted text-muted-foreground")}
-                  />
-                  {stockCost.derived === null && stockCost.unpriced.length === 0 && (
-                    /**
-                     * SAYS THE STOCK PATH EXISTS, BEFORE YOU TYPE.
-                     *
-                     * The form reads top to bottom as "enter an amount (required), and optionally
-                     * also deduct stock" — so for a cost that is purely stock coming out of the
-                     * store, you meet the Amount box first, type a figure into it, and only find
-                     * out further down that the number is worked out for you. The effect at the
-                     * top of this file then silently replaces what you typed.
-                     *
-                     * Nothing was wrong with the result, but the first required field was wasted
-                     * work and nobody told you. This is the cheapest honest fix: mention the other
-                     * path at the moment you are deciding whether to type.
-                     */
-                    <p id="expense-amount-help" className="text-xs text-muted-foreground">
-                      What you paid. If this cost came out of your own store, add the item under
-                      &ldquo;Deduct from stock&rdquo; below and the amount works itself out.
-                    </p>
-                  )}
-                  {stockCost.derived !== null && (
-                    /* Shows its working. "Rs 4,000" alone invites the question this answers. */
-                    <p id="expense-amount-help" className="text-xs text-muted-foreground">
-                      {stockCost.working} — the average cost this stock was bought in at. Change the
-                      quantity below to change the amount.
-                    </p>
-                  )}
-                  {stockCost.unpriced.length > 0 && (
-                    /* The case that used to pass silently: unpriced stock means the server keeps
-                       whatever was typed, so the expense and the stock it consumed can disagree
-                       by any amount. Saying so here is the difference between a number someone
-                       chose and a number nobody checked. */
-                    <p id="expense-amount-help" className="text-xs text-amber-600">
-                      {stockCost.unpriced.join(", ")} {stockCost.unpriced.length === 1 ? "has" : "have"} no
-                      cost recorded, so the amount can&apos;t be worked out from stock. Price the stock
-                      under Inventory, or enter the amount yourself and know it isn&apos;t derived.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
+                {/* Full width: Amount used to sit beside this, and the pair was the problem --
+                    see the comment above the Amount field for why it now comes last. The search
+                    box also carries a suggestion list, an unmatched warning and a helper row, none
+                    of which fit in half a row on a phone. */}
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="expense-code" className="text-base">
                     Type of cost
                   </Label>
@@ -658,8 +640,14 @@ export default function OtherExpensesTab({
                       // Resolve what was typed. If it names a real code, take it; if it does not,
                       // fall back to whatever was last validly selected rather than leaving
                       // unusable text sitting in the box looking accepted.
+                      //
+                      // Deferred 150ms so that clicking a suggestion lands first. Cancellable, so
+                      // that Cancel or unmount abandons the commit instead of letting it arrive in
+                      // the next expense -- see blurCommitRef.
                       const query = (codeQuery ?? "").trim()
-                      setTimeout(() => {
+                      cancelBlurCommit()
+                      blurCommitRef.current = setTimeout(() => {
+                        blurCommitRef.current = null
                         const resolved = resolveActivityFromQuery(query, activities)
                         if (resolved) handleCodeChange(resolved.code)
                         setUnmatchedCodeQuery(resolved || !query ? null : query)
@@ -729,20 +717,6 @@ export default function OtherExpensesTab({
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="expense-notes" className="text-base">
-                  Notes
-                </Label>
-                <Textarea
-                  id="expense-notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="What was this expense for?"
-                  rows={3}
-                  className="text-base"
-                />
-              </div>
-
               {selectedTracksInventory && (
                 <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-800">
                   <span className="mt-0.5 shrink-0">📦</span>
@@ -756,7 +730,13 @@ export default function OtherExpensesTab({
                 <div className="space-y-3 border rounded-md p-3 bg-background">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-muted-foreground">
-                      Deduct from stock{" "}<span className="font-normal">(optional — only if this cost used supplies already in your inventory)</span>
+                      {/* Says what linking an item DOES, not just that it is allowed. The old
+                          parenthetical ("optional, only if this cost used supplies already in your
+                          inventory") described when to use the section but never mentioned that it
+                          fills in the amount for you -- which is the entire reason the Amount box
+                          below might not be yours to type. Laxmi's writer asked why the cost box
+                          was there at all when the amount comes from the quantity. */}
+                      Deduct from stock{" "}<span className="font-normal">(only if this cost used supplies from your own store. Link an item with a cost recorded against it and the amount below works itself out.)</span>
                     </p>
                     {supportsMultiInventoryItems && (
                       <Button
@@ -854,6 +834,92 @@ export default function OtherExpensesTab({
                   )}
                 </div>
               )}
+
+              {/**
+               * AMOUNT COMES LAST, BECAUSE IT IS THE ONLY FIELD THAT MIGHT NOT BE YOURS TO FILL.
+               *
+               * It used to be the third field, directly above "Type of cost" and well above the
+               * stock section. That put the one required number the form asks for BEFORE the
+               * question that decides whether the writer should be typing a number at all. For a
+               * cost that is purely supplies coming out of the store, you met a required Amount
+               * box, typed a figure, and the effect at the top of this file silently replaced it
+               * with the derived cost further down. The result was right; the work was wasted and
+               * nothing said so. Laxmi asked why the Cost box was there at all when the amount
+               * comes from the quantity, which is the same confusion from the other end.
+               *
+               * The form now reads in the order the decision actually happens:
+               *
+               *   Date -> Where it belongs -> Type of cost -> Did this come out of your store?
+               *   -> Amount
+               *
+               * By the time you reach this box, it is either already filled in and read-only
+               * (stock answered it) or genuinely waiting for what you paid. The field stops
+               * asking a question whose answer it was about to overwrite.
+               */}
+              <div className="space-y-2">
+                <Label htmlFor="expense-amount" className="text-base">
+                  {stockCost.derived !== null ? "Amount (₹) — from stock" : "Amount (₹)"}
+                </Label>
+                <Input
+                  id="expense-amount"
+                  type="number" inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={numericInputValue(formData.amount)}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, amount: Number.parseFloat(e.target.value) || 0 }))
+                  }
+                  required
+                  /* Read-only rather than hidden: the number is the point of the form, and an
+                     amount that vanishes when you link an item looks like a bug. Read-only says
+                     "this is computed", which is the honest description. */
+                  readOnly={stockCost.derived !== null}
+                  aria-describedby="expense-amount-help"
+                  className={cn("h-11", stockCost.derived !== null && "bg-muted text-muted-foreground")}
+                />
+                {stockCost.derived === null && stockCost.unpriced.length === 0 && (
+                  /* Still worth saying, even with the stock section now above: somebody who
+                     scrolled past it needs to know the box is theirs to fill, and that there was
+                     another way. "above" and "below" both have to track the field order -- this
+                     line said "below" for exactly as long as the stock section was below. */
+                  <p id="expense-amount-help" className="text-xs text-muted-foreground">
+                    What you paid. If this cost came out of your own store, link the item under
+                    &ldquo;Deduct from stock&rdquo; above and the amount works itself out.
+                  </p>
+                )}
+                {stockCost.derived !== null && (
+                  /* Shows its working. "Rs 4,000" alone invites the question this answers. */
+                  <p id="expense-amount-help" className="text-xs text-muted-foreground">
+                    {stockCost.working} — the average cost this stock was bought in at. Change the
+                    quantity above to change the amount.
+                  </p>
+                )}
+                {stockCost.unpriced.length > 0 && (
+                  /* The case that used to pass silently: unpriced stock means the server keeps
+                     whatever was typed, so the expense and the stock it consumed can disagree
+                     by any amount. Saying so here is the difference between a number someone
+                     chose and a number nobody checked. */
+                  <p id="expense-amount-help" className="text-xs text-amber-600">
+                    {stockCost.unpriced.join(", ")} {stockCost.unpriced.length === 1 ? "has" : "have"} no
+                    cost recorded, so the amount can&apos;t be worked out from stock. Price the stock
+                    under Inventory, or enter the amount yourself and know it isn&apos;t derived.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="expense-notes" className="text-base">
+                  Notes
+                </Label>
+                <Textarea
+                  id="expense-notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="What was this expense for?"
+                  rows={3}
+                  className="text-base"
+                />
+              </div>
 
               <div className={cn(
                 "flex flex-col sm:flex-row gap-2",

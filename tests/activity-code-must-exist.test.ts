@@ -23,6 +23,67 @@ import { resolve } from "node:path"
 const read = (file: string) => readFileSync(resolve(__dirname, "..", file), "utf8")
 
 /**
+ * The refusal branch of the submit handler: where it starts, where its block ends, and the block
+ * itself. Brace-matched rather than regex-matched, because a regex cannot say "this block" -- a lazy
+ * `[\s\S]*?` happily runs past the closing brace and finds whatever comes next.
+ *
+ * Deliberately keyed on `.outcome === "refuse"`, which is decideExpenseCode's contract, and NOT on
+ * `codeDecision` or `matchingActivity` -- local names chosen today, and pinning to them is the
+ * identifier fragility that already broke one guard in this file.
+ *
+ * The condition is matched whole (`\(\s*(\w+)\.outcome`), so a branch gated into unreachability --
+ * `if (false && d.outcome === "refuse")` -- does not match at all.
+ */
+const refusalBranch = (src: string): { body: string; end: number } | null => {
+  const condition = /if\s*\(\s*(\w+)\.outcome\s*===\s*["']refuse["']\s*\)\s*\{/.exec(src)
+  if (!condition) return null
+  const open = src.indexOf("{", condition.index)
+  let depth = 0
+  for (let i = open; i < src.length; i += 1) {
+    if (src[i] === "{") depth += 1
+    else if (src[i] === "}") {
+      depth -= 1
+      if (depth === 0) return { body: src.slice(open, i), end: i }
+    }
+  }
+  return null
+}
+
+/**
+ * Does this block return, ITSELF? Two things have to be excluded, and both were found by review
+ * rather than by the tamper that was supposed to prove this guard.
+ *
+ * 1. STRING AND TEMPLATE LITERALS. `\breturn\b` over raw source reads the toast's copy as well as
+ *    its statements. No refusal message contains the word "return" today, which is why the hand
+ *    tamper passed -- but copy is the most-edited thing in that file, and "returned to the
+ *    supplier" in a message would have hidden a deleted return completely.
+ *
+ * 2. NESTED FUNCTION BODIES. A `return` inside a callback is that callback's return, not the
+ *    handler's. `setTimeout(() => { return }, 0)` in the refusal branch would satisfy a flat scan
+ *    while submit carried on and wrote the committed code -- which is the precise bug this whole
+ *    guard exists to catch. This file already deals with a real 150ms setTimeout a few lines away,
+ *    so a callback appearing in that branch is not a hypothetical shape.
+ *
+ * Both raised by CodeRabbit on PR #41. The depth walk is the same one that finds the branch, so
+ * scope-awareness costs a counter rather than a parser.
+ */
+const branchReturns = (block: string): boolean => {
+  const code = block
+    .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, "``")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''")
+
+  // depth 0 is inside the branch's own braces; anything deeper belongs to a nested block.
+  let depth = 0
+  for (const match of code.matchAll(/[{}]|\breturn\b/g)) {
+    if (match[0] === "{") depth += 1
+    else if (match[0] === "}") depth -= 1
+    else if (depth <= 1) return true
+  }
+  return false
+}
+
+/**
  * DERIVED, not a hand-kept pair. Any file importing resolveActivityFromQuery is by definition a
  * form where somebody chooses an activity code, so a third one added tomorrow is covered tomorrow
  * rather than quietly exempt.
@@ -51,9 +112,20 @@ describe("an activity code must already exist", () => {
      */
     const missing = pickerForms().filter((file) => {
       const src = read(file)
+      /**
+       * TWO WAYS TO SATISFY THIS, and both are real: do the lookup inline (labour still does), or
+       * delegate to decideExpenseCode (expenses now does, because the inline version shipped wrong
+       * twice and this scan could not see either failure -- see tests/expense-code-decision.ts).
+       *
+       * Accepting only the inline shape would have made moving the logic into a tested pure
+       * function look like a regression, which is how a guard starts arguing against the fix.
+       */
+      const delegates = /decideExpenseCode\s*\(/.test(
+        src.split("\n").filter((line) => !/^\s*import\b/.test(line)).join("\n"),
+      )
       const looksUpActivity = /activities\.find\(\s*\(\s*a\w*\s*\)\s*=>\s*a\w*\.code\.toLowerCase\(\)\s*===/.test(src)
       const bailsWhenUnmatched = /if\s*\(\s*!\s*matchingActivity\s*\)/.test(src)
-      return !(looksUpActivity && bailsWhenUnmatched)
+      return !(delegates || (looksUpActivity && bailsWhenUnmatched))
     })
     expect(missing, "gate submit on a resolved activity, the way labour does").toEqual([])
   })
@@ -91,27 +163,168 @@ describe("an activity code must already exist", () => {
     ).toBe(false)
   })
 
-  it("an unmatched search cannot fall back to the code it replaced", () => {
+  /**
+   * ⚠ A SCAN USED TO LIVE HERE CALLED "an unmatched search cannot fall back to the code it
+   * replaced". It asserted that a refusal on `!pendingCodeResolution` appeared above the line
+   * computing `effectiveCode` -- ordering being the property, since the same check placed after the
+   * fallback could never fire.
+   *
+   * It is gone rather than ported, because the thing it was reaching for is now expressible. The
+   * decision is a pure function, and tests/expense-code-decision.ts asks it directly. That is
+   * strictly stronger: the scan could only see whether a guard was positioned above a fallback, and
+   * was blind to WHICH inputs the guard consulted -- which is precisely how the second bug shipped
+   * with this file green. The replacement covers the settled query and the one still in the box,
+   * the ambiguous partial, and the emptied-on-focus case, none of which a position check can state.
+   *
+   * Noted at this length because the repo guide warns that one such replacement was weaker than the
+   * scan it replaced, so the comparison is worth writing down rather than assuming.
+   */
+
+  it("submits through the decision function rather than reimplementing it inline", () => {
     /**
-     * THE BUG THE FIRST VERSION OF THIS FIX INTRODUCED.
+     * Not a tidiness assertion. Both versions of this logic were wrong while it lived inline, and
+     * the scan guarding it could not see either failure -- so the contract in
+     * tests/expense-code-decision.ts is only worth anything if the form routes through the thing it
+     * tests.
      *
-     * Select 136. Type "fertilizer". Look away. The warning appears — but formData.code is still
-     * 136 and codeQuery has been cleared, so submit resolved to 136 and saved the expense under a
-     * code the writer had visibly replaced. A valid-but-unintended code is worse than a refused
-     * one: nothing downstream can tell it was not meant.
-     *
-     * Asserts the guard runs BEFORE the fallback. Ordering is the whole property — the same check
-     * placed after `effectiveCode` is computed would never be reached, because the fallback has
-     * already produced a code that matches.
+     * A CALL, not a mention: import lines stripped, and matched with an open paren. This repo has
+     * a live example of the weaker form, where a test asserted toContain("formatLocationLabel")
+     * and passed on the import line of a component that never called it.
      */
     const src = read("components/other-expenses-tab.tsx")
-    const submit = src.slice(src.indexOf("handleSubmitUnguarded"))
-    const unmatchedGuard = submit.search(/if\s*\(\s*unmatchedCodeQuery\s*&&\s*!\s*pendingCodeResolution\s*\)/)
-    const fallback = submit.search(/const\s+effectiveCode\s*=/)
+    const withoutImports = src
+      .split("\n")
+      .filter((line) => !/^\s*import\b/.test(line))
+      .join("\n")
+    expect(/decideExpenseCode\s*\(/.test(withoutImports)).toBe(true)
+  })
 
-    expect(unmatchedGuard, "submit must refuse a typed code that matched nothing").toBeGreaterThan(-1)
-    expect(fallback).toBeGreaterThan(-1)
-    expect(unmatchedGuard, "the refusal must come before the fallback, or it never fires").toBeLessThan(fallback)
+  it("stops before saving when the decision is a refusal", () => {
+    /**
+     * CALLING the decision and OBEYING it are two different claims, and the test above only makes
+     * the first. A caller that read the refusal and then persisted anyway would satisfy it, which
+     * is the whole failure mode: the decision function is now well tested, so the remaining place
+     * a wrong code can reach the database is a caller that ignores the answer.
+     *
+     * Keyed on `.outcome === "refuse"` and on the persistence calls, because those are the
+     * function's contract and the data boundary respectively. Deliberately NOT keyed on
+     * `codeDecision` or `matchingActivity`: those are local names I chose today, and pinning to
+     * them is the identifier fragility that broke the previous version of this file's guard.
+     *
+     * Raised by CodeRabbit on PR #41.
+     */
+    const src = read("components/other-expenses-tab.tsx")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+
+    /**
+     * BRACE-MATCHED, not regex-matched. Two earlier attempts at this were vacuous:
+     *
+     *   /if\s*\([^)]*\.outcome === "refuse"[\s\S]*?\breturn\b/
+     *
+     * `[^)]*` swallows anything before the comparison, so `if (false && d.outcome === "refuse")`
+     * still matched -- a branch that can never run read as a branch that returns. And `[\s\S]*?`
+     * finds the next `return` ANYWHERE below, so deleting the branch's own return matched a later
+     * one instead. A regex cannot express "this block returns"; walking the braces can.
+     */
+    const branch = refusalBranch(src)
+    expect(branch, "the refusal must be branched on directly, with nothing gating it").not.toBeNull()
+    expect(
+      branchReturns(branch!.body),
+      "the refusal branch must return, or submit carries on and writes the committed code",
+    ).toBe(true)
+
+    const persistence = ["addDeployment", "updateDeployment"]
+      .map((name) => src.indexOf(`${name}(`))
+      .filter((index) => index >= 0)
+    expect(persistence, "expected at least one persistence call to bound the refusal against").not.toHaveLength(0)
+    expect(branch!.end, "the refusal has to be decided before anything is written").toBeLessThan(
+      Math.min(...persistence),
+    )
+  })
+
+  it("and that check notices when the return is deleted", () => {
+    /**
+     * THE TAMPER, ENCODED AS A TEST rather than run by hand once and written up in a commit message.
+     *
+     * The predicate above is the whole guard, so its own blind spots are the product's blind spots.
+     * Two have already been found by tampering:
+     *
+     *   1. `if (false && d.outcome === "refuse")` matched a regex using `[^)]*`, so a branch that
+     *      can never run read as a branch that returns.
+     *   2. `[\s\S]*?\breturn\b` found the next `return` anywhere below, so deleting the branch's
+     *      own return matched a later one instead.
+     *
+     * And a third that only a reviewer saw: `\breturn\b` runs over the toast's STRING LITERALS. No
+     * refusal message contains the word "return" today, so the hand tamper passed -- but copy is the
+     * most-edited thing in this file, and "returned to the supplier" in a message would have made a
+     * deleted return invisible. Raised by CodeRabbit on PR #41.
+     *
+     * Literals are stripped before the check now, and this test removes the return from a COPY of
+     * the real source and asserts the predicate goes false. That keeps the tamper running on every
+     * CI run instead of living in my memory of having done it once.
+     */
+    const src = read("components/other-expenses-tab.tsx")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+    const branch = refusalBranch(src)
+    expect(branch).not.toBeNull()
+
+    const withoutReturn = branch!.body.replace(/\breturn\b\s*;?/, "")
+    expect(withoutReturn, "the tamper must actually have removed something").not.toBe(branch!.body)
+    expect(
+      branchReturns(withoutReturn),
+      "a refusal branch with no return must fail this check, whatever the messages inside it say",
+    ).toBe(false)
+
+    // And the literals-are-stripped property, stated directly: a message mentioning the word
+    // cannot stand in for the statement.
+    expect(branchReturns('{ toast.error("this will be returned to the supplier") }')).toBe(false)
+    expect(branchReturns("{ toast.error(`a returned purchase`) }")).toBe(false)
+
+    /**
+     * NOR CAN A CALLBACK'S RETURN STAND IN FOR THE HANDLER'S. A `return` inside setTimeout belongs
+     * to the callback; submit carries on regardless and writes the committed code, which is the
+     * precise bug this guard exists to catch. Not a hypothetical shape either -- the refusal branch
+     * sits a few lines from a real 150ms setTimeout in this same file.
+     *
+     * Raised by CodeRabbit on PR #41, which rated the fix a heavy lift. It was not: the depth walk
+     * that already finds the branch does the scoping with a counter.
+     */
+    expect(branchReturns("{ toast.error(x); setTimeout(() => { return }, 0) }")).toBe(false)
+    expect(branchReturns("{ activities.forEach((a) => { if (a) return }) }")).toBe(false)
+    // Still true when the handler itself returns, callback or no callback.
+    expect(branchReturns("{ setTimeout(() => { return }, 0); return }")).toBe(true)
+  })
+
+  it("abandons a scheduled blur commit when the form is reset", () => {
+    /**
+     * The blur commit is deferred 150ms so a suggestion click lands first. Uncancellable, it
+     * outlived the form session: type a resolvable code, hit Cancel, and 150ms later the callback
+     * called handleCodeChange and put that code into the NEXT expense -- a cost code the writer
+     * never chose for the entry it ends up on.
+     *
+     * Three parts, because any one alone leaves the hole open: the timer is held somewhere
+     * cancellable, resetForm cancels it, and the deferred write goes through that same handle.
+     */
+    const src = read("components/other-expenses-tab.tsx")
+    const stripped = src
+      .split("\n")
+      .filter((line) => {
+        const t = line.trim()
+        return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
+      })
+      .join("\n")
+
+    expect(/blurCommitRef\s*=\s*useRef/.test(stripped), "hold the timer where it can be cleared").toBe(true)
+    expect(/blurCommitRef\.current\s*=\s*setTimeout/.test(stripped), "schedule through that handle").toBe(true)
+
+    const reset = stripped.slice(stripped.indexOf("const resetForm"))
+    const resetBody = reset.slice(0, reset.indexOf("clearDraft()"))
+    expect(
+      /cancelBlurCommit\(\)|clearTimeout/.test(resetBody),
+      "resetForm must cancel the pending commit, or it lands on the next expense",
+    ).toBe(true)
   })
 
   it("the unmatched warning does not outlive the thing it warns about", () => {
