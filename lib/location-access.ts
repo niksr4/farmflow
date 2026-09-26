@@ -117,8 +117,36 @@ export async function getAccessibleLocationIds(sessionUser?: SessionUser): Promi
     return []
   }
 
-  // The account exists. NOW a cached answer is safe to serve -- it saves the `user_locations` query
-  // without standing in for the existence check above.
+  /**
+   * AND IT HAS TO BE THE SAME ACCOUNT, not just an account with the same username.
+   *
+   * The lookup above matches on username+tenant, so a deleted username that gets REUSED resolves to
+   * the replacement account. The stale session's JWT still carries the old id, `userId` comes back
+   * truthy, and the existence check passes -- for a different principal. On a cache miss the
+   * replacement's `user_locations` is then read, and if that account has no rows the answer is
+   * `null`: unrestricted access to every location in the tenant, handed to a session whose account
+   * was deleted.
+   *
+   * Narrow (an admin has to delete a user and reuse the username inside the session's life) but not
+   * theoretical: "create a replacement for someone who left, same login" is an ordinary thing for an
+   * estate admin to do. Reusing "nandu" would do it.
+   *
+   * Comparing ids is safe because SessionUser.id IS users.id -- lib/auth-server.ts's toSessionUser
+   * takes it from `rows[0].id` on the happy path. For a live account the two therefore agree by
+   * construction, and they can only diverge on the stale-JWT fallback path, which is exactly the
+   * case being rejected.
+   *
+   * Raised by CodeRabbit on PR #47, citing .coderabbit.yaml: "a guard must not be measured against
+   * data that the thing it guards against can move." The username is exactly that -- the attacker
+   * scenario is somebody else taking the name.
+   */
+  if (String(userId) !== String(user.id)) {
+    setCachedLocationIds(cacheKey, [])
+    return []
+  }
+
+  // The account exists AND is this session's own. NOW a cached answer is safe to serve -- it saves
+  // the `user_locations` query without standing in for either check above.
   const cached = getCachedLocationIds(cacheKey)
   if (cached.hit) return cached.value
 
