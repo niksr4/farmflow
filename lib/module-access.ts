@@ -104,10 +104,27 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
     throw new Error("Database not configured")
   }
 
+  /**
+   * ACCOUNT EXISTENCE IS CHECKED BEFORE ANY CACHED VALUE IS SERVED. The cache read sits BELOW the
+   * `users` lookup, not above it.
+   *
+   * Same shape CodeRabbit found in lib/location-access.ts on PRs #32 and #47, swept here rather
+   * than waiting for it to be reported twice. The `users` lookup below is the fail-closed check
+   * that gives a deleted account nothing, and it was reachable only on a cache miss -- so for the
+   * 30s TTL a deleted user's live session kept the module list computed while the account existed.
+   * `DELETE /api/admin/users` does not invalidate MODULE_CACHE, and NextAuth JWTs are not revoked
+   * server-side, which is what lets the session outlive the row.
+   *
+   * Milder than the location-access version, and worth being precise about rather than calling it
+   * equivalent: a stale module list grants the tabs that account already had, where a stale
+   * location `null` granted every location in the tenant. But "milder" is not "correct" -- it is
+   * still an access decision served to a principal whose existence was never checked, which is
+   * exactly the reasoning I got wrong on #47 and do not intend to repeat here.
+   *
+   * The cache still saves the tenant_modules, plan and user_modules reads -- three queries against
+   * one indexed lookup.
+   */
   const cacheKey = `${user.tenantId}:${user.id}`
-  const cached = getCachedModules(cacheKey)
-  if (cached) return cached
-
   const tenantContext = normalizeTenantContext(user.tenantId, user.role)
   const userRows = await runTenantQuery(
     sql,
@@ -121,6 +138,59 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
     `,
   )
   const userId = userRows?.[0]?.id
+
+  // A user-role session with no `users` row for its username+tenant gets NO modules (fail closed),
+  // never the tenant-wide default. requireSessionUser() falls back to trusting the JWT's own claims
+  // when its DB lookup finds no row (an account hard-deleted while a session was still live --
+  // NextAuth JWTs are not revoked server-side), so falling through to `tenantEnabled` would hand
+  // that stale session every module the tenant has, ignoring any per-user user_modules restrictions
+  // the account had. Mirrors getAccessibleLocationIds() in lib/location-access.ts.
+  //
+  // ⚠ AN OWNER PREVIEW IS THE ONE CASE WHERE A MISSING `users` ROW IS NORMAL, NOT SUSPICIOUS.
+  //
+  // resolveScopedSessionUser swaps the tenant id and keeps the role, so a previewing owner arrives
+  // here as role "owner" against somebody else's tenant -- a tenant they have no account in, and
+  // should not need one in. Without this exemption the lookup above finds nothing, the fail-closed
+  // branch fires, and the preview renders with no modules at all: no tabs, an empty workspace, and
+  // nothing saying why. The access gate itself was never the problem (requireModuleAccess returns
+  // early for role "owner"), so every API call behind the blank screen would have succeeded.
+  //
+  // Caught by CodeRabbit on PR #35, which is the PR that introduced the fail-closed branch.
+  //
+  // MOVED ABOVE the tenant_modules/plan reads so the cache check below can sit after it without
+  // paying for three queries first. It never depended on them.
+  if (user.role !== "admin" && !ownerPreviewActive && !userId) {
+    setCachedModules(cacheKey, [])
+    return []
+  }
+
+  /**
+   * AND IT HAS TO BE THE SAME ACCOUNT, not just an account with the same username.
+   *
+   * The lookup above matches on username+tenant, so a deleted username that gets REUSED resolves to
+   * the replacement account. The stale session's JWT still carries the old id, `userId` comes back
+   * truthy, the existence check passes, and this session is then served the REPLACEMENT account's
+   * modules -- a different principal's access, under the old principal's session.
+   *
+   * Exempt for an owner preview, where there is deliberately no `users` row to match against, and
+   * skipped for `admin` for the same reason the check above skips it.
+   *
+   * Comparing ids is safe because SessionUser.id IS users.id -- lib/auth-server.ts's toSessionUser
+   * takes it from `rows[0].id`. For a live account they agree by construction and can only diverge
+   * on the stale-JWT fallback path, which is exactly what is being rejected.
+   *
+   * Raised by CodeRabbit on PR #42, and on #47 for the location-access twin.
+   */
+  if (user.role !== "admin" && !ownerPreviewActive && String(userId) !== String(user.id)) {
+    setCachedModules(cacheKey, [])
+    return []
+  }
+
+  // The account exists AND is this session's own (or this is an owner preview, where it need not).
+  // NOW a cached answer is safe to serve -- it saves the three reads below without standing in for
+  // either check above.
+  const cached = getCachedModules(cacheKey)
+  if (cached) return cached
 
   const tenantModules = await runTenantQuery(
     sql,
@@ -145,18 +215,13 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
 
   let result: string[]
 
-  // A user-role session with no `users` row for its username+tenant gets NO modules (fail closed),
-  // never the tenant-wide default. requireSessionUser() falls back to trusting the JWT's own claims
-  // when its DB lookup finds no row (an account hard-deleted while a session was still live --
-  // NextAuth JWTs are not revoked server-side), so falling through to `tenantEnabled` here would
-  // hand that stale session every module the tenant has, ignoring any per-user user_modules
-  // restrictions the account had. Mirrors getAccessibleLocationIds() in lib/location-access.ts.
-  if (user.role !== "admin" && !userId) {
-    setCachedModules(cacheKey, [])
-    return []
-  }
-
-  if (user.role === "admin") {
+  // A preview answers "what does this tenant's workspace look like", so it reads the tenant's
+  // enabled modules exactly as that tenant's admin would -- unfiltered, like the admin branch.
+  // Falling through to the generic branch below would apply filterUserBlockedModules and hide
+  // balance-sheet, which is a role=user restriction (USER_ROLE_BLOCKED_MODULES) being applied to
+  // an owner. The preview would then be wrong in the opposite direction: quieter, but still not
+  // what the customer sees.
+  if (user.role === "admin" || ownerPreviewActive) {
     result = tenantEnabled
   } else if (userId) {
     try {
