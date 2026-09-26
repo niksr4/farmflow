@@ -222,14 +222,65 @@ const ACCEPTED: Record<string, { count: number; why: string }> = {
 }
 
 /** Direct-form occurrences per file, from the same scan the checks below use. */
-const directFormCounts = (): Record<string, number> => {
+/**
+ * Direct-form occurrences per file, counting MATCHES rather than matching LINES.
+ *
+ * `git grep -n` emits one result per line, so a line carrying two wrong-clock expressions counted
+ * as one -- and then both count checks passed while the file held one more offender than the list
+ * admitted. Turning a file-based allowlist into a count-based one and then counting the wrong
+ * thing leaves the same hole one level down, which is a tidy demonstration that "count-based" is
+ * only as good as what gets counted.
+ *
+ * Raised by CodeRabbit on PR #48.
+ */
+/**
+ * ⚠ THE SAME PATTERN STRING CANNOT GO TO BOTH `git grep -E` AND `new RegExp`.
+ *
+ * git grep -E is POSIX ERE and spells whitespace `[[:space:]]`. A JS RegExp reads that as a
+ * character class of `[`, `:`, `s`, `p`, `a`, `c`, `e` -- so the pattern matches nothing, and the
+ * first version of the per-match counting below silently fell back to 1 hit per line via `?? 1`.
+ * Which is to say: the fix for "counts lines, not matches" still counted lines, and nothing said so.
+ *
+ * This file already carries a warning about the mirror image of this (using `\s` in the git grep
+ * pattern, which matched a literal "s" and passed against a deliberately broken tree). Same trap,
+ * opposite direction, found the same way -- by a test that asserted the arithmetic.
+ */
+const toJsRegexSource = (posixEre: string) => posixEre.replace(/\[\[:space:\]\]/g, String.raw`\s`)
+
+/**
+ * Split out from directFormCounts so the arithmetic can be ASKED with synthetic lines.
+ *
+ * The first attempt at this tested a locally-built regex instead, which proved the pattern could
+ * count two matches but not that the counter used it -- so replacing the count with a hard-coded 1
+ * left every test green. Tamper 3 on PR #48 found that; the guard for "counts matches, not lines"
+ * has to exercise the thing that counts.
+ */
+const countDirectFormMatches = (scanLines: string[]): Record<string, number> => {
   const counts: Record<string, number> = {}
-  for (const line of scan()) {
+  const perMatch = new RegExp(toJsRegexSource(UTC_TODAY_SHAPE), "g")
+  for (const line of scanLines) {
     const file = line.split(":")[0]
-    counts[file] = (counts[file] ?? 0) + 1
+    const code = line.split(":").slice(2).join(":")
+    const hits = code.match(perMatch)?.length ?? 0
+    /**
+     * LOUD, not `?? 1`. Every line here came out of a git grep for this very pattern, so a JS
+     * conversion that finds nothing means the two regex dialects have diverged -- and a silent
+     * fallback of 1 is precisely what hid that. An allowlist guard that quietly undercounts is worse
+     * than one that crashes.
+     */
+    if (hits === 0) {
+      throw new Error(
+        `directFormCounts: the JS conversion of UTC_TODAY_SHAPE matched nothing in a line git grep DID match.\n` +
+          `The two regex dialects have diverged -- check toJsRegexSource for a POSIX class it does not translate.\n` +
+          `  line: ${line}`,
+      )
+    }
+    counts[file] = (counts[file] ?? 0) + hits
   }
   return counts
 }
+
+const directFormCounts = (): Record<string, number> => countDirectFormMatches(scan())
 
 /**
  * Same rule, variable form — exempting OCCURRENCES, not files.
@@ -314,6 +365,31 @@ describe("nobody reintroduces the UTC-date-for-today shape", () => {
       .filter(([file, n]) => (counts[file] ?? 0) < n)
       .map(([file, n]) => `${file}: accepted ${n}, found ${counts[file] ?? 0}`)
     expect(stale, "lower the number (or delete the entry) in VARIABLE_FORM_ACCEPTED").toEqual([])
+  })
+
+  it("counts two wrong-clock expressions on one line as two", () => {
+    /**
+     * `git grep -n` emits one result per LINE. So a line carrying two of these counted as one, and
+     * both count checks passed while the file held one more offender than the list admitted -- the
+     * file-based hole reappearing one level down, inside the fix for it.
+     *
+     * Raised by CodeRabbit on PR #48. Exercised through countDirectFormMatches rather than a
+     * locally-built regex: the first version of this test proved the PATTERN could count two and
+     * said nothing about whether the counter used it, so hard-coding the count to 1 left it green.
+     */
+    const twoOnOneLine =
+      "lib/x.ts:9:  const a = new Date().toISOString().slice(0, 10), b = new Date().toISOString().slice(0, 10)"
+    const oneOnEachOfTwoLines = [
+      "lib/y.ts:3:  const a = new Date().toISOString().slice(0, 10)",
+      "lib/y.ts:8:  const b = new Date().toISOString().slice(0, 10)",
+    ]
+
+    expect(countDirectFormMatches([twoOnOneLine]), "two expressions, one line").toEqual({ "lib/x.ts": 2 })
+    expect(countDirectFormMatches(oneOnEachOfTwoLines), "one each, two lines").toEqual({ "lib/y.ts": 2 })
+    // The two shapes must be indistinguishable to the allowlist -- which is the whole point.
+    expect(countDirectFormMatches([twoOnOneLine])["lib/x.ts"]).toBe(
+      countDirectFormMatches(oneOnEachOfTwoLines)["lib/y.ts"],
+    )
   })
 
   it("every accepted entry is still a real occurrence, at the count claimed", () => {
