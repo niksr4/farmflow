@@ -23,6 +23,49 @@ import { resolve } from "node:path"
 const read = (file: string) => readFileSync(resolve(__dirname, "..", file), "utf8")
 
 /**
+ * The refusal branch of the submit handler: where it starts, where its block ends, and the block
+ * itself. Brace-matched rather than regex-matched, because a regex cannot say "this block" -- a lazy
+ * `[\s\S]*?` happily runs past the closing brace and finds whatever comes next.
+ *
+ * Deliberately keyed on `.outcome === "refuse"`, which is decideExpenseCode's contract, and NOT on
+ * `codeDecision` or `matchingActivity` -- local names chosen today, and pinning to them is the
+ * identifier fragility that already broke one guard in this file.
+ *
+ * The condition is matched whole (`\(\s*(\w+)\.outcome`), so a branch gated into unreachability --
+ * `if (false && d.outcome === "refuse")` -- does not match at all.
+ */
+const refusalBranch = (src: string): { body: string; end: number } | null => {
+  const condition = /if\s*\(\s*(\w+)\.outcome\s*===\s*["']refuse["']\s*\)\s*\{/.exec(src)
+  if (!condition) return null
+  const open = src.indexOf("{", condition.index)
+  let depth = 0
+  for (let i = open; i < src.length; i += 1) {
+    if (src[i] === "{") depth += 1
+    else if (src[i] === "}") {
+      depth -= 1
+      if (depth === 0) return { body: src.slice(open, i), end: i }
+    }
+  }
+  return null
+}
+
+/**
+ * Does this block return? Strings and template literals are removed FIRST.
+ *
+ * `\breturn\b` over raw source reads the toast's copy as well as its statements. No refusal message
+ * contains the word "return" today, which is why a hand tamper passed -- but copy is the
+ * most-edited thing in that file, and "returned to the supplier" in a message would have hidden a
+ * deleted return statement completely. Raised by CodeRabbit on PR #41.
+ */
+const branchReturns = (block: string): boolean =>
+  /\breturn\b/.test(
+    block
+      .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, "``")
+      .replace(/"(?:\\.|[^"\\])*"/g, '""')
+      .replace(/'(?:\\.|[^'\\])*'/g, "''"),
+  )
+
+/**
  * DERIVED, not a hand-kept pair. Any file importing resolveActivityFromQuery is by definition a
  * form where somebody chooses an activity code, so a third one added tomorrow is covered tomorrow
  * rather than quietly exempt.
@@ -166,25 +209,10 @@ describe("an activity code must already exist", () => {
      * finds the next `return` ANYWHERE below, so deleting the branch's own return matched a later
      * one instead. A regex cannot express "this block returns"; walking the braces can.
      */
-    const condition = /if\s*\(\s*(\w+)\.outcome\s*===\s*["']refuse["']\s*\)\s*\{/.exec(src)
-    expect(condition, "the refusal must be branched on directly, with nothing gating it").not.toBeNull()
-
-    const openBrace = src.indexOf("{", condition!.index)
-    let depth = 0
-    let closeBrace = -1
-    for (let i = openBrace; i < src.length; i += 1) {
-      if (src[i] === "{") depth += 1
-      else if (src[i] === "}") {
-        depth -= 1
-        if (depth === 0) {
-          closeBrace = i
-          break
-        }
-      }
-    }
-    expect(closeBrace, "could not find the end of the refusal branch").toBeGreaterThan(openBrace)
+    const branch = refusalBranch(src)
+    expect(branch, "the refusal must be branched on directly, with nothing gating it").not.toBeNull()
     expect(
-      /\breturn\b/.test(src.slice(openBrace, closeBrace)),
+      branchReturns(branch!.body),
       "the refusal branch must return, or submit carries on and writes the committed code",
     ).toBe(true)
 
@@ -192,9 +220,49 @@ describe("an activity code must already exist", () => {
       .map((name) => src.indexOf(`${name}(`))
       .filter((index) => index >= 0)
     expect(persistence, "expected at least one persistence call to bound the refusal against").not.toHaveLength(0)
-    expect(closeBrace, "the refusal has to be decided before anything is written").toBeLessThan(
+    expect(branch!.end, "the refusal has to be decided before anything is written").toBeLessThan(
       Math.min(...persistence),
     )
+  })
+
+  it("and that check notices when the return is deleted", () => {
+    /**
+     * THE TAMPER, ENCODED AS A TEST rather than run by hand once and written up in a commit message.
+     *
+     * The predicate above is the whole guard, so its own blind spots are the product's blind spots.
+     * Two have already been found by tampering:
+     *
+     *   1. `if (false && d.outcome === "refuse")` matched a regex using `[^)]*`, so a branch that
+     *      can never run read as a branch that returns.
+     *   2. `[\s\S]*?\breturn\b` found the next `return` anywhere below, so deleting the branch's
+     *      own return matched a later one instead.
+     *
+     * And a third that only a reviewer saw: `\breturn\b` runs over the toast's STRING LITERALS. No
+     * refusal message contains the word "return" today, so the hand tamper passed -- but copy is the
+     * most-edited thing in this file, and "returned to the supplier" in a message would have made a
+     * deleted return invisible. Raised by CodeRabbit on PR #41.
+     *
+     * Literals are stripped before the check now, and this test removes the return from a COPY of
+     * the real source and asserts the predicate goes false. That keeps the tamper running on every
+     * CI run instead of living in my memory of having done it once.
+     */
+    const src = read("components/other-expenses-tab.tsx")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+    const branch = refusalBranch(src)
+    expect(branch).not.toBeNull()
+
+    const withoutReturn = branch!.body.replace(/\breturn\b\s*;?/, "")
+    expect(withoutReturn, "the tamper must actually have removed something").not.toBe(branch!.body)
+    expect(
+      branchReturns(withoutReturn),
+      "a refusal branch with no return must fail this check, whatever the messages inside it say",
+    ).toBe(false)
+
+    // And the literals-are-stripped property, stated directly: a message mentioning the word
+    // cannot stand in for the statement.
+    expect(branchReturns('toast.error("this will be returned to the supplier")')).toBe(false)
+    expect(branchReturns("toast.error(`a returned purchase`)")).toBe(false)
   })
 
   it("abandons a scheduled blur commit when the form is reset", () => {
