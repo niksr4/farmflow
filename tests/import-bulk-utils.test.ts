@@ -107,6 +107,174 @@ describe("import bulk utils — field normalization", () => {
     expect(isUnrecognisedTransactionType("buyback-adjustment")).toBe(true)
   })
 
+  describe("a return reverses the direction of the word it accompanies", () => {
+    /**
+     * "Purchase Return" contains "purchase", so the word-level match called it a restock and ADDED
+     * the quantity -- when a return to the supplier takes stock out. It was the only return flavour
+     * that was both wrong and silent: every other one fell through to "deplete" AND tripped the
+     * unrecognised-type warning, so a human saw it. This one was confident, backwards, and quiet.
+     *
+     * Raised by CodeRabbit on PR #37.
+     */
+    it("reads a return to the supplier as stock going OUT", () => {
+      for (const type of ["Purchase Return", "Purchase Returns", "purchase returned", "Supplier Return", "Vendor Returns"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+      }
+    })
+
+    it("reads a return from the customer as stock coming IN", () => {
+      for (const type of ["Sales Return", "Sale Returns", "Customer Return", "sold returned", "Buyer Return"]) {
+        expect(normalizeTransactionType(type), type).toBe("restock")
+      }
+    })
+
+    it("does not flag a return whose direction it worked out", () => {
+      // The warning is for types nothing can classify. Once the direction is known, warning about it
+      // would train whoever runs the import to click past the warnings that matter.
+      expect(isUnrecognisedTransactionType("Purchase Return")).toBe(false)
+      expect(isUnrecognisedTransactionType("Sales Return")).toBe(false)
+    })
+
+    it("lets a named counterparty outrank the transaction word", () => {
+      /**
+       * "Customer Purchase Return" contains BOTH `customer` and `purchase`. The first version of
+       * this fix checked supplier-ish words first, so it matched `purchase` and sent stock OUT --
+       * when a customer returning a purchase brings stock IN. Four phrases contained words from both
+       * groups and all four resolved the same wrong way, with no unrecognised-type warning.
+       *
+       * Raised by CodeRabbit on PR #44. "Customer" tells you which way the goods are moving whatever
+       * else the phrase says; "purchase" only tells you which way the ORIGINAL transaction went,
+       * which a return then reverses.
+       */
+      for (const type of ["Customer Purchase Return", "Buyer Purchase Return", "Customer Return of Purchase"]) {
+        expect(normalizeTransactionType(type), type).toBe("restock")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+      for (const type of ["Supplier Sales Return", "Vendor Sold Return"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+    })
+
+    it("lets an explicit to/from outrank the counterparty", () => {
+      /**
+       * "Return from Supplier" contains `supplier`, and the counterparty rule read that as stock
+       * going OUT -- but goods coming FROM the supplier are arriving. "Return to Customer" had the
+       * mirror error and became a recognised restock when we are the ones shipping. Both confident,
+       * silent, and backwards. Raised by CodeRabbit on PR #44.
+       *
+       * Once a preposition is present the counterparty stops mattering: "to" is leaving, "from" is
+       * arriving, whoever is at the other end.
+       */
+      for (const type of ["Return to Supplier", "Return to Customer", "Purchase Return to Supplier", "Return to the Buyer"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+      for (const type of ["Return from Supplier", "Return from Customer", "Sales Return from Customer", "Return from the Vendor"]) {
+        expect(normalizeTransactionType(type), type).toBe("restock")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+    })
+
+    it("spells 'return' the same way in the detector and the direction rule", () => {
+      /**
+       * They were two separate literals and they disagreed: the detector matched `returned`, the
+       * direction prefix did not. So "Returned from Supplier" entered the return branch, missed
+       * tier 0, fell to the counterparty tier and recorded a DEPLETION when the goods are arriving.
+       * "Returned to Customer" had the mirror error.
+       *
+       * Raised by CodeRabbit on PR #44 -- the fifth finding on this classifier, and the first that
+       * was not a new sentence shape but two patterns for one word drifting apart. Both now derive
+       * from RETURN_WORD_SOURCE.
+       *
+       * Derived, not a fixed pair: every spelling is run through both directions, so adding one to
+       * the source without teaching the prefix about it fails here.
+       */
+      for (const spelling of ["Return", "Returns", "Returned"]) {
+        expect(normalizeTransactionType(`${spelling} from Supplier`), `${spelling} from`).toBe("restock")
+        expect(normalizeTransactionType(`${spelling} to Customer`), `${spelling} to`).toBe("deplete")
+        // And the bare word still refuses to guess, whichever spelling it is.
+        expect(isUnrecognisedTransactionType(spelling), `bare ${spelling}`).toBe(true)
+      }
+    })
+
+    it("reads a direction written with punctuation", () => {
+      // A hand-written CSV column does "Return from: Supplier", and a bare \s+ separator missed it
+      // -- so tier 1 saw `supplier` and sent stock OUT when the phrase says it is arriving.
+      // Raised by CodeRabbit on PR #44.
+      expect(normalizeTransactionType("Return from: Supplier")).toBe("restock")
+      expect(normalizeTransactionType("Return to: Customer")).toBe("deplete")
+      expect(normalizeTransactionType("Return, to supplier")).toBe("deplete")
+      expect(normalizeTransactionType("Return - from vendor")).toBe("restock")
+    })
+
+    it("does not mistake a purchase's source for the return's destination", () => {
+      /**
+       * "Return of goods purchased from supplier" contains `from supplier`, but that says where the
+       * goods were BOUGHT -- returning them takes stock OUT. An unanchored preposition read it as
+       * arriving, confidently and with no warning. Raised by CodeRabbit on PR #44.
+       *
+       * Fixed by NARROWING tier 0 to a preposition attached to "return", not by adding another rule
+       * for this sentence. The compound phrase then falls through to the counterparty tier, which
+       * gets it right for the right reason.
+       */
+      expect(normalizeTransactionType("Return of goods purchased from supplier")).toBe("deplete")
+      // And the mirror: goods we sold, coming back.
+      expect(normalizeTransactionType("Return of goods sold to customer")).toBe("restock")
+    })
+
+    it("does not read a preposition that is not about a counterparty", () => {
+      // "Return to stores" is our own store, and the direction is the opposite of "to <them>".
+      // Anchoring the preposition to a counterparty word keeps tier 0 from firing on it.
+      expect(normalizeTransactionType("Return to stores")).toBe("deplete")
+      expect(isUnrecognisedTransactionType("Return to stores"), "no counterparty, no direction").toBe(true)
+    })
+
+    it("flags a phrase that contradicts itself rather than picking a side", () => {
+      // Both counterparties, or both transaction directions. Neither reading is defensible, and on
+      // an import that moves real stock a warning beats a coin flip.
+      for (const type of ["Customer Supplier Return", "Purchase Sales Return", "Vendor Buyer Returns"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(true)
+      }
+    })
+
+    it("refuses to guess a bare return, and says so", () => {
+      /**
+       * "Return" names no counterparty, so its direction is genuinely unknown -- it could be going
+       * to a supplier or coming back from a customer, and the two move stock opposite ways by the
+       * same quantity. It keeps the historic deplete default AND is flagged, because on an import
+       * that moves real stock a warning is worth more than a confident coin flip.
+       */
+      for (const type of ["Return", "Returned", "Goods Return", "returns"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(true)
+      }
+    })
+
+    it("keeps the direction and the warning in agreement for every type", () => {
+      /**
+       * DERIVED, not a list. The two exports each used to test RESTOCK_WORDS on their own, which is
+       * how "Purchase Return" ended up classified as a restock while the warning said nothing was
+       * wrong. They share one classifier now, and the invariant is: anything flagged as
+       * unrecognised must have fallen through to the default, never to restock.
+       *
+       * A restock is the direction that ADDS stock, so "unrecognised but restocked" is the
+       * combination that silently inflates inventory -- exactly the shipped bug.
+       */
+      const types = [
+        "Purchase", "purchased", "Bought", "buy", "Received", "Stock In", "Opening",
+        "Used", "usage", "Consumed", "Issue", "Stock out", "applied", "sold", "Deplete",
+        "Purchase Return", "Sales Return", "Return", "Returned", "Goods Return",
+        "transfer", "buyback-adjustment", "something else", "Debit Note", "Credit Note",
+      ]
+      const inflating = types.filter(
+        (type) => isUnrecognisedTransactionType(type) && normalizeTransactionType(type) === "restock",
+      )
+      expect(inflating, "an unrecognised type must never add stock").toEqual([])
+    })
+  })
+
   it("flags a non-blank type it does not recognise, so validation can warn before it defaults to deplete", () => {
     expect(isUnrecognisedTransactionType("transfer")).toBe(true)
     expect(isUnrecognisedTransactionType("something else")).toBe(true)
