@@ -51,9 +51,20 @@ describe("an activity code must already exist", () => {
      */
     const missing = pickerForms().filter((file) => {
       const src = read(file)
+      /**
+       * TWO WAYS TO SATISFY THIS, and both are real: do the lookup inline (labour still does), or
+       * delegate to decideExpenseCode (expenses now does, because the inline version shipped wrong
+       * twice and this scan could not see either failure -- see tests/expense-code-decision.ts).
+       *
+       * Accepting only the inline shape would have made moving the logic into a tested pure
+       * function look like a regression, which is how a guard starts arguing against the fix.
+       */
+      const delegates = /decideExpenseCode\s*\(/.test(
+        src.split("\n").filter((line) => !/^\s*import\b/.test(line)).join("\n"),
+      )
       const looksUpActivity = /activities\.find\(\s*\(\s*a\w*\s*\)\s*=>\s*a\w*\.code\.toLowerCase\(\)\s*===/.test(src)
       const bailsWhenUnmatched = /if\s*\(\s*!\s*matchingActivity\s*\)/.test(src)
-      return !(looksUpActivity && bailsWhenUnmatched)
+      return !(delegates || (looksUpActivity && bailsWhenUnmatched))
     })
     expect(missing, "gate submit on a resolved activity, the way labour does").toEqual([])
   })
@@ -91,27 +102,69 @@ describe("an activity code must already exist", () => {
     ).toBe(false)
   })
 
-  it("an unmatched search cannot fall back to the code it replaced", () => {
+  /**
+   * ⚠ A SCAN USED TO LIVE HERE CALLED "an unmatched search cannot fall back to the code it
+   * replaced". It asserted that a refusal on `!pendingCodeResolution` appeared above the line
+   * computing `effectiveCode` -- ordering being the property, since the same check placed after the
+   * fallback could never fire.
+   *
+   * It is gone rather than ported, because the thing it was reaching for is now expressible. The
+   * decision is a pure function, and tests/expense-code-decision.ts asks it directly. That is
+   * strictly stronger: the scan could only see whether a guard was positioned above a fallback, and
+   * was blind to WHICH inputs the guard consulted -- which is precisely how the second bug shipped
+   * with this file green. The replacement covers the settled query and the one still in the box,
+   * the ambiguous partial, and the emptied-on-focus case, none of which a position check can state.
+   *
+   * Noted at this length because the repo guide warns that one such replacement was weaker than the
+   * scan it replaced, so the comparison is worth writing down rather than assuming.
+   */
+
+  it("submits through the decision function rather than reimplementing it inline", () => {
     /**
-     * THE BUG THE FIRST VERSION OF THIS FIX INTRODUCED.
+     * Not a tidiness assertion. Both versions of this logic were wrong while it lived inline, and
+     * the scan guarding it could not see either failure -- so the contract below is only worth
+     * anything if the form actually routes through the thing the contract tests.
      *
-     * Select 136. Type "fertilizer". Look away. The warning appears — but formData.code is still
-     * 136 and codeQuery has been cleared, so submit resolved to 136 and saved the expense under a
-     * code the writer had visibly replaced. A valid-but-unintended code is worse than a refused
-     * one: nothing downstream can tell it was not meant.
-     *
-     * Asserts the guard runs BEFORE the fallback. Ordering is the whole property — the same check
-     * placed after `effectiveCode` is computed would never be reached, because the fallback has
-     * already produced a code that matches.
+     * A CALL, not a mention: import lines stripped, and matched with an open paren. This repo has
+     * a live example of the weaker form, where a test asserted toContain("formatLocationLabel")
+     * and passed on the import line of a component that never called it.
      */
     const src = read("components/other-expenses-tab.tsx")
-    const submit = src.slice(src.indexOf("handleSubmitUnguarded"))
-    const unmatchedGuard = submit.search(/if\s*\(\s*unmatchedCodeQuery\s*&&\s*!\s*pendingCodeResolution\s*\)/)
-    const fallback = submit.search(/const\s+effectiveCode\s*=/)
+    const withoutImports = src
+      .split("\n")
+      .filter((line) => !/^\s*import\b/.test(line))
+      .join("\n")
+    expect(/decideExpenseCode\s*\(/.test(withoutImports)).toBe(true)
+  })
 
-    expect(unmatchedGuard, "submit must refuse a typed code that matched nothing").toBeGreaterThan(-1)
-    expect(fallback).toBeGreaterThan(-1)
-    expect(unmatchedGuard, "the refusal must come before the fallback, or it never fires").toBeLessThan(fallback)
+  it("abandons a scheduled blur commit when the form is reset", () => {
+    /**
+     * The blur commit is deferred 150ms so a suggestion click lands first. Uncancellable, it
+     * outlived the form session: type a resolvable code, hit Cancel, and 150ms later the callback
+     * called handleCodeChange and put that code into the NEXT expense -- a cost code the writer
+     * never chose for the entry it ends up on.
+     *
+     * Three parts, because any one alone leaves the hole open: the timer is held somewhere
+     * cancellable, resetForm cancels it, and the deferred write goes through that same handle.
+     */
+    const src = read("components/other-expenses-tab.tsx")
+    const stripped = src
+      .split("\n")
+      .filter((line) => {
+        const t = line.trim()
+        return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
+      })
+      .join("\n")
+
+    expect(/blurCommitRef\s*=\s*useRef/.test(stripped), "hold the timer where it can be cleared").toBe(true)
+    expect(/blurCommitRef\.current\s*=\s*setTimeout/.test(stripped), "schedule through that handle").toBe(true)
+
+    const reset = stripped.slice(stripped.indexOf("const resetForm"))
+    const resetBody = reset.slice(0, reset.indexOf("clearDraft()"))
+    expect(
+      /cancelBlurCommit\(\)|clearTimeout/.test(resetBody),
+      "resetForm must cancel the pending commit, or it lands on the next expense",
+    ).toBe(true)
   })
 
   it("the unmatched warning does not outlive the thing it warns about", () => {

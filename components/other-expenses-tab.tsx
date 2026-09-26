@@ -29,7 +29,7 @@ import { toast } from "sonner"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { deleteWithUndo } from "@/lib/undo-delete"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { resolveActivityFromQuery } from "@/lib/activity-code-match"
+import { decideExpenseCode, resolveActivityFromQuery } from "@/lib/activity-code-match"
 import ActivitySuggestList, { filterActivitySuggestions } from "@/components/activity-suggest-list"
 import { formatLocationLabel } from "@/lib/location-label"
 import { numericInputValue } from "@/lib/number-input"
@@ -132,6 +132,26 @@ export default function OtherExpensesTab({
    * type "fertilizer", look away, and the box is empty with no explanation.
    */
   const [unmatchedCodeQuery, setUnmatchedCodeQuery] = useState<string | null>(null)
+
+  /**
+   * The blur commit is deferred 150ms so that clicking a suggestion registers before the query is
+   * cleared. That timer was not cancellable, and an uncancellable write into form state outlives
+   * the form session it belongs to: type a resolvable code, hit Cancel, and 150ms later the
+   * callback called handleCodeChange and put that code into the NEXT expense. An unmatched query
+   * likewise restored its own warning over a freshly reset form.
+   *
+   * Holding it in a ref makes the commit abandonable, which is the only thing that was missing.
+   * Caught by CodeRabbit on PR #40.
+   */
+  const blurCommitRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelBlurCommit = useCallback(() => {
+    if (blurCommitRef.current === null) return
+    clearTimeout(blurCommitRef.current)
+    blurCommitRef.current = null
+  }, [])
+  // Unmounting is the other way a form session ends. Switching tabs mid-type should not leave a
+  // timer holding a setState on a component that is gone.
+  useEffect(() => cancelBlurCommit, [cancelBlurCommit])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [supportsMultiInventoryItems, setSupportsMultiInventoryItems] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -278,6 +298,10 @@ export default function OtherExpensesTab({
   const visibleActivities = showAllCodes ? sortedActivities : usedActivities
 
   const resetForm = () => {
+    // Before clearing anything: a blur commit scheduled 150ms ago would otherwise land AFTER this
+    // reset and repopulate the code, or restore the unmatched warning, on the next expense.
+    cancelBlurCommit()
+    setCodeQuery(null)
     setUnmatchedCodeQuery(null)
     setFormData({
       date: todayIso(),
@@ -311,11 +335,9 @@ export default function OtherExpensesTab({
      * (components/labor-deployment-tab.tsx); expenses never did, so an unknown code travelled all
      * the way to Postgres and came back as a foreign-key violation after the form was complete.
      *
-     * Resolve any still-open search synchronously first, the same way labour does, so submitting
+     * Any still-open search is resolved synchronously, the same way labour does, so submitting
      * straight after typing does not race the field's own 150ms blur commit.
      */
-    const pendingCodeResolution = codeQuery !== null ? resolveActivityFromQuery(codeQuery, activities) : null
-
     /**
      * AN UNMATCHED SEARCH MUST NOT FALL BACK TO THE CODE IT REPLACED.
      *
@@ -326,24 +348,40 @@ export default function OtherExpensesTab({
      *
      * Caught by CodeRabbit on PR #40, citing the "prefer a figure that could be quietly wrong
      * over a style concern" instruction in .coderabbit.yaml.
+     *
+     * ⚠ THE FIRST VERSION OF THIS GUARD READ ONLY `unmatchedCodeQuery`, AND THAT WAS HALF A FIX.
+     *
+     * unmatchedCodeQuery is written by the blur callback, 150ms after the field loses focus. Save
+     * can win that race: type "fertilizer" and hit Save before the timer fires and codeQuery is
+     * still "fertilizer" while unmatchedCodeQuery is still null, so the guard did not run and the
+     * fallback saved the previously selected code anyway. On a phone, tapping Save straight from
+     * the open keyboard is the normal way to submit, so 150ms is not a hard race to win.
+     *
+     * The settled value and the one still in the box both have to count. Caught by CodeRabbit on
+     * PR #40 as well -- posted one minute before that PR was merged, so it shipped.
+     *
+     * THE WHOLE DECISION NOW LIVES IN decideExpenseCode, in lib/activity-code-match.ts, because
+     * both versions of this logic were wrong here and the tests guarding it could not see either
+     * one. They scanned this handler's source, and the second scan was satisfied by the
+     * `codeQuery !== null` on the line above -- green with the fix deleted. A pure function can be
+     * asked what it decides instead of being grepped for how it looks.
      */
-    if (unmatchedCodeQuery && !pendingCodeResolution) {
+    const codeDecision = decideExpenseCode({
+      liveQuery: codeQuery,
+      settledUnmatched: unmatchedCodeQuery,
+      committedCode: formData.code,
+      activities,
+    })
+    if (codeDecision.outcome === "refuse") {
       toast.error(
-        `"${unmatchedCodeQuery}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`,
-      )
-      return
-    }
-
-    const effectiveCode = (pendingCodeResolution?.code ?? formData.code).trim()
-    const matchingActivity = activities.find((a) => a.code.toLowerCase() === effectiveCode.toLowerCase())
-    if (!matchingActivity) {
-      toast.error(
-        effectiveCode
-          ? `"${effectiveCode}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`
+        codeDecision.typed
+          ? `"${codeDecision.typed}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`
           : "Pick a type of cost from the list.",
       )
       return
     }
+    const matchingActivity = codeDecision.activity
+    const effectiveCode = matchingActivity.code
     trackClick(editingId ? "expense_update" : "expense_save")
     setIsSubmitting(true)
 
@@ -602,8 +640,14 @@ export default function OtherExpensesTab({
                       // Resolve what was typed. If it names a real code, take it; if it does not,
                       // fall back to whatever was last validly selected rather than leaving
                       // unusable text sitting in the box looking accepted.
+                      //
+                      // Deferred 150ms so that clicking a suggestion lands first. Cancellable, so
+                      // that Cancel or unmount abandons the commit instead of letting it arrive in
+                      // the next expense -- see blurCommitRef.
                       const query = (codeQuery ?? "").trim()
-                      setTimeout(() => {
+                      cancelBlurCommit()
+                      blurCommitRef.current = setTimeout(() => {
+                        blurCommitRef.current = null
                         const resolved = resolveActivityFromQuery(query, activities)
                         if (resolved) handleCodeChange(resolved.code)
                         setUnmatchedCodeQuery(resolved || !query ? null : query)
@@ -692,7 +736,7 @@ export default function OtherExpensesTab({
                           fills in the amount for you -- which is the entire reason the Amount box
                           below might not be yours to type. Laxmi's writer asked why the cost box
                           was there at all when the amount comes from the quantity. */}
-                      Deduct from stock{" "}<span className="font-normal">(only if this cost used supplies from your own store. Link an item and the amount below works itself out.)</span>
+                      Deduct from stock{" "}<span className="font-normal">(only if this cost used supplies from your own store. Link an item with a cost recorded against it and the amount below works itself out.)</span>
                     </p>
                     {supportsMultiInventoryItems && (
                       <Button

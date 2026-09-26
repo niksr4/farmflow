@@ -126,7 +126,27 @@ describe("the form asks in the order the decision happens", () => {
   it("tells the writer that linking stock fills the amount in, not merely that it is allowed", () => {
     // The old label said when to use the section and never what it does. "Optional" is not the
     // question a writer has; "do I still have to type the cost?" is.
-    expect(body).toMatch(/Link an item and the amount below works itself out/)
+    expect(body).toMatch(/the amount below works itself out/)
+  })
+
+  it("does not promise a derived amount for stock that has no cost recorded", () => {
+    /**
+     * stockCost.derived stays null when a linked item is unpriced -- the writer still has to type
+     * the amount, and an amber helper under Amount says so. An unqualified "link an item and the
+     * amount works itself out" contradicts that helper, and this is not a hypothetical shape:
+     * Laxmi has three items sitting at Rs 0 (Urea 1,650kg, DAP 150kg, "19 all" 1kg) and HoneyFarm
+     * has 44 zero-cost restocks over 60,357kg. The unpriced case is the common one.
+     *
+     * Caught by CodeRabbit on PR #41, citing "a test must assert what the code SHOULD do, not what
+     * it currently does" -- the first version of the test above pinned the over-promise in place.
+     */
+    const label = body.slice(body.indexOf("Deduct from stock"))
+    const parenthetical = /\(only if[^)]*\)/.exec(label)?.[0] ?? ""
+    expect(parenthetical, "the stock label must still explain itself").not.toBe("")
+    expect(
+      parenthetical,
+      "the amount only works itself out when the linked item has a cost, so say so",
+    ).toMatch(/cost recorded|recorded cost|priced/i)
   })
 })
 
