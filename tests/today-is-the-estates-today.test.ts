@@ -211,14 +211,24 @@ const scan = () => {
  * still technically the wrong date for ~5.5 hours a day; none of them reaches a number anybody is
  * paid or charged. THIS LIST MUST ONLY EVER SHRINK.
  */
-const ACCEPTED: Record<string, string> = {
-  "app/api/coffee-news/route.ts": "cache key for a news feed — a day-early key costs one refetch",
-  "app/api/receivables/route.ts": "overdue cutoffs, but receivables is enterprise-tier with 0 rows in prod",
-  "app/api/weather/rainfall-context/route.ts": "forecast context window, not a recorded figure",
-  "app/api/yield-forecast/route.ts": "named todayUtc and compared only against other UTC-parsed dates; enterprise-tier, 0 rows",
-  "components/tenant-settings-page.tsx": "date in a download filename",
-  "components/inventory-system.tsx": "dates in two CSV download filenames",
-  "components/admin/utils.ts": "DEFAULT_WEEKLY_START, an admin date-picker seed the operator immediately overrides",
+const ACCEPTED: Record<string, { count: number; why: string }> = {
+  "app/api/coffee-news/route.ts": { count: 1, why: "cache key for a news feed — a day-early key costs one refetch" },
+  "app/api/receivables/route.ts": { count: 1, why: "overdue cutoffs, but receivables is enterprise-tier with 0 rows in prod" },
+  "app/api/weather/rainfall-context/route.ts": { count: 1, why: "forecast context window, not a recorded figure" },
+  "app/api/yield-forecast/route.ts": { count: 1, why: "named todayUtc and compared only against other UTC-parsed dates; enterprise-tier, 0 rows" },
+  "components/tenant-settings-page.tsx": { count: 1, why: "date in a download filename" },
+  "components/inventory-system.tsx": { count: 2, why: "dates in two CSV download filenames" },
+  "components/admin/utils.ts": { count: 1, why: "DEFAULT_WEEKLY_START, an admin date-picker seed the operator immediately overrides" },
+}
+
+/** Direct-form occurrences per file, from the same scan the checks below use. */
+const directFormCounts = (): Record<string, number> => {
+  const counts: Record<string, number> = {}
+  for (const line of scan()) {
+    const file = line.split(":")[0]
+    counts[file] = (counts[file] ?? 0) + 1
+  }
+  return counts
 }
 
 /**
@@ -252,9 +262,23 @@ const VARIABLE_FORM_ACCEPTED: Record<string, number> = {
 }
 
 describe("nobody reintroduces the UTC-date-for-today shape", () => {
-  it("no NEW source file derives today by slicing a UTC ISO string", () => {
-    const unexpected = scan().filter((line) => !Object.keys(ACCEPTED).some((file) => line.startsWith(`${file}:`)))
-    expect(unexpected, "use todayIso() from lib/date-utils -- it is IST, see the docstring there").toEqual([])
+  it("no source file derives today by slicing a UTC ISO string beyond what is accepted", () => {
+    /**
+     * OCCURRENCES, not files. This used to exempt whole PATHS -- so a file already on the list could
+     * gain a second, third, fourth offender and the guard stayed green, and the staleness twin below
+     * also stayed green because the original occurrence was untouched.
+     *
+     * That is the "hand-kept list of files is how the next instance hides" failure from CLAUDE.md.
+     * The variable-form list beside this one was already count-based for exactly that reason; this
+     * one was not, so the weaker half of the same guard was the half nobody had fixed.
+     *
+     * Raised by CodeRabbit on PR #34 as an outside-diff-range finding, which is why it sat unread.
+     */
+    const counts = directFormCounts()
+    const over = Object.entries(counts)
+      .filter(([file, n]) => n > (ACCEPTED[file]?.count ?? 0))
+      .map(([file, n]) => `${file}: ${n} (accepted ${ACCEPTED[file]?.count ?? 0})`)
+    expect(over, "use todayIso() from lib/date-utils -- it is IST, see the docstring there").toEqual([])
   })
 
   const variableFormCounts = (): Record<string, number> => {
@@ -292,11 +316,18 @@ describe("nobody reintroduces the UTC-date-for-today shape", () => {
     expect(stale, "lower the number (or delete the entry) in VARIABLE_FORM_ACCEPTED").toEqual([])
   })
 
-  it("every accepted entry is still a real occurrence", () => {
+  it("every accepted entry is still a real occurrence, at the count claimed", () => {
     // Without this, a file that gets fixed leaves a stale exemption behind, and the next genuine
     // offender in that file is silently permitted. An allowlist that cannot expire is a hole.
-    const hit = scan()
-    const stale = Object.keys(ACCEPTED).filter((file) => !hit.some((line) => line.startsWith(`${file}:`)))
-    expect(stale, "these no longer match — delete them from ACCEPTED").toEqual([])
+    //
+    // Counts, not presence: fixing ONE of two occurrences in a listed file used to leave the
+    // exemption intact at its original breadth, so the slot the fix freed up was silently available
+    // to the next offender. Comparing counts closes both ends -- fix one and this fails, add one and
+    // the check above fails.
+    const counts = directFormCounts()
+    const stale = Object.entries(ACCEPTED)
+      .filter(([file, { count }]) => (counts[file] ?? 0) < count)
+      .map(([file, { count }]) => `${file}: accepted ${count}, found ${counts[file] ?? 0}`)
+    expect(stale, "lower the number (or delete the entry) in ACCEPTED").toEqual([])
   })
 })
