@@ -70,6 +70,7 @@ vi.mock("@/lib/server/db", () => {
 vi.mock("@/lib/server/security-events", () => ({ logSecurityEvent: (...a: unknown[]) => logSecurityEvent(...a) }))
 vi.mock("@/lib/server/password-hash", () => ({ hashPassword: () => "hashed" }))
 
+import { RESET_LINK_USED_MESSAGE } from "@/lib/server/password-reset-utils"
 import { resetPasswordWithToken } from "@/lib/server/password-reset"
 
 const LIVE_TOKEN_ROW = {
@@ -126,6 +127,28 @@ describe("resetPasswordWithToken", () => {
     expect(sweepAt).toBeGreaterThan(passwordAt)
     // Ordering still matters inside the transaction: the sweep's guard reads the token row that the
     // consume statement wrote, so it has to run after it.
+  })
+
+  it("consumes the token BEFORE the password update, not after", async () => {
+    await reset()
+    /**
+     * The other end of the same ordering, and the assertion above does not cover it: it constrains
+     * only the sweep. Both the password update and the sweep are gated on
+     * `consumed_at = CURRENT_TIMESTAMP`, so if the consume statement moved below the password update
+     * the EXISTS would find nothing, nothing would change, and the function would report the link as
+     * used -- for a link that was perfectly good. Every test here would still pass, because
+     * batchResult() hands back consumed rows in the second slot regardless of statement order.
+     *
+     * Raised by CodeRabbit on PR #43.
+     */
+    const all = batched()
+    const consumeAt = all.findIndex(
+      (t) => /UPDATE password_reset_tokens/i.test(t) && /\bid = \?/.test(t) && /RETURNING/i.test(t),
+    )
+    const passwordAt = all.findIndex(isPasswordUpdate)
+    expect(consumeAt, "expected a single-token consume statement").toBeGreaterThanOrEqual(0)
+    expect(passwordAt).toBeGreaterThanOrEqual(0)
+    expect(consumeAt, "the password update reads the row the consume wrote").toBeLessThan(passwordAt)
   })
 
   it("does all three writes in ONE transaction", async () => {
@@ -185,7 +208,12 @@ describe("resetPasswordWithToken", () => {
     // Consume returned no rows, so both gated writes were no-ops and the transaction changed
     // nothing. Reporting success here would claim a password change that did not happen.
     runTenantQueries.mockResolvedValue(batchResult([]))
-    await expect(reset()).rejects.toThrow()
+    /**
+     * Matched on the message, not on "something threw". A bare rejects.toThrow() passes for any
+     * error -- a TypeError from a wrong result shape, or a destructuring bug on consumedRows -- so it
+     * would not prove the writer sees "already used" rather than a 500. Raised by CodeRabbit on #43.
+     */
+    await expect(reset()).rejects.toThrow(RESET_LINK_USED_MESSAGE)
     expect(logSecurityEvent).not.toHaveBeenCalled()
   })
 
