@@ -177,6 +177,22 @@ const RETURN_WORDS = /\b(returns?|returned)\b/
  * When both sides of a tier match ("Customer Supplier Return", "Purchase Sales Return") the phrase
  * genuinely contradicts itself and is flagged rather than guessed -- same rule as a bare "Return".
  */
+/**
+ * AN EXPLICIT PREPOSITION BEATS THE COUNTERPARTY, because it names the direction outright.
+ *
+ * "Return from Supplier" contains `supplier`, and the counterparty rule below read that as stock
+ * going OUT -- but goods coming FROM the supplier are arriving. "Return to Customer" had the mirror
+ * error and became a recognised restock when we are the ones shipping. Both were confident, silent
+ * and backwards. Raised by CodeRabbit on PR #44.
+ *
+ * Once a `to`/`from` is present the counterparty stops mattering at all: "to" means it is leaving us
+ * and "from" means it is arriving, whoever is at the other end. Requiring the preposition to sit
+ * directly beside a counterparty word keeps it from firing on unrelated phrasing like
+ * "Return to stores", where "stores" is our own and the direction is the opposite one.
+ */
+const RETURN_LEAVING_US = /\bto\s+(?:the\s+)?(supplier|vendor|customer|buyer)\b/
+const RETURN_ARRIVING_TO_US = /\bfrom\s+(?:the\s+)?(supplier|vendor|customer|buyer)\b/
+
 const RETURN_COUNTERPARTY_SUPPLIER = /\b(supplier|vendor)\b/
 const RETURN_COUNTERPARTY_CUSTOMER = /\b(customer|buyer)\b/
 /** We bought it, so returning it sends stock OUT. */
@@ -196,7 +212,14 @@ const readTransactionType = (value: string | null | undefined): TransactionTypeR
   if (!raw) return { type: "deplete", recognised: true }
 
   if (RETURN_WORDS.test(raw)) {
-    // Tier 1: a named counterparty settles it, whatever else the phrase contains.
+    // Tier 0: an explicit "to <them>" / "from <them>" states the direction outright.
+    const leaving = RETURN_LEAVING_US.test(raw)
+    const arriving = RETURN_ARRIVING_TO_US.test(raw)
+    if (leaving !== arriving) return { type: leaving ? "deplete" : "restock", recognised: true }
+    // Both prepositions present ("return from supplier to customer") says two things at once.
+    if (leaving && arriving) return { type: "deplete", recognised: false }
+
+    // Tier 1: no preposition, so a named counterparty settles it.
     const toSupplier = RETURN_COUNTERPARTY_SUPPLIER.test(raw)
     const fromCustomer = RETURN_COUNTERPARTY_CUSTOMER.test(raw)
     if (toSupplier !== fromCustomer) return { type: toSupplier ? "deplete" : "restock", recognised: true }

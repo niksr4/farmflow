@@ -156,6 +156,33 @@ describe("import bulk utils — field normalization", () => {
       }
     })
 
+    it("lets an explicit to/from outrank the counterparty", () => {
+      /**
+       * "Return from Supplier" contains `supplier`, and the counterparty rule read that as stock
+       * going OUT -- but goods coming FROM the supplier are arriving. "Return to Customer" had the
+       * mirror error and became a recognised restock when we are the ones shipping. Both confident,
+       * silent, and backwards. Raised by CodeRabbit on PR #44.
+       *
+       * Once a preposition is present the counterparty stops mattering: "to" is leaving, "from" is
+       * arriving, whoever is at the other end.
+       */
+      for (const type of ["Return to Supplier", "Return to Customer", "Purchase Return to Supplier", "Return to the Buyer"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+      for (const type of ["Return from Supplier", "Return from Customer", "Sales Return from Customer", "Return from the Vendor"]) {
+        expect(normalizeTransactionType(type), type).toBe("restock")
+        expect(isUnrecognisedTransactionType(type), type).toBe(false)
+      }
+    })
+
+    it("does not read a preposition that is not about a counterparty", () => {
+      // "Return to stores" is our own store, and the direction is the opposite of "to <them>".
+      // Anchoring the preposition to a counterparty word keeps tier 0 from firing on it.
+      expect(normalizeTransactionType("Return to stores")).toBe("deplete")
+      expect(isUnrecognisedTransactionType("Return to stores"), "no counterparty, no direction").toBe(true)
+    })
+
     it("flags a phrase that contradicts itself rather than picking a side", () => {
       // Both counterparties, or both transaction directions. Neither reading is defensible, and on
       // an import that moves real stock a warning beats a coin flip.
