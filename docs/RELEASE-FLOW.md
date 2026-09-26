@@ -61,11 +61,34 @@ and the whole flow should be arranged so that it sees small, coherent diffs.
 > CodeRabbit is free on public repositories, which is one more thing tied to this repo staying
 > public — see the note in STATUS.md before changing visibility.
 >
-> ⚠ **Read its findings by email or on github.com, never through the API.** CodeRabbit posts some
-> findings as *outside diff range* comments, which GitHub cannot render inline. Those are invisible
-> to `gh pr view`, `gh pr checks` **and** the GraphQL `reviewThreads` query. PR #33 was merged on
-> the belief that its review held three Minor items; the email carried two **Major** defects that
-> none of those commands showed.
+> ⚠ **Some findings are NOT in the inline comment list.** CodeRabbit posts findings GitHub cannot
+> render inline as *outside diff range* comments, which are invisible to `gh pr view`,
+> `gh pr checks` **and** the GraphQL `reviewThreads` query. PR #33 was merged on the belief that its
+> review held three Minor items; the email carried two **Major** defects that none of those commands
+> showed.
+>
+> ⚠ **This used to say "never through the API", and that was wrong — it cost six missed findings.**
+> Outside-diff comments live in the pull request review's own `body` field, which the REST reviews
+> endpoint does expose. Corrected after CodeRabbit pointed it out on PR #36, and *then* a full audit
+> of all 41 PRs found what the wrong version had been hiding: **six** outside-diff findings across
+> PRs #32, #33, #34 and #40, three of them Major — including a CWE-863 authorization bypass in
+> `lib/location-access.ts` that had been live for three days. Believing the doc meant not running
+> the one command that would have shown them.
+>
+> Read **all three** surfaces before merging:
+>
+> ```bash
+> gh api repos/niksr4/farmflow/pulls/N/reviews --paginate --jq '.[] | select(.user.login|test("coderabbit";"i")) | .body'
+> gh api repos/niksr4/farmflow/pulls/N/comments --paginate --jq '.[] | "\(.path):\(.line)\n\(.body)"'
+> gh api repos/niksr4/farmflow/issues/N/comments --paginate --jq '.[] | select(.user.login=="coderabbitai[bot]") | .body'
+> ```
+>
+> The first is the one that was missing. Grep its output for `Outside diff range comments` and for
+> `Actionable comments posted: N`, then check N against the number you actually read.
+>
+> ⚠ **And CodeRabbit reviews in more than one pass.** On PR #40 it posted three findings at 10:16 and
+> two more **Majors at 10:31:17**; the merge went in at 10:32 and both shipped. A single check is not
+> a check. Confirm the walkthrough no longer says `review in progress` before merging.
 
 ## The flow
 

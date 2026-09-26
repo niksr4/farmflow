@@ -63,7 +63,7 @@ describe("getAccessibleLocationIds", () => {
 
   it("returns null (unrestricted) for a user role with zero user_locations rows -- the default, backward-compatible state", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-1" }]) // users lookup
+      .mockResolvedValueOnce([{ id: "u-zero-rows" }]) // users lookup
       .mockResolvedValueOnce([]) // user_locations lookup: nothing assigned yet
     const result = await getAccessibleLocationIds(user({ id: "u-zero-rows" }))
     expect(result).toBeNull()
@@ -71,7 +71,7 @@ describe("getAccessibleLocationIds", () => {
 
   it("returns an allow-list of only the enabled locations once any row exists -- diverges from user_modules' sparse-override default", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-2" }])
+      .mockResolvedValueOnce([{ id: "u-allow-list" }])
       .mockResolvedValueOnce([
         { location_id: "tirtha-block-1", enabled: true },
         { location_id: "tirtha-block-2", enabled: true },
@@ -83,7 +83,7 @@ describe("getAccessibleLocationIds", () => {
 
   it("returns an empty array (fully locked out), not null, when every assigned row is disabled", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-3" }])
+      .mockResolvedValueOnce([{ id: "u-all-disabled" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: false }])
     const result = await getAccessibleLocationIds(user({ id: "u-all-disabled" }))
     expect(result).toEqual([])
@@ -91,39 +91,127 @@ describe("getAccessibleLocationIds", () => {
 
   it("treats a not-yet-migrated user_locations table as unrestricted rather than throwing", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-4" }])
+      .mockResolvedValueOnce([{ id: "u-missing-relation" }])
       .mockRejectedValueOnce(new Error('relation "user_locations" does not exist'))
     const result = await getAccessibleLocationIds(user({ id: "u-missing-relation" }))
     expect(result).toBeNull()
   })
 
-  it("caches the result so a second call within the TTL skips the database", async () => {
+  it("caches the result so a second call within the TTL skips the user_locations query", async () => {
+    /**
+     * ⚠ THIS USED TO ASSERT THE SECOND CALL TOUCHED THE DATABASE NOT AT ALL, and that is the
+     * behaviour PR #47 deliberately changed: the cache sat ABOVE the `users` lookup, so a deleted
+     * account kept its answer for the 30s TTL. Existence is now always checked; the cache still
+     * saves the `user_locations` query, which is the expensive half.
+     *
+     * Kept rather than deleted, because "the cache still does work" is worth asserting -- otherwise
+     * the fix could degrade into querying everything on every request and nothing would notice.
+     */
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-5" }])
+      .mockResolvedValueOnce([{ id: "u-cached" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
     const first = await getAccessibleLocationIds(user({ id: "u-cached" }))
     const callCountAfterFirst = runTenantQuery.mock.calls.length
 
+    runTenantQuery.mockResolvedValueOnce([{ id: "u-cached" }]) // users lookup only
     const second = await getAccessibleLocationIds(user({ id: "u-cached" }))
     expect(second).toEqual(first)
-    expect(runTenantQuery.mock.calls.length).toBe(callCountAfterFirst)
+    expect(
+      runTenantQuery.mock.calls.length - callCountAfterFirst,
+      "one existence check, and no user_locations re-read",
+    ).toBe(1)
   })
 
   it("invalidateLocationCache clears the cache so the next call re-reads the database", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-6" }])
+      .mockResolvedValueOnce([{ id: "u-invalidate" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
     await getAccessibleLocationIds(user({ id: "u-invalidate" }))
     const callCountAfterFirst = runTenantQuery.mock.calls.length
 
     invalidateLocationCache(TENANT_ID)
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-6" }])
+      .mockResolvedValueOnce([{ id: "u-invalidate" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }, { location_id: "citrus-grove-block-1", enabled: true }])
     const afterInvalidate = await getAccessibleLocationIds(user({ id: "u-invalidate" }))
 
     expect(runTenantQuery.mock.calls.length).toBeGreaterThan(callCountAfterFirst)
     expect(afterInvalidate).toEqual(["tirtha-block-1", "citrus-grove-block-1"])
+  })
+})
+
+describe("no cached answer is served before the account is known to exist", () => {
+  /**
+   * `null` means unrestricted, and it is written for any user-role account with no `user_locations`
+   * rows -- correct while the account exists. It was returned BEFORE the `users` lookup, which is
+   * the fail-closed check PR #32 added precisely so a deleted account gets nothing.
+   *
+   * NextAuth JWTs are not revoked server-side, so deleting a user left their live session reading
+   * every location in the tenant for the rest of the 30s cache TTL. PR #32's fix, bypassed by
+   * PR #32's cache.
+   *
+   * Caught by CodeRabbit on PR #32 as an OUTSIDE-DIFF-RANGE finding, which is why it sat unfixed for
+   * three days: those live in the pull request review's `body` field, not in the inline comment
+   * list, and docs/RELEASE-FLOW.md claimed they were unreachable via the API.
+   */
+  it("re-checks the users row even when unrestricted access is already cached", async () => {
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "u-unrestricted" }]) // users lookup
+      .mockResolvedValueOnce([]) // user_locations: none -> null, i.e. unrestricted
+    expect(await getAccessibleLocationIds(user({ id: "u-unrestricted" }))).toBeNull()
+
+    // The account is deleted. The session survives, so the next call must not trust the cache.
+    runTenantQuery.mockReset()
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
+    const afterDeletion = await getAccessibleLocationIds(user({ id: "u-unrestricted" }))
+
+    expect(runTenantQuery, "a cached 'unrestricted' must be re-validated, not served").toHaveBeenCalled()
+    expect(afterDeletion, "a deleted account must get nothing, cache or no cache").toEqual([])
+  })
+
+  it("re-checks the users row even when an ALLOW-LIST is cached", async () => {
+    /**
+     * ⚠ MY FIRST FIX ONLY RE-VALIDATED A CACHED `null`, and a test here asserted that as correct:
+     * "a stale allow-list grants only what the account already had, so it is the safe direction".
+     *
+     * That was wrong, and CodeRabbit said so on PR #47. The intended answer for a deleted account is
+     * `[]` -- nothing. Granting "tirtha-block-1" to an account that no longer exists is not a milder
+     * version of the same bug, it is the same bug: an authorization decision served to a principal
+     * whose existence was never checked. "Less bad than unrestricted" is not "safe", and writing the
+     * asymmetry down as deliberate is how it would have survived the next review too.
+     */
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "u-restricted" }])
+      .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
+    expect(await getAccessibleLocationIds(user({ id: "u-restricted" }))).toEqual(["tirtha-block-1"])
+
+    // Account deleted, session still live.
+    runTenantQuery.mockReset()
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
+    const afterDeletion = await getAccessibleLocationIds(user({ id: "u-restricted" }))
+
+    expect(runTenantQuery, "existence is checked before any cached value is served").toHaveBeenCalled()
+    expect(afterDeletion, "a deleted account gets nothing, not what it used to have").toEqual([])
+  })
+
+  it("still uses the cache to skip the user_locations query, which is the expensive half", async () => {
+    /**
+     * The cache is not removed, it is moved BELOW the existence check. So a second call within the
+     * TTL costs one indexed `users` lookup instead of two queries -- and this pins that the cache is
+     * still doing work, so the fix cannot quietly degrade into "query everything every time".
+     */
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "u-cache-still-used" }])
+      .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
+    expect(await getAccessibleLocationIds(user({ id: "u-cache-still-used" }))).toEqual(["tirtha-block-1"])
+    const firstCallCount = runTenantQuery.mock.calls.length
+
+    runTenantQuery.mockResolvedValueOnce([{ id: "u-cache-still-used" }]) // users lookup only
+    const second = await getAccessibleLocationIds(user({ id: "u-cache-still-used" }))
+
+    expect(second).toEqual(["tirtha-block-1"])
+    const secondCallCount = runTenantQuery.mock.calls.length - firstCallCount
+    expect(secondCallCount, "the second call re-checks existence and nothing else").toBe(1)
   })
 })
 
@@ -136,6 +224,47 @@ describe("getAccessibleLocationIds -- no backing users row", () => {
     expect(result).toEqual([])
     // Only the users lookup ran -- user_locations was never consulted for a user that doesn't exist.
     expect(runTenantQuery).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("a reused username is not the same account", () => {
+  /**
+   * The lookup matches on username+tenant, so a deleted username that gets REUSED resolves to the
+   * REPLACEMENT account. The stale session's JWT still carries the old id, the lookup returns a
+   * truthy id, and the existence check passes -- for a different principal.
+   *
+   * Then the replacement's user_locations is read, and if that account has no rows the answer is
+   * `null`: unrestricted access to every location in the tenant, handed to a session whose own
+   * account was deleted.
+   *
+   * Narrow (an admin must delete a user and reuse the username inside the session's 30-day life) but
+   * not theoretical -- "make a replacement for whoever left, same login" is an ordinary thing for an
+   * estate admin to do. Reusing "nandu" would do it.
+   *
+   * Raised by CodeRabbit on PR #47, citing .coderabbit.yaml: "a guard must not be measured against
+   * data that the thing it guards against can move." The username is exactly that.
+   *
+   * ⚠ NOTE ON THE FIXTURES IN THIS FILE. They used to mock the users lookup returning "db-user-N"
+   * while the session carried "u-something" -- ids that never matched, because until now nothing
+   * compared them. In production they are the same value: lib/auth-server.ts's toSessionUser takes
+   * SessionUser.id from `rows[0].id`. The fixtures now reflect that, which is what makes the
+   * mismatch below mean something.
+   */
+  it("refuses a session whose id does not match the row found by username", async () => {
+    runTenantQuery.mockResolvedValueOnce([{ id: "new-nandu-id" }]) // the REPLACEMENT account
+    const result = await getAccessibleLocationIds(user({ id: "deleted-nandu-id", username: "nandu" }))
+    expect(result, "a replacement account's permissions are not this session's to use").toEqual([])
+    // user_locations was never consulted: the identity check comes first.
+    expect(runTenantQuery).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not refuse the ordinary case where they match", async () => {
+    // The guard rejects a DIFFERENT account, not every account. Without this, "fail closed" could
+    // quietly become "fail always" and every user-role session would see nothing.
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "u-same" }])
+      .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
+    expect(await getAccessibleLocationIds(user({ id: "u-same" }))).toEqual(["tirtha-block-1"])
   })
 })
 
@@ -160,14 +289,14 @@ describe("requireLocationAccess", () => {
 
   it("allows a restricted user to reach a location inside their allow-list", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-7" }])
+      .mockResolvedValueOnce([{ id: "u-allowed" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
     await expect(requireLocationAccess("tirtha-block-1", user({ id: "u-allowed" }))).resolves.toBeTruthy()
   })
 
   it("rejects a restricted user reaching for a location outside their allow-list -- the Harish/Citrus-Grove scenario", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-8" }])
+      .mockResolvedValueOnce([{ id: "u-denied" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
 
     expect.assertions(1)
@@ -180,7 +309,7 @@ describe("requireLocationAccess", () => {
 
   it("allows an unrestricted user (zero user_locations rows) to reach any location", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-9" }])
+      .mockResolvedValueOnce([{ id: "u-unrestricted" }])
       .mockResolvedValueOnce([])
     await expect(requireLocationAccess("citrus-grove-block-1", user({ id: "u-unrestricted" }))).resolves.toBeTruthy()
   })

@@ -68,10 +68,30 @@ export async function getAccessibleLocationIds(sessionUser?: SessionUser): Promi
     throw new Error("Database not configured")
   }
 
+  /**
+   * ACCOUNT EXISTENCE IS CHECKED BEFORE ANY CACHED VALUE IS SERVED. The cache sits BELOW the `users`
+   * lookup, not above it.
+   *
+   * The lookup is the fail-closed check PR #32 added so that a deleted account gets nothing. It was
+   * reachable only after a cache miss, so for the 30s TTL a deleted user's live session kept the
+   * answer computed while the account existed -- PR #32's own fix, bypassed by PR #32's own cache.
+   * NextAuth JWTs are not revoked server-side, which is what makes the session outlive the row.
+   *
+   * ⚠ MY FIRST FIX FOR THIS ONLY RE-VALIDATED A CACHED `null`, on the reasoning that a stale
+   * allow-list "grants only what the account had" and was therefore the safe direction. That was
+   * wrong, and CodeRabbit said so on PR #47. The intended answer for a deleted account is `[]` --
+   * nothing. Granting "tirtha-block-1" to an account that no longer exists is not a milder version
+   * of the same bug, it is the same bug: an authorization decision served to a principal whose
+   * existence was never checked. "Less bad than unrestricted" is not "safe".
+   *
+   * Cost of doing it properly: one indexed `users` lookup per request. The cache still saves the
+   * `user_locations` query, which is the expensive half.
+   *
+   * Caught by CodeRabbit on PR #32 as an OUTSIDE-DIFF-RANGE finding, which is why it sat unfixed for
+   * three days: those live in the review body, and docs/RELEASE-FLOW.md said they were unreachable
+   * via the API. They are not -- see the correction in that file.
+   */
   const cacheKey = `${user.tenantId}:${user.id}`
-  const cached = getCachedLocationIds(cacheKey)
-  if (cached.hit) return cached.value
-
   const tenantContext = normalizeTenantContext(user.tenantId, user.role)
   const userRows = await runTenantQuery(
     sql,
@@ -96,6 +116,39 @@ export async function getAccessibleLocationIds(sessionUser?: SessionUser): Promi
     setCachedLocationIds(cacheKey, [])
     return []
   }
+
+  /**
+   * AND IT HAS TO BE THE SAME ACCOUNT, not just an account with the same username.
+   *
+   * The lookup above matches on username+tenant, so a deleted username that gets REUSED resolves to
+   * the replacement account. The stale session's JWT still carries the old id, `userId` comes back
+   * truthy, and the existence check passes -- for a different principal. On a cache miss the
+   * replacement's `user_locations` is then read, and if that account has no rows the answer is
+   * `null`: unrestricted access to every location in the tenant, handed to a session whose account
+   * was deleted.
+   *
+   * Narrow (an admin has to delete a user and reuse the username inside the session's life) but not
+   * theoretical: "create a replacement for someone who left, same login" is an ordinary thing for an
+   * estate admin to do. Reusing "nandu" would do it.
+   *
+   * Comparing ids is safe because SessionUser.id IS users.id -- lib/auth-server.ts's toSessionUser
+   * takes it from `rows[0].id` on the happy path. For a live account the two therefore agree by
+   * construction, and they can only diverge on the stale-JWT fallback path, which is exactly the
+   * case being rejected.
+   *
+   * Raised by CodeRabbit on PR #47, citing .coderabbit.yaml: "a guard must not be measured against
+   * data that the thing it guards against can move." The username is exactly that -- the attacker
+   * scenario is somebody else taking the name.
+   */
+  if (String(userId) !== String(user.id)) {
+    setCachedLocationIds(cacheKey, [])
+    return []
+  }
+
+  // The account exists AND is this session's own. NOW a cached answer is safe to serve -- it saves
+  // the `user_locations` query without standing in for either check above.
+  const cached = getCachedLocationIds(cacheKey)
+  if (cached.hit) return cached.value
 
   let result: string[] | null = null
 
