@@ -7,8 +7,15 @@ import { describe, expect, it } from "vitest"
 // app/api/expenses-neon/route.ts (normalizeExpenseAmount, on both POST and PUT) because a
 // direct API call skips the form entirely and can send a negative or non-numeric value.
 //
-// `reference` is deliberately NOT required: expenses allow ad-hoc cost types that aren't in
-// the saved activity list, so a typed code with no resolved reference is a valid entry.
+// ⚠ THIS COMMENT USED TO SAY the opposite, and it was wrong the whole time: "expenses allow
+// ad-hoc cost types that aren't in the saved activity list, so a typed code with no resolved
+// reference is a valid entry." expense_transactions has always carried
+// FOREIGN KEY (code, tenant_id) REFERENCES account_activities, so an unsaved code has never been
+// storable. The form believed the comment, committed raw keystrokes as the code, and two tenants
+// filled in a whole expense before finding out (HoneyFarm 2026-09-03, Laxmi 2026-09-25).
+//
+// `reference` is still not required HERE, but only because it is now derived from the matched
+// activity rather than typed — see tests/activity-code-must-exist.ts for the real contract.
 function validateExpenseForm(data: {
   code: string
   reference?: string

@@ -125,6 +125,13 @@ export default function OtherExpensesTab({
   // field — both search the same activities list by code or reference, so
   // either field can be typed into and resolves the other.
   const [codeQuery, setCodeQuery] = useState<string | null>(null)
+  /**
+   * What the writer typed that did NOT name a real code, kept only to say so.
+   *
+   * Without this the field just silently reverts on blur, which is its own small mystery: you
+   * type "fertilizer", look away, and the box is empty with no explanation.
+   */
+  const [unmatchedCodeQuery, setUnmatchedCodeQuery] = useState<string | null>(null)
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [supportsMultiInventoryItems, setSupportsMultiInventoryItems] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -209,6 +216,8 @@ export default function OtherExpensesTab({
 
   // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
+    // Picking a real code answers the warning, so it must not outlive the choice.
+    setUnmatchedCodeQuery(null)
     setFormData((prev) => ({ ...prev, code }))
     const matchingActivity = activities.find((activity) => activity.code.toLowerCase() === code.toLowerCase())
     if (matchingActivity) {
@@ -269,6 +278,7 @@ export default function OtherExpensesTab({
   const visibleActivities = showAllCodes ? sortedActivities : usedActivities
 
   const resetForm = () => {
+    setUnmatchedCodeQuery(null)
     setFormData({
       date: todayIso(),
       code: "",
@@ -296,6 +306,44 @@ export default function OtherExpensesTab({
       toast.error("Enter an amount greater than zero.")
       return
     }
+    /**
+     * The code must name a real activity. Labour has checked this since it was written
+     * (components/labor-deployment-tab.tsx); expenses never did, so an unknown code travelled all
+     * the way to Postgres and came back as a foreign-key violation after the form was complete.
+     *
+     * Resolve any still-open search synchronously first, the same way labour does, so submitting
+     * straight after typing does not race the field's own 150ms blur commit.
+     */
+    const pendingCodeResolution = codeQuery !== null ? resolveActivityFromQuery(codeQuery, activities) : null
+
+    /**
+     * AN UNMATCHED SEARCH MUST NOT FALL BACK TO THE CODE IT REPLACED.
+     *
+     * Select 136, then type "fertilizer" and look away: the warning appears, but formData.code is
+     * still 136 and codeQuery has been cleared, so this used to resolve to 136 and save the
+     * expense under a code the writer had visibly replaced. A valid but unintended cost code is
+     * worse than a refused one, because nothing downstream can tell it was not meant.
+     *
+     * Caught by CodeRabbit on PR #40, citing the "prefer a figure that could be quietly wrong
+     * over a style concern" instruction in .coderabbit.yaml.
+     */
+    if (unmatchedCodeQuery && !pendingCodeResolution) {
+      toast.error(
+        `"${unmatchedCodeQuery}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`,
+      )
+      return
+    }
+
+    const effectiveCode = (pendingCodeResolution?.code ?? formData.code).trim()
+    const matchingActivity = activities.find((a) => a.code.toLowerCase() === effectiveCode.toLowerCase())
+    if (!matchingActivity) {
+      toast.error(
+        effectiveCode
+          ? `"${effectiveCode}" isn't one of your cost codes. Pick one from the list, or add it under Activity Codes first.`
+          : "Pick a type of cost from the list.",
+      )
+      return
+    }
     trackClick(editingId ? "expense_update" : "expense_save")
     setIsSubmitting(true)
 
@@ -304,16 +352,14 @@ export default function OtherExpensesTab({
       .filter((l) => l.itemType && l.quantity > 0)
     const inventoryPayload = supportsMultiInventoryItems ? validInvItems : validInvItems.slice(0, 1)
 
-    // formData.code already tracks every keystroke (see the code field's onChange),
-    // so a fast Save can't lose the typed code — but if it also resolves to a saved
-    // activity, prefer the canonical code/reference over raw not-yet-blurred text.
-    const pendingCodeResolution = codeQuery !== null ? resolveActivityFromQuery(codeQuery, activities) : null
-    const effectiveCode = pendingCodeResolution?.code ?? formData.code
-    const effectiveReference = pendingCodeResolution?.reference ?? formData.reference
+    // effectiveCode and matchingActivity were resolved by the guard above, which has already
+    // refused anything that is not a saved activity. Taking the reference off the matched row
+    // rather than off formData means the two always describe the same code.
+    const effectiveReference = matchingActivity.reference
 
     const deployment: any = {
       date: formData.date,
-      code: effectiveCode,
+      code: matchingActivity.code,
       reference: effectiveReference,
       amount: formData.amount,
       notes: formData.notes,
@@ -331,7 +377,7 @@ export default function OtherExpensesTab({
     try {
       const result = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
       if (result.ok) {
-        if (isMobile && !editingId) setSavedConfirm({ reference: formData.reference, total: formData.amount })
+        if (isMobile && !editingId) setSavedConfirm({ reference: effectiveReference, total: formData.amount })
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
@@ -533,14 +579,33 @@ export default function OtherExpensesTab({
                        amount that vanishes when you link an item looks like a bug. Read-only says
                        "this is computed", which is the honest description. */
                     readOnly={stockCost.derived !== null}
-                    aria-describedby={stockCost.derived !== null || stockCost.unpriced.length > 0 ? "expense-amount-help" : undefined}
+                    aria-describedby="expense-amount-help"
                     className={cn("h-11", stockCost.derived !== null && "bg-muted text-muted-foreground")}
                   />
+                  {stockCost.derived === null && stockCost.unpriced.length === 0 && (
+                    /**
+                     * SAYS THE STOCK PATH EXISTS, BEFORE YOU TYPE.
+                     *
+                     * The form reads top to bottom as "enter an amount (required), and optionally
+                     * also deduct stock" — so for a cost that is purely stock coming out of the
+                     * store, you meet the Amount box first, type a figure into it, and only find
+                     * out further down that the number is worked out for you. The effect at the
+                     * top of this file then silently replaces what you typed.
+                     *
+                     * Nothing was wrong with the result, but the first required field was wasted
+                     * work and nobody told you. This is the cheapest honest fix: mention the other
+                     * path at the moment you are deciding whether to type.
+                     */
+                    <p id="expense-amount-help" className="text-xs text-muted-foreground">
+                      What you paid. If this cost came out of your own store, add the item under
+                      &ldquo;Deduct from stock&rdquo; below and the amount works itself out.
+                    </p>
+                  )}
                   {stockCost.derived !== null && (
                     /* Shows its working. "Rs 4,000" alone invites the question this answers. */
                     <p id="expense-amount-help" className="text-xs text-muted-foreground">
                       {stockCost.working} — the average cost this stock was bought in at. Change the
-                      quantity above to change the amount.
+                      quantity below to change the amount.
                     </p>
                   )}
                   {stockCost.unpriced.length > 0 && (
@@ -572,27 +637,36 @@ export default function OtherExpensesTab({
                           : ""
                     }
                     onChange={(e) => {
-                      const value = e.target.value
-                      setCodeQuery(value)
-                      // Expenses allow ad-hoc codes that aren't in the saved list yet, so
-                      // formData.code must track every keystroke directly — unlike labour,
-                      // it can't wait for a resolved match, or a typed-but-unmatched code
-                      // would be silently discarded when the field loses focus.
-                      setFormData((prev) => ({ ...prev, code: value }))
+                      /**
+                       * TYPING SEARCHES. ONLY A MATCH COMMITS.
+                       *
+                       * This used to do `setFormData({ ...prev, code: value })` on every
+                       * keystroke, under a comment claiming "expenses allow ad-hoc codes that
+                       * aren't in the saved list yet". That was never true: expense_transactions
+                       * carries FOREIGN KEY (code, tenant_id) REFERENCES account_activities, so
+                       * the database has always refused a code it does not already hold. The
+                       * field promised something the schema forbids, and the only place that
+                       * showed up was a save failure after the whole form was filled in.
+                       *
+                       * HoneyFarm hit it 2026-09-03. Laxmi hit it 2026-09-25, typing the word
+                       * "fertilizer" -- which the placeholder below had been suggesting.
+                       */
+                      setCodeQuery(e.target.value)
                     }}
                     onFocus={() => setCodeQuery("")}
                     onBlur={() => {
-                      // If the typed text also resolves to a saved activity, canonicalize
-                      // the code and auto-fill its category — a convenience on top of the
-                      // live commit above, not something the field's correctness depends on.
+                      // Resolve what was typed. If it names a real code, take it; if it does not,
+                      // fall back to whatever was last validly selected rather than leaving
+                      // unusable text sitting in the box looking accepted.
                       const query = (codeQuery ?? "").trim()
                       setTimeout(() => {
                         const resolved = resolveActivityFromQuery(query, activities)
                         if (resolved) handleCodeChange(resolved.code)
+                        setUnmatchedCodeQuery(resolved || !query ? null : query)
                         setCodeQuery(null)
                       }, 150)
                     }}
-                    placeholder="e.g. Fertiliser, Fuel"
+                    placeholder="Search your cost codes"
                     required
                     className={cn("h-11", isMobile && "h-12 rounded-xl text-base")}
                   />
@@ -605,8 +679,17 @@ export default function OtherExpensesTab({
                       }}
                     />
                   )}
+                  {unmatchedCodeQuery && (
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                      <span className="mt-0.5 shrink-0 text-base leading-none">⚠️</span>
+                      <span>
+                        <strong>{unmatchedCodeQuery}</strong> is not one of your cost codes, so it has not
+                        been filled in. Pick one from the list above, or add it under Activity Codes first.
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">Your most-used cost types appear first. Type a code or category name.</p>
+                    <p className="text-xs text-muted-foreground">Start typing to search. Pick one from the list — your most-used appear first.</p>
                     {unusedActivities.length > 0 && (
                       <button
                         type="button"
