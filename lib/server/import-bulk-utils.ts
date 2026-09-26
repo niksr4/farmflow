@@ -135,16 +135,95 @@ export const normalizeBagType = (value: string | null | undefined) => {
 const RESTOCK_WORDS = /\b(restock\w*|purchase[ds]?|bought|buy|received?|stock[\s-]?in|opening)\b/
 const DEPLETE_WORDS = /\b(deplete\w*|use[ds]?|usage|consume[ds]?|consumption|issue[ds]?|stock[\s-]?out|applied|sold)\b/
 
-export const normalizeTransactionType = (value: string | null | undefined) => {
+/**
+ * A RETURN REVERSES THE DIRECTION OF THE WORD IT ACCOMPANIES, so a compound type has to be read as
+ * a whole rather than word by word.
+ *
+ * "Purchase Return" contains "purchase". The word-level match therefore called it a restock and
+ * ADDED the quantity, when a return to the supplier takes stock out. Worse, it was the only return
+ * flavour that was both wrong and silent: every other one ("Sales Return", "Goods Return", a bare
+ * "Return") fell through to "deplete" AND tripped the unrecognised-type warning, so a human saw it.
+ * This one was classified confidently, in the wrong direction, with nothing said.
+ *
+ * Caught by CodeRabbit on PR #37.
+ *
+ * Both directions are now read, because a return is the one word in this vocabulary whose meaning
+ * depends on who is handing the goods over:
+ *
+ *   Purchase Return / Supplier Return -> back to whoever we bought from -> stock OUT
+ *   Sales Return / Customer Return    -> back from whoever we sold to   -> stock IN
+ *
+ * A bare "Return" names no counterparty, so its direction is genuinely unknown. It keeps the
+ * historic "deplete" default and is FLAGGED, because guessing a direction on an import that moves
+ * real stock is how a spreadsheet silently moves the quantity the wrong way twice over.
+ */
+const RETURN_WORDS = /\b(returns?|returned)\b/
+
+/**
+ * TWO TIERS, because WHO is handing the goods over outranks WHAT the original transaction was.
+ *
+ * The first version of this put the counterparty and the transaction words in one alternation and
+ * checked supplier-ish before customer-ish. "Customer Purchase Return" then matched `purchase` and
+ * was classified as stock going OUT -- when a customer returning a purchase brings stock IN. Four
+ * phrases contained words from both groups and all four resolved the same wrong way, confidently and
+ * with no unrecognised-type warning. Raised by CodeRabbit on PR #44, quoting .coderabbit.yaml back
+ * at it: "its characteristic failure is NOT a crash, it is a confident wrong answer."
+ *
+ * A named counterparty settles the direction on its own. "Customer" tells you the goods are coming
+ * back to you whatever the rest of the phrase says; "Purchase" only tells you which way the ORIGINAL
+ * transaction went, which a return then reverses. So the counterparty is consulted first and the
+ * transaction words are the fallback for phrases that name no one.
+ *
+ * When both sides of a tier match ("Customer Supplier Return", "Purchase Sales Return") the phrase
+ * genuinely contradicts itself and is flagged rather than guessed -- same rule as a bare "Return".
+ */
+const RETURN_COUNTERPARTY_SUPPLIER = /\b(supplier|vendor)\b/
+const RETURN_COUNTERPARTY_CUSTOMER = /\b(customer|buyer)\b/
+/** We bought it, so returning it sends stock OUT. */
+const RETURN_OF_A_PURCHASE = /\b(purchase[ds]?|bought|buy)\b/
+/** We sold or issued it, so returning it brings stock IN. */
+const RETURN_OF_A_SALE = /\b(sale[sd]?|sold|issue[ds]?)\b/
+
+type TransactionTypeReading = { type: "restock" | "deplete"; recognised: boolean }
+
+/**
+ * One classifier behind both exports. They each used to test RESTOCK_WORDS separately, so the
+ * direction and the warning could disagree with each other -- which is exactly what happened:
+ * "Purchase Return" resolved to restock while the warning said nothing was wrong.
+ */
+const readTransactionType = (value: string | null | undefined): TransactionTypeReading => {
   const raw = String(value || "").trim().toLowerCase()
-  if (RESTOCK_WORDS.test(raw)) return "restock"
-  return "deplete"
+  if (!raw) return { type: "deplete", recognised: true }
+
+  if (RETURN_WORDS.test(raw)) {
+    // Tier 1: a named counterparty settles it, whatever else the phrase contains.
+    const toSupplier = RETURN_COUNTERPARTY_SUPPLIER.test(raw)
+    const fromCustomer = RETURN_COUNTERPARTY_CUSTOMER.test(raw)
+    if (toSupplier !== fromCustomer) return { type: toSupplier ? "deplete" : "restock", recognised: true }
+
+    // Tier 2: nobody named, so fall back to which way the original transaction went.
+    if (!toSupplier && !fromCustomer) {
+      const ofAPurchase = RETURN_OF_A_PURCHASE.test(raw)
+      const ofASale = RETURN_OF_A_SALE.test(raw)
+      if (ofAPurchase !== ofASale) return { type: ofAPurchase ? "deplete" : "restock", recognised: true }
+    }
+
+    // Both counterparties, both transaction words, or neither: the phrase contradicts itself or says
+    // nothing. Keep the historic deplete default and FLAG it -- a warning beats a coin flip on an
+    // import that moves real stock.
+    return { type: "deplete", recognised: false }
+  }
+
+  if (RESTOCK_WORDS.test(raw)) return { type: "restock", recognised: true }
+  return { type: "deplete", recognised: DEPLETE_WORDS.test(raw) }
 }
+
+export const normalizeTransactionType = (value: string | null | undefined) => readTransactionType(value).type
 
 /** True when a non-blank transaction_type was not recognised and fell through to "deplete". */
 export const isUnrecognisedTransactionType = (value: string | null | undefined) => {
   const raw = String(value || "").trim().toLowerCase()
-  return Boolean(raw) && !RESTOCK_WORDS.test(raw) && !DEPLETE_WORDS.test(raw)
+  return Boolean(raw) && !readTransactionType(value).recognised
 }
 
 export const getField = (row: Record<string, string>, keys: string[]) => {
