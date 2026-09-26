@@ -263,3 +263,36 @@ export function istClock(instant: DateInput): string {
     hour12: false,
   }).format(date)
 }
+
+/**
+ * The last COMPLETED Monday-to-Sunday week on the estate's calendar, as two YYYY-MM-DD strings.
+ *
+ * Extracted from the weekly digest agent, which derived it from `new Date().getDay()` -- the HOST's
+ * weekday. PR #38 made the orchestrator's "is it Monday?" check IST, so for the 5.5 hours between
+ * 18:30 UTC Sunday and midnight the two disagreed: IST was already Monday, the orchestrator agreed
+ * to run, and the host was still on Sunday. On a UTC server that sent the derivation back 13 days
+ * instead of 7, so the digest reported the week BEFORE the one that had just ended. Every figure in
+ * the email real, for the wrong seven days.
+ *
+ * Verified against both zones at 2026-09-27T19:00:00Z (Monday 00:30 IST):
+ *
+ *            TZ=UTC              TZ=Asia/Kolkata
+ *   before   09-14 -> 09-20      09-20 -> 09-27     two different wrong answers
+ *   after    09-21 -> 09-27      09-21 -> 09-27     the week that actually just ended
+ *
+ * Note the IST run was wrong too, by one day rather than seven: setHours(0,0,0,0) made an IST
+ * midnight and toISOString() then rendered the previous UTC day. Two bug signatures in eight lines.
+ *
+ * Host-independent by construction: Date.UTC() of the IST calendar date is a UTC midnight, so
+ * getUTCDay() and toISOString().slice(0, 10) read that same date back exactly rather than
+ * accidentally.
+ */
+export function lastCompletedIstWeek(): { weekStart: string; weekEnd: string } {
+  const { year, month, day } = istTodayParts() // month is 1-12
+  const istTodayUtcMidnight = Date.UTC(year, month - 1, day)
+  const istWeekday = new Date(istTodayUtcMidnight).getUTCDay() // 0=Sun, 1=Mon
+  const daysBackToThisMonday = istWeekday === 0 ? 6 : istWeekday - 1
+  const monday = new Date(istTodayUtcMidnight - (daysBackToThisMonday + 7) * 86_400_000)
+  const sunday = new Date(monday.getTime() + 6 * 86_400_000)
+  return { weekStart: monday.toISOString().slice(0, 10), weekEnd: sunday.toISOString().slice(0, 10) }
+}

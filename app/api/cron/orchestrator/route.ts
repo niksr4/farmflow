@@ -52,8 +52,29 @@ async function handleCronInvocation(request: Request) {
     // is a landmine, and this one is a straight swap with no window arithmetic behind it.
     const isMonday = istNowParts().weekday === 1
 
-    // Guard: skip weekly digest if a successful run already completed this calendar week.
-    // Prevents double-sends on Vercel cron retries or manual re-triggers on Monday.
+    /**
+     * Guard: skip weekly digest if a successful run already completed this calendar week.
+     * Prevents double-sends on Vercel cron retries or manual re-triggers on Monday.
+     *
+     * ⚠ THE WEEK BOUNDARY HAS TO BE IST, BECAUSE `isMonday` ABOVE IS. This read
+     * `date_trunc('week', NOW())`, which on a UTC session is the UTC week start -- and the two
+     * disagree for the 5.5 hours between 18:30 UTC Sunday and midnight. In that window IST is
+     * already Monday, so `isMonday` is true, but the current UTC week still began LAST Monday. The
+     * guard therefore looked for a successful run since last Monday, found last week's digest, and
+     * suppressed this week's. A missing email, with a successful-looking agent_runs row explaining
+     * why -- which is the worst shape a bug can take here, because the evidence argues it is policy.
+     *
+     * The 02:00 UTC schedule never enters that window. An authenticated manual GET or POST does, and
+     * so does a prior-week run created by the separate /api/cron/weekly-digest route.
+     *
+     * Round trip, not a single cast: NOW() AT TIME ZONE 'Asia/Kolkata' gives the IST wall clock as a
+     * naive timestamp, date_trunc finds the IST week start, and the second AT TIME ZONE turns that
+     * back into an instant so it can be compared against `completed_at` (timestamptz). Casting only
+     * once would compare an instant against a naive value -- signature 2 in the CLAUDE.md timezone
+     * notes, and silently off by 5.5 hours.
+     *
+     * Raised by CodeRabbit on PR #38.
+     */
     let digestAlreadySentThisWeek = false
     if (isMonday && sql) {
       try {
@@ -61,7 +82,7 @@ async function handleCronInvocation(request: Request) {
           SELECT id FROM agent_runs
           WHERE agent_name = 'weekly-digest'
             AND status = 'success'
-            AND completed_at >= date_trunc('week', NOW())
+            AND completed_at >= date_trunc('week', NOW() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'
           LIMIT 1
         `
         const rows = Array.isArray(guard) ? guard : (guard as any)?.rows ?? []
@@ -71,6 +92,12 @@ async function handleCronInvocation(request: Request) {
 
     // Guard: skip daily digest if a successful run already completed today.
     // Prevents double-sends on Vercel cron retries or manual re-triggers.
+    //
+    // "Today" is the ESTATE's, for the same reason as the week above: a UTC day boundary means that
+    // between 18:30 UTC and midnight the estate is already on tomorrow while this guard still reads
+    // yesterday, so a manual re-trigger in that window sees today's send as belonging to the current
+    // UTC day and suppresses tomorrow's. Less consequential than the weekly one -- a day is skipped
+    // rather than a week -- but it is the same mistake and the same two casts fix it.
     let dailyDigestAlreadySentToday = false
     if (sql) {
       try {
@@ -78,7 +105,7 @@ async function handleCronInvocation(request: Request) {
           SELECT id FROM agent_runs
           WHERE agent_name = 'daily-digest'
             AND status = 'success'
-            AND completed_at >= date_trunc('day', NOW())
+            AND completed_at >= date_trunc('day', NOW() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'
           LIMIT 1
         `
         const rows = Array.isArray(guard) ? guard : (guard as any)?.rows ?? []
