@@ -195,9 +195,23 @@ export async function loadValidatedImportJob(input: {
   dataset: string
   validationToken: string
 }): Promise<ValidationJobRecord | null> {
-  // The token is client-supplied and cast with ::uuid below; a malformed one made Postgres raise
-  // 22P02 and the commit answered 500. It is simply a token that matches no job.
-  if (!isUuid(String(input.validationToken || "").trim())) return null
+  /**
+   * The token is client-supplied and cast with ::uuid below; a malformed one made Postgres raise
+   * 22P02 and the commit answered 500. It is simply a token that matches no job.
+   *
+   * VALIDATED AND USED HAVE TO BE THE SAME STRING. This checked `.trim()`ed and then cast the
+   * untrimmed `input.validationToken` in both queries, so " <uuid> " passed the guard and still
+   * reached Postgres with the whitespace attached -- producing the exact 22P02 the guard exists to
+   * prevent. Not reachable from the app today: both callers already trim (the zod schema in this
+   * file has `.string().trim()`, and app/api/import-bulk/route.ts trims explicitly), so this is
+   * closing the gap between what the function promises and what it does rather than fixing a live
+   * 500. A function that is only correct because of what its callers happen to do is one caller
+   * away from being wrong.
+   *
+   * Raised by CodeRabbit on PR #37.
+   */
+  const validationToken = String(input.validationToken || "").trim()
+  if (!isUuid(validationToken)) return null
   const tenantContext = normalizeTenantContext(input.tenantId, input.role)
   if (input.requestedByUserId) {
     try {
@@ -214,7 +228,7 @@ export async function loadValidatedImportJob(input: {
             validation_expires_at,
             errors
           FROM import_jobs
-          WHERE id = ${input.validationToken}::uuid
+          WHERE id = ${validationToken}::uuid
             AND tenant_id = ${tenantContext.tenantId}::uuid
             AND dataset = ${input.dataset}
             AND (
@@ -243,7 +257,7 @@ export async function loadValidatedImportJob(input: {
         validation_expires_at,
         errors
       FROM import_jobs
-      WHERE id = ${input.validationToken}::uuid
+      WHERE id = ${validationToken}::uuid
         AND tenant_id = ${tenantContext.tenantId}::uuid
         AND requested_by = ${input.requestedBy}
         AND dataset = ${input.dataset}
