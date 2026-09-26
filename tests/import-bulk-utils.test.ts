@@ -107,6 +107,70 @@ describe("import bulk utils — field normalization", () => {
     expect(isUnrecognisedTransactionType("buyback-adjustment")).toBe(true)
   })
 
+  describe("a return reverses the direction of the word it accompanies", () => {
+    /**
+     * "Purchase Return" contains "purchase", so the word-level match called it a restock and ADDED
+     * the quantity -- when a return to the supplier takes stock out. It was the only return flavour
+     * that was both wrong and silent: every other one fell through to "deplete" AND tripped the
+     * unrecognised-type warning, so a human saw it. This one was confident, backwards, and quiet.
+     *
+     * Raised by CodeRabbit on PR #37.
+     */
+    it("reads a return to the supplier as stock going OUT", () => {
+      for (const type of ["Purchase Return", "Purchase Returns", "purchase returned", "Supplier Return", "Vendor Returns"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+      }
+    })
+
+    it("reads a return from the customer as stock coming IN", () => {
+      for (const type of ["Sales Return", "Sale Returns", "Customer Return", "sold returned", "Buyer Return"]) {
+        expect(normalizeTransactionType(type), type).toBe("restock")
+      }
+    })
+
+    it("does not flag a return whose direction it worked out", () => {
+      // The warning is for types nothing can classify. Once the direction is known, warning about it
+      // would train whoever runs the import to click past the warnings that matter.
+      expect(isUnrecognisedTransactionType("Purchase Return")).toBe(false)
+      expect(isUnrecognisedTransactionType("Sales Return")).toBe(false)
+    })
+
+    it("refuses to guess a bare return, and says so", () => {
+      /**
+       * "Return" names no counterparty, so its direction is genuinely unknown -- it could be going
+       * to a supplier or coming back from a customer, and the two move stock opposite ways by the
+       * same quantity. It keeps the historic deplete default AND is flagged, because on an import
+       * that moves real stock a warning is worth more than a confident coin flip.
+       */
+      for (const type of ["Return", "Returned", "Goods Return", "returns"]) {
+        expect(normalizeTransactionType(type), type).toBe("deplete")
+        expect(isUnrecognisedTransactionType(type), type).toBe(true)
+      }
+    })
+
+    it("keeps the direction and the warning in agreement for every type", () => {
+      /**
+       * DERIVED, not a list. The two exports each used to test RESTOCK_WORDS on their own, which is
+       * how "Purchase Return" ended up classified as a restock while the warning said nothing was
+       * wrong. They share one classifier now, and the invariant is: anything flagged as
+       * unrecognised must have fallen through to the default, never to restock.
+       *
+       * A restock is the direction that ADDS stock, so "unrecognised but restocked" is the
+       * combination that silently inflates inventory -- exactly the shipped bug.
+       */
+      const types = [
+        "Purchase", "purchased", "Bought", "buy", "Received", "Stock In", "Opening",
+        "Used", "usage", "Consumed", "Issue", "Stock out", "applied", "sold", "Deplete",
+        "Purchase Return", "Sales Return", "Return", "Returned", "Goods Return",
+        "transfer", "buyback-adjustment", "something else", "Debit Note", "Credit Note",
+      ]
+      const inflating = types.filter(
+        (type) => isUnrecognisedTransactionType(type) && normalizeTransactionType(type) === "restock",
+      )
+      expect(inflating, "an unrecognised type must never add stock").toEqual([])
+    })
+  })
+
   it("flags a non-blank type it does not recognise, so validation can warn before it defaults to deplete", () => {
     expect(isUnrecognisedTransactionType("transfer")).toBe(true)
     expect(isUnrecognisedTransactionType("something else")).toBe(true)

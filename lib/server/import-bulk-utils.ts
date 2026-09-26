@@ -135,16 +135,59 @@ export const normalizeBagType = (value: string | null | undefined) => {
 const RESTOCK_WORDS = /\b(restock\w*|purchase[ds]?|bought|buy|received?|stock[\s-]?in|opening)\b/
 const DEPLETE_WORDS = /\b(deplete\w*|use[ds]?|usage|consume[ds]?|consumption|issue[ds]?|stock[\s-]?out|applied|sold)\b/
 
-export const normalizeTransactionType = (value: string | null | undefined) => {
+/**
+ * A RETURN REVERSES THE DIRECTION OF THE WORD IT ACCOMPANIES, so a compound type has to be read as
+ * a whole rather than word by word.
+ *
+ * "Purchase Return" contains "purchase". The word-level match therefore called it a restock and
+ * ADDED the quantity, when a return to the supplier takes stock out. Worse, it was the only return
+ * flavour that was both wrong and silent: every other one ("Sales Return", "Goods Return", a bare
+ * "Return") fell through to "deplete" AND tripped the unrecognised-type warning, so a human saw it.
+ * This one was classified confidently, in the wrong direction, with nothing said.
+ *
+ * Caught by CodeRabbit on PR #37.
+ *
+ * Both directions are now read, because a return is the one word in this vocabulary whose meaning
+ * depends on who is handing the goods over:
+ *
+ *   Purchase Return / Supplier Return -> back to whoever we bought from -> stock OUT
+ *   Sales Return / Customer Return    -> back from whoever we sold to   -> stock IN
+ *
+ * A bare "Return" names no counterparty, so its direction is genuinely unknown. It keeps the
+ * historic "deplete" default and is FLAGGED, because guessing a direction on an import that moves
+ * real stock is how a spreadsheet silently moves the quantity the wrong way twice over.
+ */
+const RETURN_WORDS = /\b(returns?|returned)\b/
+const RETURN_TO_SUPPLIER = /\b(purchase[ds]?|bought|buy|supplier|vendor)\b/
+const RETURN_FROM_CUSTOMER = /\b(sale[sd]?|sold|customer|buyer|issue[ds]?)\b/
+
+type TransactionTypeReading = { type: "restock" | "deplete"; recognised: boolean }
+
+/**
+ * One classifier behind both exports. They each used to test RESTOCK_WORDS separately, so the
+ * direction and the warning could disagree with each other -- which is exactly what happened:
+ * "Purchase Return" resolved to restock while the warning said nothing was wrong.
+ */
+const readTransactionType = (value: string | null | undefined): TransactionTypeReading => {
   const raw = String(value || "").trim().toLowerCase()
-  if (RESTOCK_WORDS.test(raw)) return "restock"
-  return "deplete"
+  if (!raw) return { type: "deplete", recognised: true }
+
+  if (RETURN_WORDS.test(raw)) {
+    if (RETURN_TO_SUPPLIER.test(raw)) return { type: "deplete", recognised: true }
+    if (RETURN_FROM_CUSTOMER.test(raw)) return { type: "restock", recognised: true }
+    return { type: "deplete", recognised: false }
+  }
+
+  if (RESTOCK_WORDS.test(raw)) return { type: "restock", recognised: true }
+  return { type: "deplete", recognised: DEPLETE_WORDS.test(raw) }
 }
+
+export const normalizeTransactionType = (value: string | null | undefined) => readTransactionType(value).type
 
 /** True when a non-blank transaction_type was not recognised and fell through to "deplete". */
 export const isUnrecognisedTransactionType = (value: string | null | undefined) => {
   const raw = String(value || "").trim().toLowerCase()
-  return Boolean(raw) && !RESTOCK_WORDS.test(raw) && !DEPLETE_WORDS.test(raw)
+  return Boolean(raw) && !readTransactionType(value).recognised
 }
 
 export const getField = (row: Record<string, string>, keys: string[]) => {
