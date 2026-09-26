@@ -72,7 +72,7 @@ describe("getEnabledModules", () => {
 
   it("applies a user's sparse user_modules overrides on top of the tenant's modules", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-1" }]) // users lookup
+      .mockResolvedValueOnce([{ id: "u-override" }]) // users lookup
       .mockResolvedValueOnce([]) // tenant_modules: plan defaults
       .mockResolvedValueOnce([{ module: "inventory", enabled: false }]) // user_modules
     const result = await getEnabledModules(user({ id: "u-override" }))
@@ -125,7 +125,7 @@ describe("no cached module list is served before the account is known to exist",
    */
   it("re-checks the users row even when a module list is cached", async () => {
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-10" }]) // users lookup
+      .mockResolvedValueOnce([{ id: "u-cached-modules" }]) // users lookup
       .mockResolvedValueOnce([{ module: "inventory", enabled: true }]) // tenant_modules
       .mockResolvedValueOnce([]) // user_modules
     expect(await getEnabledModules(user({ id: "u-cached-modules" }))).toContain("inventory")
@@ -143,13 +143,13 @@ describe("no cached module list is served before the account is known to exist",
     // The cache is moved, not removed. A second call within the TTL costs one indexed users lookup
     // instead of three queries -- pinned so the fix cannot degrade into querying everything.
     runTenantQuery
-      .mockResolvedValueOnce([{ id: "db-user-11" }])
+      .mockResolvedValueOnce([{ id: "u-cache-kept" }])
       .mockResolvedValueOnce([{ module: "inventory", enabled: true }])
       .mockResolvedValueOnce([])
     expect(await getEnabledModules(user({ id: "u-cache-kept" }))).toContain("inventory")
     const firstCallCount = runTenantQuery.mock.calls.length
 
-    runTenantQuery.mockResolvedValueOnce([{ id: "db-user-11" }]) // users lookup only
+    runTenantQuery.mockResolvedValueOnce([{ id: "u-cache-kept" }]) // users lookup only
     const second = await getEnabledModules(user({ id: "u-cache-kept" }))
 
     expect(second).toContain("inventory")
@@ -203,16 +203,42 @@ describe("an owner previewing another tenant", () => {
   })
 
   it("reads the PREVIEWED tenant's modules, not the owner's own", async () => {
-    // The whole point of the preview. If this read the owner's tenant it would look like it worked.
+    /**
+     * The whole point of the preview. If this read the owner's tenant it would look like it worked.
+     *
+     * Asserted on the tenant_modules call SPECIFICALLY, not across every call: the first call is
+     * resolveScopedSessionUser's own tenants lookup, which carries PREVIEWED_TENANT_ID no matter
+     * what the module query then does. A flat "some call mentioned it" passed even when the module
+     * read used the owner's tenant. Raised by CodeRabbit on PR #42.
+     */
     runTenantQuery
-      .mockResolvedValueOnce([{ id: PREVIEWED_TENANT_ID }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: PREVIEWED_TENANT_ID }]) // tenants lookup
+      .mockResolvedValueOnce([]) // users lookup in the previewed tenant
+      .mockResolvedValueOnce([]) // tenant_modules
     await getEnabledModules(ownerInPreview())
-    const tenantIdsQueried = runTenantQuery.mock.calls.flatMap(
-      (call) => ((call[2] as { values?: unknown[] })?.values || []) as unknown[],
+
+    const tenantModulesCall = runTenantQuery.mock.calls.find((call) =>
+      /tenant_modules/i.test(String((call[2] as { strings?: string[] })?.strings?.join("?") || "")),
     )
-    expect(tenantIdsQueried).toContain(PREVIEWED_TENANT_ID)
+    expect(tenantModulesCall, "expected a tenant_modules query").toBeTruthy()
+    const values = ((tenantModulesCall?.[2] as { values?: unknown[] })?.values || []) as unknown[]
+    expect(values, "the module list must come from the previewed tenant").toContain(PREVIEWED_TENANT_ID)
+    expect(values, "and not from the owner's own tenant").not.toContain(TENANT_ID)
+  })
+
+  it("refuses a reused username even while previewing is possible", async () => {
+    /**
+     * The identity check must not be weakened by the preview exemption. A NON-owner session whose
+     * id does not match the row found by username is a reused username, and gets nothing --
+     * previewing is an owner-only path and cannot be borrowed to skip it.
+     *
+     * Raised by CodeRabbit on #42 and #47 as the same CWE-863.
+     */
+    previewCookie.value = undefined
+    runTenantQuery.mockResolvedValueOnce([{ id: "new-nandu-id" }]) // the REPLACEMENT account
+    const result = await getEnabledModules(user({ id: "deleted-nandu-id", username: "nandu" }))
+    expect(result, "a replacement account's modules are not this session's to use").toEqual([])
+    expect(runTenantQuery, "nothing else is read once identity fails").toHaveBeenCalledTimes(1)
   })
 
   it("still gives an owner who is NOT previewing every module, without touching the database", async () => {

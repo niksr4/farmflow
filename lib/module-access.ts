@@ -164,8 +164,31 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
     return []
   }
 
-  // The account exists (or this is an owner preview, where it need not). NOW a cached answer is safe
-  // to serve -- it saves the three reads below without standing in for the check above.
+  /**
+   * AND IT HAS TO BE THE SAME ACCOUNT, not just an account with the same username.
+   *
+   * The lookup above matches on username+tenant, so a deleted username that gets REUSED resolves to
+   * the replacement account. The stale session's JWT still carries the old id, `userId` comes back
+   * truthy, the existence check passes, and this session is then served the REPLACEMENT account's
+   * modules -- a different principal's access, under the old principal's session.
+   *
+   * Exempt for an owner preview, where there is deliberately no `users` row to match against, and
+   * skipped for `admin` for the same reason the check above skips it.
+   *
+   * Comparing ids is safe because SessionUser.id IS users.id -- lib/auth-server.ts's toSessionUser
+   * takes it from `rows[0].id`. For a live account they agree by construction and can only diverge
+   * on the stale-JWT fallback path, which is exactly what is being rejected.
+   *
+   * Raised by CodeRabbit on PR #42, and on #47 for the location-access twin.
+   */
+  if (user.role !== "admin" && !ownerPreviewActive && String(userId) !== String(user.id)) {
+    setCachedModules(cacheKey, [])
+    return []
+  }
+
+  // The account exists AND is this session's own (or this is an owner preview, where it need not).
+  // NOW a cached answer is safe to serve -- it saves the three reads below without standing in for
+  // either check above.
   const cached = getCachedModules(cacheKey)
   if (cached) return cached
 
