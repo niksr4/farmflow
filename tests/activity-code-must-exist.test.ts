@@ -50,20 +50,38 @@ const refusalBranch = (src: string): { body: string; end: number } | null => {
 }
 
 /**
- * Does this block return? Strings and template literals are removed FIRST.
+ * Does this block return, ITSELF? Two things have to be excluded, and both were found by review
+ * rather than by the tamper that was supposed to prove this guard.
  *
- * `\breturn\b` over raw source reads the toast's copy as well as its statements. No refusal message
- * contains the word "return" today, which is why a hand tamper passed -- but copy is the
- * most-edited thing in that file, and "returned to the supplier" in a message would have hidden a
- * deleted return statement completely. Raised by CodeRabbit on PR #41.
+ * 1. STRING AND TEMPLATE LITERALS. `\breturn\b` over raw source reads the toast's copy as well as
+ *    its statements. No refusal message contains the word "return" today, which is why the hand
+ *    tamper passed -- but copy is the most-edited thing in that file, and "returned to the
+ *    supplier" in a message would have hidden a deleted return completely.
+ *
+ * 2. NESTED FUNCTION BODIES. A `return` inside a callback is that callback's return, not the
+ *    handler's. `setTimeout(() => { return }, 0)` in the refusal branch would satisfy a flat scan
+ *    while submit carried on and wrote the committed code -- which is the precise bug this whole
+ *    guard exists to catch. This file already deals with a real 150ms setTimeout a few lines away,
+ *    so a callback appearing in that branch is not a hypothetical shape.
+ *
+ * Both raised by CodeRabbit on PR #41. The depth walk is the same one that finds the branch, so
+ * scope-awareness costs a counter rather than a parser.
  */
-const branchReturns = (block: string): boolean =>
-  /\breturn\b/.test(
-    block
-      .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, "``")
-      .replace(/"(?:\\.|[^"\\])*"/g, '""')
-      .replace(/'(?:\\.|[^'\\])*'/g, "''"),
-  )
+const branchReturns = (block: string): boolean => {
+  const code = block
+    .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, "``")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''")
+
+  // depth 0 is inside the branch's own braces; anything deeper belongs to a nested block.
+  let depth = 0
+  for (const match of code.matchAll(/[{}]|\breturn\b/g)) {
+    if (match[0] === "{") depth += 1
+    else if (match[0] === "}") depth -= 1
+    else if (depth <= 1) return true
+  }
+  return false
+}
 
 /**
  * DERIVED, not a hand-kept pair. Any file importing resolveActivityFromQuery is by definition a
@@ -261,8 +279,22 @@ describe("an activity code must already exist", () => {
 
     // And the literals-are-stripped property, stated directly: a message mentioning the word
     // cannot stand in for the statement.
-    expect(branchReturns('toast.error("this will be returned to the supplier")')).toBe(false)
-    expect(branchReturns("toast.error(`a returned purchase`)")).toBe(false)
+    expect(branchReturns('{ toast.error("this will be returned to the supplier") }')).toBe(false)
+    expect(branchReturns("{ toast.error(`a returned purchase`) }")).toBe(false)
+
+    /**
+     * NOR CAN A CALLBACK'S RETURN STAND IN FOR THE HANDLER'S. A `return` inside setTimeout belongs
+     * to the callback; submit carries on regardless and writes the committed code, which is the
+     * precise bug this guard exists to catch. Not a hypothetical shape either -- the refusal branch
+     * sits a few lines from a real 150ms setTimeout in this same file.
+     *
+     * Raised by CodeRabbit on PR #41, which rated the fix a heavy lift. It was not: the depth walk
+     * that already finds the branch does the scoping with a counter.
+     */
+    expect(branchReturns("{ toast.error(x); setTimeout(() => { return }, 0) }")).toBe(false)
+    expect(branchReturns("{ activities.forEach((a) => { if (a) return }) }")).toBe(false)
+    // Still true when the handler itself returns, callback or no callback.
+    expect(branchReturns("{ setTimeout(() => { return }, 0); return }")).toBe(true)
   })
 
   it("abandons a scheduled blur commit when the form is reset", () => {
