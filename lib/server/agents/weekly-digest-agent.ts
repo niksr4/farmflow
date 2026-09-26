@@ -9,6 +9,7 @@ import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
+import { lastCompletedIstWeek } from "@/lib/date-utils"
 import { CROP_LABEL } from "@/lib/tenant-estate-profile"
 import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
 import { buildAgronomyContext } from "@/lib/coffee-agronomy"
@@ -56,23 +57,45 @@ type LastWeekActivity = {
 }
 
 async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity> {
-  // Last week = Mon 00:00 IST to Sun 23:59 IST
-  // Cron runs Monday 02:00 UTC (07:30 IST), so "last week" is the 7 days just ended
-  const now = new Date()
-  const dayOfWeek = now.getDay() // 0=Sun, 1=Mon
-  const daysToLastMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-  const lastMonday = new Date(now)
-  lastMonday.setDate(now.getDate() - daysToLastMonday - 7)
-  lastMonday.setHours(0, 0, 0, 0)
-  const lastSunday = new Date(lastMonday)
-  lastSunday.setDate(lastMonday.getDate() + 6)
-  lastSunday.setHours(23, 59, 59, 999)
+  /**
+   * Last week = Mon to Sun, on the ESTATE's calendar.
+   *
+   * ⚠ THIS READ THE HOST CALENDAR, and PR #38 made the orchestrator's `isMonday` read IST -- so the
+   * two now disagree for the 5.5 hours between 18:30 UTC Sunday and midnight. In that window IST is
+   * already Monday, the orchestrator agrees to run, and `now.getDay()` here is still 0 (Sunday): so
+   * `daysToLastMonday` became 6, the code went back 13 days, and the digest reported the week BEFORE
+   * the one that just ended. Every figure in the email would be real, for the wrong seven days.
+   *
+   * The 02:00 UTC schedule never enters that window -- which is exactly what the exemption for this
+   * file in tests/today-is-the-estates-today.ts said, in a comment ending "if you reschedule that
+   * cron, fix this first". Nobody rescheduled the cron. #38 changed the other half of the
+   * comparison instead, which the exemption did not anticipate.
+   *
+   * Raised by CodeRabbit on PR #38.
+   *
+   * Derived from istTodayParts() and then advanced with UTC-only arithmetic, so no host offset can
+   * enter: Date.UTC() of the IST calendar date is a UTC midnight by construction, getUTCDay() reads
+   * the weekday of that same date, and toISOString().slice(0, 10) is then exact rather than
+   * accidentally right.
+   */
+  const { weekStart: startDate, weekEnd: endDate } = lastCompletedIstWeek()
+  const lastMonday = new Date(`${startDate}T00:00:00Z`)
+  const lastSunday = new Date(`${endDate}T00:00:00Z`)
 
-  const fmt = (d: Date) => d.toISOString().split("T")[0]
-  const startDate = fmt(lastMonday)
-  const endDate = fmt(lastSunday)
-
-  const weekLabel = `${lastMonday.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${lastSunday.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+  /**
+   * Formatted with an explicit timeZone. `toLocaleDateString("en-IN", ...)` with no zone renders in
+   * the SERVER's, so the label could name a different day than startDate/endDate do -- the email
+   * disagreeing with its own query range. "UTC" is correct here precisely because these instants are
+   * UTC midnights standing for IST calendar dates.
+   */
+  const labelPart = (d: Date, withYear: boolean) =>
+    new Intl.DateTimeFormat("en-IN", {
+      timeZone: "UTC",
+      day: "numeric",
+      month: "short",
+      ...(withYear ? { year: "numeric" } : {}),
+    }).format(d)
+  const weekLabel = `${labelPart(lastMonday, false)} – ${labelPart(lastSunday, true)}`
 
   const empty: LastWeekActivity = { weekLabel, weekStart: startDate, weekEnd: endDate, processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0, expenseTotal: 0, expenseEntries: 0, salesRevenue: 0, dispatchBags: 0, rainfallInches: 0, pickingEntries: 0 }
   if (!sql) return empty

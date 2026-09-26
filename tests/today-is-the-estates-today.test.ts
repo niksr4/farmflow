@@ -242,13 +242,23 @@ const VARIABLE_FORM_ACCEPTED: Record<string, number> = {
   // Derives from a season end date that is already an explicit YYYY-MM-DD, not from "now".
   "app/api/dashboard/season-projection/route.ts": 1,
   /**
-   * Correct, but only because of WHEN it runs. The cron fires Monday 02:00 UTC = 07:30 IST, so the
-   * UTC weekday and the IST weekday agree at that instant and "last Monday" comes out right. It
-   * would break if the schedule ever moved earlier than 18:30 UTC on a Sunday. Left alone rather
-   * than changed, because touching digest windowing to fix a bug that cannot currently fire is the
-   * worse trade — but if you reschedule that cron, fix this first.
+   * ⚠ lib/server/agents/weekly-digest-agent.ts USED TO BE EXEMPT HERE, and the entry is worth
+   * remembering rather than just deleting. It read:
+   *
+   *   "Correct, but only because of WHEN it runs. The cron fires Monday 02:00 UTC = 07:30 IST, so
+   *    the UTC weekday and the IST weekday agree at that instant... It would break if the schedule
+   *    ever moved earlier than 18:30 UTC on a Sunday... but if you reschedule that cron, fix this
+   *    first."
+   *
+   * Nobody rescheduled the cron. PR #38 changed the OTHER half of the comparison instead -- the
+   * orchestrator's `isMonday` became IST -- so the two halves disagreed for those 5.5 hours and the
+   * digest could report the week before the one that just ended. The exemption named the trigger it
+   * expected and was blind to the one that happened.
+   *
+   * The lesson for anything added below: an exemption justified by "this cannot fire because of X"
+   * has to say what makes X true, and X here was a relationship between two files rather than a
+   * property of this one.
    */
-  "lib/server/agents/weekly-digest-agent.ts": 1,
 }
 
 describe("nobody reintroduces the UTC-date-for-today shape", () => {
