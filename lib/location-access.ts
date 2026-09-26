@@ -70,7 +70,29 @@ export async function getAccessibleLocationIds(sessionUser?: SessionUser): Promi
 
   const cacheKey = `${user.tenantId}:${user.id}`
   const cached = getCachedLocationIds(cacheKey)
-  if (cached.hit) return cached.value
+  /**
+   * A CACHED `null` MEANS "UNRESTRICTED", AND THAT IS THE ONE ANSWER NOT SAFE TO SERVE FROM CACHE.
+   *
+   * `null` is written here for any user-role account with no `user_locations` rows -- correct while
+   * the account exists. But it was returned BEFORE the `users` lookup below, which is the
+   * fail-closed check PR #32 added precisely so that a deleted account gets nothing. NextAuth JWTs
+   * are not revoked server-side, so an admin deleting a user left that user's live session reading
+   * every location in the tenant for the rest of the cache TTL -- PR #32's own fix, bypassed by
+   * PR #32's own cache.
+   *
+   * Bounded at CACHE_TTL_MS (30s) per warm instance rather than indefinite, which is why this is a
+   * narrow window and not an open door. It is still an authorization decision served without
+   * checking whether the principal exists.
+   *
+   * Caught by CodeRabbit on PR #32 as an OUTSIDE-DIFF-RANGE finding, which is why it sat unfixed:
+   * those live in the review body, and docs/RELEASE-FLOW.md told me they were unreachable via the
+   * API. They are not -- see the correction to that file.
+   *
+   * A restricted list stays cached. Re-validating it would cost a query per request to protect an
+   * answer that is already the safe direction: a stale allow-list grants only what the account had,
+   * whereas a stale `null` grants everything.
+   */
+  if (cached.hit && cached.value !== null) return cached.value
 
   const tenantContext = normalizeTenantContext(user.tenantId, user.role)
   const userRows = await runTenantQuery(

@@ -127,6 +127,54 @@ describe("getAccessibleLocationIds", () => {
   })
 })
 
+describe("a cached 'unrestricted' is re-validated, a cached allow-list is not", () => {
+  /**
+   * `null` means unrestricted, and it is written for any user-role account with no `user_locations`
+   * rows -- correct while the account exists. It was returned BEFORE the `users` lookup, which is
+   * the fail-closed check PR #32 added precisely so a deleted account gets nothing.
+   *
+   * NextAuth JWTs are not revoked server-side, so deleting a user left their live session reading
+   * every location in the tenant for the rest of the 30s cache TTL. PR #32's fix, bypassed by
+   * PR #32's cache.
+   *
+   * Caught by CodeRabbit on PR #32 as an OUTSIDE-DIFF-RANGE finding, which is why it sat unfixed for
+   * three days: those live in the pull request review's `body` field, not in the inline comment
+   * list, and docs/RELEASE-FLOW.md claimed they were unreachable via the API.
+   */
+  it("re-checks the users row even when unrestricted access is already cached", async () => {
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "db-user-7" }]) // users lookup
+      .mockResolvedValueOnce([]) // user_locations: none -> null, i.e. unrestricted
+    expect(await getAccessibleLocationIds(user({ id: "u-unrestricted" }))).toBeNull()
+
+    // The account is deleted. The session survives, so the next call must not trust the cache.
+    runTenantQuery.mockReset()
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
+    const afterDeletion = await getAccessibleLocationIds(user({ id: "u-unrestricted" }))
+
+    expect(runTenantQuery, "a cached 'unrestricted' must be re-validated, not served").toHaveBeenCalled()
+    expect(afterDeletion, "a deleted account must get nothing, cache or no cache").toEqual([])
+  })
+
+  it("still serves a cached allow-list without re-querying", async () => {
+    /**
+     * The other half, and the reason this is not just "stop caching". A stale allow-list grants only
+     * what the account already had; a stale `null` grants everything. Re-validating the safe
+     * direction would cost a query per request to protect nothing, so the asymmetry is deliberate
+     * and worth pinning -- otherwise the next person "fixes" it into a per-request lookup.
+     */
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "db-user-8" }])
+      .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
+    expect(await getAccessibleLocationIds(user({ id: "u-restricted" }))).toEqual(["tirtha-block-1"])
+    const callsAfterFirst = runTenantQuery.mock.calls.length
+
+    const second = await getAccessibleLocationIds(user({ id: "u-restricted" }))
+    expect(second).toEqual(["tirtha-block-1"])
+    expect(runTenantQuery.mock.calls.length, "a restricted list stays cached").toBe(callsAfterFirst)
+  })
+})
+
 describe("getAccessibleLocationIds -- no backing users row", () => {
   it("fails closed ([] = zero locations) when the session's username has no users row, instead of returning null (unrestricted)", async () => {
     // Reachable via requireSessionUser()'s stale-JWT fallback: an account deleted while its
