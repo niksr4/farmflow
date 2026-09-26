@@ -78,7 +78,7 @@ and the whole flow should be arranged so that it sees small, coherent diffs.
 > Read **all three** surfaces before merging:
 >
 > ```bash
-> gh api repos/niksr4/farmflow/pulls/N/reviews  --jq '.[] | select(.user.login|test("coderabbit";"i")) | .body'
+> gh api repos/niksr4/farmflow/pulls/N/reviews --paginate --jq '.[] | select(.user.login|test("coderabbit";"i")) | .body'
 > gh api repos/niksr4/farmflow/pulls/N/comments --paginate --jq '.[] | "\(.path):\(.line)\n\(.body)"'
 > gh api repos/niksr4/farmflow/issues/N/comments --paginate --jq '.[] | select(.user.login=="coderabbitai[bot]") | .body'
 > ```

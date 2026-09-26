@@ -68,32 +68,30 @@ export async function getAccessibleLocationIds(sessionUser?: SessionUser): Promi
     throw new Error("Database not configured")
   }
 
-  const cacheKey = `${user.tenantId}:${user.id}`
-  const cached = getCachedLocationIds(cacheKey)
   /**
-   * A CACHED `null` MEANS "UNRESTRICTED", AND THAT IS THE ONE ANSWER NOT SAFE TO SERVE FROM CACHE.
+   * ACCOUNT EXISTENCE IS CHECKED BEFORE ANY CACHED VALUE IS SERVED. The cache sits BELOW the `users`
+   * lookup, not above it.
    *
-   * `null` is written here for any user-role account with no `user_locations` rows -- correct while
-   * the account exists. But it was returned BEFORE the `users` lookup below, which is the
-   * fail-closed check PR #32 added precisely so that a deleted account gets nothing. NextAuth JWTs
-   * are not revoked server-side, so an admin deleting a user left that user's live session reading
-   * every location in the tenant for the rest of the cache TTL -- PR #32's own fix, bypassed by
-   * PR #32's own cache.
+   * The lookup is the fail-closed check PR #32 added so that a deleted account gets nothing. It was
+   * reachable only after a cache miss, so for the 30s TTL a deleted user's live session kept the
+   * answer computed while the account existed -- PR #32's own fix, bypassed by PR #32's own cache.
+   * NextAuth JWTs are not revoked server-side, which is what makes the session outlive the row.
    *
-   * Bounded at CACHE_TTL_MS (30s) per warm instance rather than indefinite, which is why this is a
-   * narrow window and not an open door. It is still an authorization decision served without
-   * checking whether the principal exists.
+   * ⚠ MY FIRST FIX FOR THIS ONLY RE-VALIDATED A CACHED `null`, on the reasoning that a stale
+   * allow-list "grants only what the account had" and was therefore the safe direction. That was
+   * wrong, and CodeRabbit said so on PR #47. The intended answer for a deleted account is `[]` --
+   * nothing. Granting "tirtha-block-1" to an account that no longer exists is not a milder version
+   * of the same bug, it is the same bug: an authorization decision served to a principal whose
+   * existence was never checked. "Less bad than unrestricted" is not "safe".
    *
-   * Caught by CodeRabbit on PR #32 as an OUTSIDE-DIFF-RANGE finding, which is why it sat unfixed:
-   * those live in the review body, and docs/RELEASE-FLOW.md told me they were unreachable via the
-   * API. They are not -- see the correction to that file.
+   * Cost of doing it properly: one indexed `users` lookup per request. The cache still saves the
+   * `user_locations` query, which is the expensive half.
    *
-   * A restricted list stays cached. Re-validating it would cost a query per request to protect an
-   * answer that is already the safe direction: a stale allow-list grants only what the account had,
-   * whereas a stale `null` grants everything.
+   * Caught by CodeRabbit on PR #32 as an OUTSIDE-DIFF-RANGE finding, which is why it sat unfixed for
+   * three days: those live in the review body, and docs/RELEASE-FLOW.md said they were unreachable
+   * via the API. They are not -- see the correction in that file.
    */
-  if (cached.hit && cached.value !== null) return cached.value
-
+  const cacheKey = `${user.tenantId}:${user.id}`
   const tenantContext = normalizeTenantContext(user.tenantId, user.role)
   const userRows = await runTenantQuery(
     sql,
@@ -118,6 +116,11 @@ export async function getAccessibleLocationIds(sessionUser?: SessionUser): Promi
     setCachedLocationIds(cacheKey, [])
     return []
   }
+
+  // The account exists. NOW a cached answer is safe to serve -- it saves the `user_locations` query
+  // without standing in for the existence check above.
+  const cached = getCachedLocationIds(cacheKey)
+  if (cached.hit) return cached.value
 
   let result: string[] | null = null
 

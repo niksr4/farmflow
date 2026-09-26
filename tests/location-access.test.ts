@@ -97,16 +97,29 @@ describe("getAccessibleLocationIds", () => {
     expect(result).toBeNull()
   })
 
-  it("caches the result so a second call within the TTL skips the database", async () => {
+  it("caches the result so a second call within the TTL skips the user_locations query", async () => {
+    /**
+     * ⚠ THIS USED TO ASSERT THE SECOND CALL TOUCHED THE DATABASE NOT AT ALL, and that is the
+     * behaviour PR #47 deliberately changed: the cache sat ABOVE the `users` lookup, so a deleted
+     * account kept its answer for the 30s TTL. Existence is now always checked; the cache still
+     * saves the `user_locations` query, which is the expensive half.
+     *
+     * Kept rather than deleted, because "the cache still does work" is worth asserting -- otherwise
+     * the fix could degrade into querying everything on every request and nothing would notice.
+     */
     runTenantQuery
       .mockResolvedValueOnce([{ id: "db-user-5" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
     const first = await getAccessibleLocationIds(user({ id: "u-cached" }))
     const callCountAfterFirst = runTenantQuery.mock.calls.length
 
+    runTenantQuery.mockResolvedValueOnce([{ id: "db-user-5" }]) // users lookup only
     const second = await getAccessibleLocationIds(user({ id: "u-cached" }))
     expect(second).toEqual(first)
-    expect(runTenantQuery.mock.calls.length).toBe(callCountAfterFirst)
+    expect(
+      runTenantQuery.mock.calls.length - callCountAfterFirst,
+      "one existence check, and no user_locations re-read",
+    ).toBe(1)
   })
 
   it("invalidateLocationCache clears the cache so the next call re-reads the database", async () => {
@@ -127,7 +140,7 @@ describe("getAccessibleLocationIds", () => {
   })
 })
 
-describe("a cached 'unrestricted' is re-validated, a cached allow-list is not", () => {
+describe("no cached answer is served before the account is known to exist", () => {
   /**
    * `null` means unrestricted, and it is written for any user-role account with no `user_locations`
    * rows -- correct while the account exists. It was returned BEFORE the `users` lookup, which is
@@ -156,22 +169,49 @@ describe("a cached 'unrestricted' is re-validated, a cached allow-list is not", 
     expect(afterDeletion, "a deleted account must get nothing, cache or no cache").toEqual([])
   })
 
-  it("still serves a cached allow-list without re-querying", async () => {
+  it("re-checks the users row even when an ALLOW-LIST is cached", async () => {
     /**
-     * The other half, and the reason this is not just "stop caching". A stale allow-list grants only
-     * what the account already had; a stale `null` grants everything. Re-validating the safe
-     * direction would cost a query per request to protect nothing, so the asymmetry is deliberate
-     * and worth pinning -- otherwise the next person "fixes" it into a per-request lookup.
+     * ⚠ MY FIRST FIX ONLY RE-VALIDATED A CACHED `null`, and a test here asserted that as correct:
+     * "a stale allow-list grants only what the account already had, so it is the safe direction".
+     *
+     * That was wrong, and CodeRabbit said so on PR #47. The intended answer for a deleted account is
+     * `[]` -- nothing. Granting "tirtha-block-1" to an account that no longer exists is not a milder
+     * version of the same bug, it is the same bug: an authorization decision served to a principal
+     * whose existence was never checked. "Less bad than unrestricted" is not "safe", and writing the
+     * asymmetry down as deliberate is how it would have survived the next review too.
      */
     runTenantQuery
       .mockResolvedValueOnce([{ id: "db-user-8" }])
       .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
     expect(await getAccessibleLocationIds(user({ id: "u-restricted" }))).toEqual(["tirtha-block-1"])
-    const callsAfterFirst = runTenantQuery.mock.calls.length
 
-    const second = await getAccessibleLocationIds(user({ id: "u-restricted" }))
+    // Account deleted, session still live.
+    runTenantQuery.mockReset()
+    runTenantQuery.mockResolvedValueOnce([]) // users lookup: no row
+    const afterDeletion = await getAccessibleLocationIds(user({ id: "u-restricted" }))
+
+    expect(runTenantQuery, "existence is checked before any cached value is served").toHaveBeenCalled()
+    expect(afterDeletion, "a deleted account gets nothing, not what it used to have").toEqual([])
+  })
+
+  it("still uses the cache to skip the user_locations query, which is the expensive half", async () => {
+    /**
+     * The cache is not removed, it is moved BELOW the existence check. So a second call within the
+     * TTL costs one indexed `users` lookup instead of two queries -- and this pins that the cache is
+     * still doing work, so the fix cannot quietly degrade into "query everything every time".
+     */
+    runTenantQuery
+      .mockResolvedValueOnce([{ id: "db-user-9" }])
+      .mockResolvedValueOnce([{ location_id: "tirtha-block-1", enabled: true }])
+    expect(await getAccessibleLocationIds(user({ id: "u-cache-still-used" }))).toEqual(["tirtha-block-1"])
+    const firstCallCount = runTenantQuery.mock.calls.length
+
+    runTenantQuery.mockResolvedValueOnce([{ id: "db-user-9" }]) // users lookup only
+    const second = await getAccessibleLocationIds(user({ id: "u-cache-still-used" }))
+
     expect(second).toEqual(["tirtha-block-1"])
-    expect(runTenantQuery.mock.calls.length, "a restricted list stays cached").toBe(callsAfterFirst)
+    const secondCallCount = runTenantQuery.mock.calls.length - firstCallCount
+    expect(secondCallCount, "the second call re-checks existence and nothing else").toBe(1)
   })
 })
 
