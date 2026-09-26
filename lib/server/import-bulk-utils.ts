@@ -190,8 +190,32 @@ const RETURN_WORDS = /\b(returns?|returned)\b/
  * directly beside a counterparty word keeps it from firing on unrelated phrasing like
  * "Return to stores", where "stores" is our own and the direction is the opposite one.
  */
-const RETURN_LEAVING_US = /\bto\s+(?:the\s+)?(supplier|vendor|customer|buyer)\b/
-const RETURN_ARRIVING_TO_US = /\bfrom\s+(?:the\s+)?(supplier|vendor|customer|buyer)\b/
+/**
+ * ⚠ THE PREPOSITION MUST BE ATTACHED TO "RETURN", NOT MERELY PRESENT IN THE PHRASE.
+ *
+ * "Return of goods purchased from supplier" contains `from supplier` -- but that says where the
+ * goods were BOUGHT, not where the return is going. Returning purchased goods takes stock OUT, and
+ * an unanchored match read it as arriving. Raised by CodeRabbit on PR #44, together with
+ * "Return from: Supplier", where a colon defeated a bare `\s+` separator.
+ *
+ * Anchoring to `return` immediately followed by the preposition settles both, and does it by making
+ * tier 0 NARROWER rather than by adding a rule per phrase -- which is the trap this classifier has
+ * walked into four rounds running. A compound phrase now falls through to the counterparty tier or
+ * to flagged, instead of being parsed by a regex that grows a clause every time somebody thinks of
+ * a new sentence:
+ *
+ *   Return to Supplier                       tier 0, leaving    deplete
+ *   Return from: Supplier                    tier 0, arriving   restock
+ *   Purchase Return to Supplier              tier 0, leaving    deplete
+ *   Return of goods purchased from supplier  tier 1 (supplier)  deplete   <- correct
+ *
+ * Separators allow a colon, comma or dash as well as spaces, because a hand-written CSV column does
+ * that and the direction it states is not in doubt.
+ */
+const RETURN_PREFIX = String.raw`\breturns?\b[\s:,\-]*`
+const RETURN_COUNTERPARTY_NOUN = String.raw`(?:the[\s:,\-]+)?(?:supplier|vendor|customer|buyer)\b`
+const RETURN_LEAVING_US = new RegExp(`${RETURN_PREFIX}to[\\s:,\\-]+${RETURN_COUNTERPARTY_NOUN}`)
+const RETURN_ARRIVING_TO_US = new RegExp(`${RETURN_PREFIX}from[\\s:,\\-]+${RETURN_COUNTERPARTY_NOUN}`)
 
 const RETURN_COUNTERPARTY_SUPPLIER = /\b(supplier|vendor)\b/
 const RETURN_COUNTERPARTY_CUSTOMER = /\b(customer|buyer)\b/

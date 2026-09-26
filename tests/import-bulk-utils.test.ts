@@ -176,6 +176,31 @@ describe("import bulk utils — field normalization", () => {
       }
     })
 
+    it("reads a direction written with punctuation", () => {
+      // A hand-written CSV column does "Return from: Supplier", and a bare \s+ separator missed it
+      // -- so tier 1 saw `supplier` and sent stock OUT when the phrase says it is arriving.
+      // Raised by CodeRabbit on PR #44.
+      expect(normalizeTransactionType("Return from: Supplier")).toBe("restock")
+      expect(normalizeTransactionType("Return to: Customer")).toBe("deplete")
+      expect(normalizeTransactionType("Return, to supplier")).toBe("deplete")
+      expect(normalizeTransactionType("Return - from vendor")).toBe("restock")
+    })
+
+    it("does not mistake a purchase's source for the return's destination", () => {
+      /**
+       * "Return of goods purchased from supplier" contains `from supplier`, but that says where the
+       * goods were BOUGHT -- returning them takes stock OUT. An unanchored preposition read it as
+       * arriving, confidently and with no warning. Raised by CodeRabbit on PR #44.
+       *
+       * Fixed by NARROWING tier 0 to a preposition attached to "return", not by adding another rule
+       * for this sentence. The compound phrase then falls through to the counterparty tier, which
+       * gets it right for the right reason.
+       */
+      expect(normalizeTransactionType("Return of goods purchased from supplier")).toBe("deplete")
+      // And the mirror: goods we sold, coming back.
+      expect(normalizeTransactionType("Return of goods sold to customer")).toBe("restock")
+    })
+
     it("does not read a preposition that is not about a counterparty", () => {
       // "Return to stores" is our own store, and the direction is the opposite of "to <them>".
       // Anchoring the preposition to a counterparty word keeps tier 0 from firing on it.
