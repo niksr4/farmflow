@@ -151,12 +151,29 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
   // NextAuth JWTs are not revoked server-side), so falling through to `tenantEnabled` here would
   // hand that stale session every module the tenant has, ignoring any per-user user_modules
   // restrictions the account had. Mirrors getAccessibleLocationIds() in lib/location-access.ts.
-  if (user.role !== "admin" && !userId) {
+  //
+  // ⚠ AN OWNER PREVIEW IS THE ONE CASE WHERE A MISSING `users` ROW IS NORMAL, NOT SUSPICIOUS.
+  //
+  // resolveScopedSessionUser swaps the tenant id and keeps the role, so a previewing owner arrives
+  // here as role "owner" against somebody else's tenant -- a tenant they have no account in, and
+  // should not need one in. Without this exemption the lookup above finds nothing, the fail-closed
+  // branch fires, and the preview renders with no modules at all: no tabs, an empty workspace, and
+  // nothing saying why. The access gate itself was never the problem (requireModuleAccess returns
+  // early for role "owner"), so every API call behind the blank screen would have succeeded.
+  //
+  // Caught by CodeRabbit on PR #35, which is the PR that introduced the fail-closed branch.
+  if (user.role !== "admin" && !ownerPreviewActive && !userId) {
     setCachedModules(cacheKey, [])
     return []
   }
 
-  if (user.role === "admin") {
+  // A preview answers "what does this tenant's workspace look like", so it reads the tenant's
+  // enabled modules exactly as that tenant's admin would -- unfiltered, like the admin branch.
+  // Falling through to the generic branch below would apply filterUserBlockedModules and hide
+  // balance-sheet, which is a role=user restriction (USER_ROLE_BLOCKED_MODULES) being applied to
+  // an owner. The preview would then be wrong in the opposite direction: quieter, but still not
+  // what the customer sees.
+  if (user.role === "admin" || ownerPreviewActive) {
     result = tenantEnabled
   } else if (userId) {
     try {
