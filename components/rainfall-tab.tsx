@@ -267,12 +267,15 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     setCm("")
     setMm("")
     setNotes("")
-    setSelectedDate(new Date())
-    setCalendarMonth(new Date())
+    // The estate's today, not the viewer's -- same reason as the initialisers above. Fixing only
+    // those left this reverting to the browser's date on every save, so the very first entry after
+    // a submit was the one that went to the wrong day.
+    setSelectedDate(estateTodayDate())
+    setCalendarMonth(estateTodayDate())
   }
 
   const handleEditRecord = (record: RainfallRecord) => {
-    const date = parseRecordDate(record.record_date) || new Date()
+    const date = parseRecordDate(record.record_date) || estateTodayDate()
     setEditingId(record.id)
     setSelectedDate(date)
     setCalendarMonth(date)
@@ -1427,7 +1430,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                   </div>
                   <Calendar mode="single" selected={selectedDate} month={calendarMonth} onMonthChange={setCalendarMonth}
                     onSelect={(date) => { if (date) { setSelectedDate(date); setCalendarMonth(date) } }}
-                    disabled={{ after: new Date() }} />
+                    disabled={{ after: estateTodayDate() }} />
                 </PopoverContent>
               </Popover>
             </div>

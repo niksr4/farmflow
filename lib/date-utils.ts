@@ -304,7 +304,11 @@ export function istDate(
 ): string {
   const date = resolveDate(instant)
   if (!date) return "--"
-  return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", ...options }).format(date)
+  // OPTIONS FIRST, timeZone LAST. Spreading them after the zone let a caller pass
+  // `{ timeZone: "UTC" }` and silently defeat the one thing this function exists to guarantee --
+  // a helper named istDate that can be talked out of IST is worse than no helper, because every
+  // call site reads as though it is safe.
+  return new Intl.DateTimeFormat("en-IN", { ...options, timeZone: "Asia/Kolkata" }).format(date)
 }
 
 /**

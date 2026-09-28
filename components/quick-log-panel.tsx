@@ -150,7 +150,14 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date: new Date(entryDate + "T12:00:00").toISOString(),
+          /**
+           * The calendar date itself, not an instant derived from it. Converting through a local
+           * Date and toISOString() anchored at noon, which survives +/-12h but not beyond -- and
+           * more to the point it made the value depend on the viewer's offset at all. The route
+           * casts this with ::date and blockedByLabourCutover reads its first ten characters, so a
+           * date-only string is exactly what both want. Nothing reads a time off deployment_date.
+           */
+          date: entryDate,
           code: activeCode.code,
           reference: activeCode.reference,
           laborEntries: [{ name: "In-house", laborCount: workers, costPerLabor: wage }],

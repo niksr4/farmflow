@@ -454,6 +454,38 @@ const stripComments = (src: string): string =>
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
     .replace(/^[ \t]*\/\/.*$/gm, "")
 
+/**
+ * Unzoned toLocale*String CALLS in one source string.
+ *
+ * Takes text rather than a path so the tests below exercise THIS function instead of keeping a
+ * private copy of its paren-walking logic -- the "a test that re-implements the rule proves the
+ * rule, not the scanner" failure CLAUDE.md records from PR #48, and which CodeRabbit found here
+ * again on PR #53.
+ */
+const findUnzonedLocaleCalls = (source: string): number => {
+  const src = stripComments(source)
+  LOCALE_FORMAT_CALL.lastIndex = 0
+  let hits = 0
+  let match: RegExpExecArray | null
+  while ((match = LOCALE_FORMAT_CALL.exec(src)) !== null) {
+    // Walk to the matching close paren so a multi-line options object stays inside the call.
+    let i = match.index + match[0].length - 1
+    let depth = 0
+    for (; i < src.length; i += 1) {
+      if (src[i] === "(") depth += 1
+      else if (src[i] === ")") {
+        depth -= 1
+        if (depth === 0) break
+      }
+    }
+    // A KEY, NOT A SUBSTRING. `includes("timeZone")` is also satisfied by `timeZoneName: "short"`,
+    // which sets a LABEL and not an offset -- so a call that is still fully viewer-local read as
+    // zoned. Raised by CodeRabbit on PR #53.
+    if (!/\btimeZone\s*:/.test(src.slice(match.index, i + 1))) hits += 1
+  }
+  return hits
+}
+
 /** Unzoned toLocale*String calls per file, counting CALLS rather than lines. */
 const unzonedLocaleFormatCounts = (): Record<string, number> => {
   const files = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
@@ -461,24 +493,8 @@ const unzonedLocaleFormatCounts = (): Record<string, number> => {
     .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
   const counts: Record<string, number> = {}
   for (const file of files) {
-    const src = stripComments(readFileSync(resolve(process.cwd(), file), "utf8"))
-    LOCALE_FORMAT_CALL.lastIndex = 0
-    let match: RegExpExecArray | null
-    while ((match = LOCALE_FORMAT_CALL.exec(src)) !== null) {
-      // Walk to the matching close paren so a multi-line options object stays inside the call.
-      let i = match.index + match[0].length - 1
-      let depth = 0
-      for (; i < src.length; i += 1) {
-        if (src[i] === "(") depth += 1
-        else if (src[i] === ")") {
-          depth -= 1
-          if (depth === 0) break
-        }
-      }
-      if (!src.slice(match.index, i + 1).includes("timeZone")) {
-        counts[file] = (counts[file] ?? 0) + 1
-      }
-    }
+    const hits = findUnzonedLocaleCalls(readFileSync(resolve(process.cwd(), file), "utf8"))
+    if (hits) counts[file] = hits
   }
   return counts
 }
@@ -524,20 +540,18 @@ describe("an estate date is printed on the estate's calendar", () => {
     // weather-tab.tsx's was written exactly this way. A line-scoped scan would have read the first
     // line only, found no timeZone on it, and been right by accident -- and would equally have
     // MISSED a zoned call whose timeZone sat on line two.
-    const across = `x.toLocaleDateString("en-IN", {\n  weekday: "short",\n})`
-    const zonedAcross = `x.toLocaleDateString("en-IN", {\n  timeZone: "Asia/Kolkata",\n})`
-    const countIn = (src: string) => {
-      LOCALE_FORMAT_CALL.lastIndex = 0
-      const m = LOCALE_FORMAT_CALL.exec(src)!
-      let i = m.index + m[0].length - 1, depth = 0
-      for (; i < src.length; i += 1) {
-        if (src[i] === "(") depth += 1
-        else if (src[i] === ")") { depth -= 1; if (depth === 0) break }
-      }
-      return src.slice(m.index, i + 1).includes("timeZone")
-    }
-    expect(countIn(across), "unzoned across lines must read as unzoned").toBe(false)
-    expect(countIn(zonedAcross), "zoned across lines must read as zoned").toBe(true)
+    expect(findUnzonedLocaleCalls('x.toLocaleDateString("en-IN", {\n  weekday: "short",\n})')).toBe(1)
+    expect(findUnzonedLocaleCalls('x.toLocaleDateString("en-IN", {\n  timeZone: "Asia/Kolkata",\n})')).toBe(0)
+  })
+
+  it("is not satisfied by timeZoneName, which is a label rather than an offset", () => {
+    // `{ timeZoneName: "short" }` appends "GMT+5:30" to a string still rendered in the VIEWER's
+    // zone -- the most convincing possible way to look zoned while being wrong. A substring check
+    // for "timeZone" passed it. Raised by CodeRabbit on PR #53.
+    expect(findUnzonedLocaleCalls('x.toLocaleTimeString("en-IN", { timeZoneName: "short" })')).toBe(1)
+    expect(
+      findUnzonedLocaleCalls('x.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", timeZoneName: "short" })'),
+    ).toBe(0)
   })
 
   it("does not count a comment describing the bug as committing it", () => {
@@ -580,18 +594,39 @@ describe("istDate renders the estate's calendar date", () => {
  * `isToday`/`isFuture`/`isPast` are banned outright rather than counted. They take no reference
  * date, so there is no correct way to call them here -- they are always the host's opinion.
  */
-const HOST_RELATIVE_PREDICATES = /\bimport\s*\{[^}]*\b(isToday|isFuture|isPast|isYesterday|isTomorrow)\b[^}]*\}\s*from\s*["']date-fns["']/
-const DATE_FNS_ON_NOW = /\b(format|startOfWeek|endOfWeek|startOfMonth|endOfMonth|startOfDay|addDays|subDays|addWeeks|subWeeks|addMonths|subMonths|addYears|subYears|differenceInDays|differenceInCalendarDays)\s*\(\s*new Date\(\)/g
+const HOST_RELATIVE_NAMES = String.raw`isToday|isFuture|isPast|isYesterday|isTomorrow`
+/** Named import: `import { isToday } from "date-fns"`. */
+const HOST_RELATIVE_NAMED = new RegExp(
+  String.raw`\bimport\s*\{[^}]*\b(${HOST_RELATIVE_NAMES})\b[^}]*\}\s*from\s*["']date-fns["']`,
+)
+/**
+ * Namespace form: `import * as dateFns from "date-fns"` then `dateFns.isToday(d)`. Nothing in the
+ * repo does this today, which is exactly why it is the shape the next one would arrive in -- the
+ * same "a guard that enumerates what it has already seen keeps passing" failure this whole file is
+ * built around. Raised by CodeRabbit on PR #53.
+ */
+const HOST_RELATIVE_NAMESPACE = new RegExp(String.raw`\b\w+\.(${HOST_RELATIVE_NAMES})\s*\(`)
+/**
+ * NOT PRECEDED BY A DOT. `\bformat(` also matches `Intl.DateTimeFormat(...).format(new Date())`,
+ * which is correct code -- it is how todayIso() is implemented. That false positive is the only
+ * reason lib/date-utils.ts needed an entry in the accepted list below, so the scanner was
+ * manufacturing its own exemption. Raised by CodeRabbit on PR #53.
+ */
+const DATE_FNS_ON_NOW = /(?<![.\w$])(format|startOfWeek|endOfWeek|startOfMonth|endOfMonth|startOfDay|addDays|subDays|addWeeks|subWeeks|addMonths|subMonths|addYears|subYears|differenceInDays|differenceInCalendarDays)\s*\(\s*new Date\(\)/g
 
 /**
  * Download filenames only. A CSV named with the viewer's date is a cosmetic mismatch on a file the
  * user is holding, not a figure anybody is paid on -- the same carve-out ACCEPTED already makes for
  * the toISOString form. THESE NUMBERS MUST ONLY EVER GO DOWN.
+ *
+ * lib/date-utils.ts was listed here and is not any more. Its only "offence" was todayIso()'s own
+ * `Intl.DateTimeFormat(...).format(new Date())`, which the scanner mistook for date-fns because
+ * `\bformat(` matches a METHOD call too. The scanner was manufacturing the exemption it then
+ * needed -- a self-justifying allowlist entry, and the quietest way for a list like this to rot.
  */
 const DATE_FNS_ON_NOW_ACCEPTED: Record<string, { count: number; why: string }> = {
   "components/pepper-tab.tsx": { count: 1, why: "date inside a CSV download filename" },
   "components/processing-tab.tsx": { count: 1, why: "date inside a CSV download filename" },
-  "lib/date-utils.ts": { count: 1, why: "inside todayIso() itself — the IST-correct implementation everything else calls" },
 }
 
 const dateFnsOnNowCounts = (): Record<string, number> => {
@@ -628,14 +663,36 @@ describe("date-fns is never handed the host's now", () => {
     const files = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
       .split("\n")
       .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
-    const offenders = files.filter((f) =>
-      HOST_RELATIVE_PREDICATES.test(stripComments(readFileSync(resolve(process.cwd(), f), "utf8"))),
-    )
+    const offenders = files.filter((f) => {
+      const src = stripComments(readFileSync(resolve(process.cwd(), f), "utf8"))
+      return HOST_RELATIVE_NAMED.test(src) || (/from\s*["']date-fns["']/.test(src) && HOST_RELATIVE_NAMESPACE.test(src))
+    })
     expect(
       offenders,
       "isToday/isFuture/isPast take no reference date, so they are always the HOST's opinion. " +
         "Compare YYYY-MM-DD strings against todayIso() instead.",
     ).toEqual([])
+  })
+
+  it("rejects a host-relative predicate reached through a namespace import", () => {
+    /**
+     * `import * as dateFns from "date-fns"` then `dateFns.isToday(d)` has the same defect and none
+     * of the same text. Nothing in the repo writes it that way, which is precisely why it is the
+     * shape the next one would arrive in -- this file exists because a guard that enumerates the
+     * forms it has already seen keeps passing while the defect changes clothes.
+     */
+    const named = 'import { isToday } from "date-fns"\nisToday(d)'
+    const namespaced = 'import * as dateFns from "date-fns"\nif (dateFns.isToday(day)) return'
+    const innocent = 'import { format } from "date-fns"\nconst x = { isToday: true }'
+
+    const flags = (src: string) =>
+      HOST_RELATIVE_NAMED.test(src) || (/from\s*["\']date-fns["\']/.test(src) && HOST_RELATIVE_NAMESPACE.test(src))
+
+    expect(flags(named), "named import must be caught").toBe(true)
+    expect(flags(namespaced), "namespace import must be caught too").toBe(true)
+    // A PROPERTY called isToday is not a CALL to date-fns' isToday. Flagging it would be noise,
+    // and components/today-gaps-card.tsx has exactly such a property.
+    expect(flags(innocent), "a plain isToday property must not be flagged").toBe(false)
   })
 
   it("estateTodayDate is the estate's day, and survives a date-fns round trip", () => {

@@ -945,6 +945,11 @@ aside a[href]:active {
 .dark .text-amber-950        { color: hsl(43 80% 82%); }
 .dark .text-amber-900        { color: hsl(43 70% 75%); }
 .dark .text-amber-800        { color: hsl(43 65% 68%); }
+/* Opacity variants compile to their OWN class, so the rules above never reach them -- Tailwind
+   emits .text-amber-900\/80, not .text-amber-900. The import-notice paragraph in
+   tenant-settings/overview-sections.tsx sat dark-amber-on-dark because of exactly that. */
+.dark .text-amber-900\/80    { color: hsl(43 70% 75% / 0.85); }
+.dark .text-amber-950\/80    { color: hsl(43 80% 82% / 0.85); }
 
 /* bg-amber-50 with additional opacity variants */
 .dark .bg-amber-50\/85       { background-color: hsl(43 60% 7% / 0.9); }

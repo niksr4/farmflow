@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { adminSql, isDbConfigured } from "@/lib/server/db"
+import { adminSql, isAdminDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireOwnerRole } from "@/lib/tenant"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
@@ -18,8 +18,17 @@ export async function POST() {
     const sessionUser = await requireSessionUser()
     requireOwnerRole(sessionUser.role)
 
-    if (!isDbConfigured) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+    /**
+     * isAdminDbConfigured, NOT isDbConfigured. adminSql falls back to `sql` when no separate
+     * owner URL is set, so gating on "is there a database" would hand this the least-privilege
+     * runtime client and put the ALTER TABLEs below straight back on a role that owns nothing --
+     * the exact bug this route was just fixed for, reintroduced through the guard.
+     */
+    if (!isAdminDbConfigured) {
+      return NextResponse.json(
+        { success: false, error: "Schema-owner database connection not configured" },
+        { status: 500 },
+      )
     }
 
     /**
