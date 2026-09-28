@@ -167,9 +167,44 @@ export async function requireSessionUser(): Promise<SessionUser> {
         requiresGuidedSetup: Boolean(rows[0].requires_guided_setup),
       })
     }
+
+    /**
+     * THE DATABASE WAS ASKED AND SAID THIS USER DOES NOT EXIST. That is an answer, not a
+     * gap, so it ends the request.
+     *
+     * This used to fall through to the JWT-claims branch below, which handed back the
+     * `role` and `tenantId` baked into the cookie at login. Sessions here are 30 days
+     * (a deliberate decision — estate managers use personal devices), so deleting a user
+     * or moving them between tenants left a token that kept working, with its old
+     * permissions, for up to a month. Revoking access did not revoke access.
+     *
+     * That is the shared root cause behind four separate fixes: #32 and #35 made the
+     * location and module resolvers fail closed instead of open, and #42 and #47 closed
+     * the cache and identity holes those two still had. Each was a downstream defence
+     * against a principal that no longer exists. This is the upstream cause.
+     *
+     * It deliberately does NOT fall through to the username lookup either. A username can
+     * be reused, so resolving a stale id by name risks handing the session to a DIFFERENT
+     * account that has since taken that name — a worse outcome than the stale claims. The
+     * username path exists for legacy tokens carrying no id at all, and is reached below.
+     *
+     * Verified before changing: under the exact runtime path (app_runtime role, RLS
+     * enforced, the same three GUCs runTenantQuery sets) every real user resolves by id --
+     * 11/11 on prod and 10/10 on dev, across 6 tenants, with the owner among them. The
+     * `users` RLS policy grants `app.role = 'owner'` a full bypass (script 98) and
+     * ownerContext sets exactly that, so this lookup is not tenant-scoped and cannot
+     * silently return zero rows for a legitimate user in another tenant.
+     */
+    throw new Error("Unauthorized")
   }
 
-  if (user?.id && user?.tenantId && user?.role) {
+  /**
+   * NO DATABASE TO ASK. Distinct from the case above: nothing has told us the user is
+   * gone, we simply cannot check. Routes gate on `isDbConfigured` and return
+   * databaseNotConfiguredResponse() well before this matters, so this exists to keep a
+   * DB-less local boot behaving as it always has rather than throwing Unauthorized.
+   */
+  if (!sql && user?.id && user?.tenantId && user?.role) {
     return toSessionUser({
       id: user.id,
       username: user.name || "",
