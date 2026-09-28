@@ -181,8 +181,8 @@ export default function SeasonPlTab() {
               </Button>
             ))}
           </div>
-          <Button size="sm" variant="outline" onClick={handlePrint}>
-            <Printer className="h-3.5 w-3.5" />
+          <Button size="sm" variant="outline" onClick={handlePrint} aria-label="Print this season P&L" title="Print">
+            <Printer className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
         </div>
       </div>

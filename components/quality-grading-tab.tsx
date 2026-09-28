@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { estateTodayDate } from "@/lib/date-utils"
 
 interface LocationOption {
   id: string
@@ -68,7 +69,7 @@ export default function QualityGradingTab() {
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState("")
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(estateTodayDate())
   const [coffeeType, setCoffeeType] = useState("")
   const [processType, setProcessType] = useState("")
   const [grade, setGrade] = useState("")

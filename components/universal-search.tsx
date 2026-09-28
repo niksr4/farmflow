@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Search, Package, ReceiptText, Users, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SearchResultItem } from "@/app/api/search/route"
+import { istDate } from "@/lib/date-utils"
 
 type Props = {
   open: boolean
@@ -23,7 +24,7 @@ function formatDate(iso: string | null): string {
   if (!iso) return ""
   const d = new Date(iso)
   if (isNaN(d.getTime())) return ""
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+  return istDate(d)
 }
 
 function formatAmount(n: number | null): string {

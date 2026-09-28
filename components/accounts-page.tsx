@@ -24,7 +24,7 @@ import WorkspacePageShell from "@/components/workspace-page-shell"
 import { toast } from "sonner"
 import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
-import { formatDateForQIF, formatDateOnly } from "@/lib/date-utils"
+import { formatDateForQIF, formatDateOnly, istDate } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -694,7 +694,7 @@ export default function AccountsPage({
             .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
         : undefined
       const subtitle = liveCodes
-        ? `Your estate's activity codes as of ${new Date().toLocaleDateString("en-IN")}.`
+        ? `Your estate's activity codes as of ${istDate(new Date())}.`
         : undefined
 
       if (format === "csv") {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { istClock, istNowParts, istTodayParts, todayIso } from "@/lib/date-utils"
+import { estateTodayDate, istClock, istDate, istNowParts, istTodayParts, todayIso } from "@/lib/date-utils"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 /**
@@ -415,5 +415,236 @@ describe("nobody reintroduces the UTC-date-for-today shape", () => {
       .filter(([file, { count }]) => (counts[file] ?? 0) < count)
       .map(([file, { count }]) => `${file}: accepted ${count}, found ${counts[file] ?? 0}`)
     expect(stale, "lower the number (or delete the entry) in ACCEPTED").toEqual([])
+  })
+})
+
+/**
+ * THE SIXTH SIGNATURE: RENDERING, not deriving.
+ *
+ * Everything above catches how "now" is DERIVED -- toISOString().slice, getMonth(), the variable
+ * form. None of it can see how a correct instant is PRINTED, and CLAUDE.md names that as the same
+ * class in the same breath: "toLocaleTimeString() and toLocaleDateString() all use the VIEWER's
+ * timezone unless given an explicit one."
+ *
+ * Nine live sites had it, and the tell is that several passed `"en-IN"` and read as though that
+ * settled the question. It does not. A locale picks the FORMAT; only `timeZone` picks the OFFSET.
+ * The clearest was the estate search: lib/server/assistant-search.ts formats each row's date in
+ * Asia/Kolkata on the server, and components/universal-search.tsx re-parsed that string as UTC
+ * midnight and re-rendered it in the viewer's zone -- undoing, in the browser, a fix the server had
+ * already made.
+ *
+ * PAREN-MATCHED, NOT LINE-MATCHED. weather-tab.tsx's was written across three lines with the
+ * options object on its own, so a line-scoped regex would have called it zoned-or-unzoned depending
+ * purely on where the author put a newline. This walks to the closing paren and asks about the
+ * whole call.
+ */
+const LOCALE_FORMAT_CALL = /toLocale(?:Date|Time)String\s*\(/g
+
+/**
+ * Comments are removed first, including JSX `{/* … *\/}` blocks.
+ *
+ * Not optional: balance-sheet-tab.tsx carries a comment reading "istClock, not
+ * toLocaleTimeString("en-IN")" -- the note explaining a previous fix of exactly this bug. The first
+ * run of this scan flagged it. A guard that fails on the DESCRIPTION of a bug is the mirror of one
+ * that passes on a mention, and both make the list lie.
+ */
+const stripComments = (src: string): string =>
+  src
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/^[ \t]*\/\/.*$/gm, "")
+
+/** Unzoned toLocale*String calls per file, counting CALLS rather than lines. */
+const unzonedLocaleFormatCounts = (): Record<string, number> => {
+  const files = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
+    .split("\n")
+    .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+  const counts: Record<string, number> = {}
+  for (const file of files) {
+    const src = stripComments(readFileSync(resolve(process.cwd(), file), "utf8"))
+    LOCALE_FORMAT_CALL.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = LOCALE_FORMAT_CALL.exec(src)) !== null) {
+      // Walk to the matching close paren so a multi-line options object stays inside the call.
+      let i = match.index + match[0].length - 1
+      let depth = 0
+      for (; i < src.length; i += 1) {
+        if (src[i] === "(") depth += 1
+        else if (src[i] === ")") {
+          depth -= 1
+          if (depth === 0) break
+        }
+      }
+      if (!src.slice(match.index, i + 1).includes("timeZone")) {
+        counts[file] = (counts[file] ?? 0) + 1
+      }
+    }
+  }
+  return counts
+}
+
+/**
+ * The calls that are RIGHT to leave viewer-local, with the reason each one is.
+ *
+ * The distinction is whose event it is. A timestamp the viewer's own browser produced belongs in
+ * the viewer's clock; anything that happened AT THE ESTATE does not. THESE NUMBERS MUST ONLY GO DOWN.
+ */
+const VIEWER_LOCAL_BY_DESIGN: Record<string, { count: number; why: string }> = {
+  "components/inventory-system.tsx": { count: 1, why: "'Synced HH:MM' — when THIS browser last synced, so the viewer's clock is the correct one" },
+  "components/inventory-system/data-tools-panel.tsx": { count: 1, why: "when an export failed in this tab — a local browser event" },
+  "components/inventory-system/record-movement-panel.tsx": { count: 1, why: "when a write failed in this tab — a local browser event" },
+  "components/accounts/labour-cost-summary.tsx": { count: 2, why: "parses at T12:00:00, so a ±5:30 render shift cannot cross a day boundary" },
+  "lib/server/agents/daily-digest-agent.ts": { count: 2, why: "parsed local and formatted local, so the pair round-trips in any host zone" },
+}
+
+describe("an estate date is printed on the estate's calendar", () => {
+  it("has no unzoned toLocale*String call outside the accepted set", () => {
+    const counts = unzonedLocaleFormatCounts()
+    const offenders = Object.entries(counts)
+      .filter(([file, n]) => n > (VIEWER_LOCAL_BY_DESIGN[file]?.count ?? 0))
+      .map(([file, n]) => `${file}: ${n} unzoned (accepted ${VIEWER_LOCAL_BY_DESIGN[file]?.count ?? 0})`)
+    expect(
+      offenders,
+      "pass { timeZone: 'Asia/Kolkata' }, or use istDate()/istClock()/formatDateOnly(). " +
+        "A locale like 'en-IN' picks the format, NOT the offset.",
+    ).toEqual([])
+  })
+
+  it("every accepted entry is still a real occurrence, at the count claimed", () => {
+    // The staleness twin, same as ACCEPTED above: a fixed file must not leave its exemption behind
+    // for the next offender to inherit.
+    const counts = unzonedLocaleFormatCounts()
+    const stale = Object.entries(VIEWER_LOCAL_BY_DESIGN)
+      .filter(([file, { count }]) => (counts[file] ?? 0) < count)
+      .map(([file, { count }]) => `${file}: accepted ${count}, found ${counts[file] ?? 0}`)
+    expect(stale, "lower the number (or delete the entry) in VIEWER_LOCAL_BY_DESIGN").toEqual([])
+  })
+
+  it("sees a call whose options object is on another line", () => {
+    // weather-tab.tsx's was written exactly this way. A line-scoped scan would have read the first
+    // line only, found no timeZone on it, and been right by accident -- and would equally have
+    // MISSED a zoned call whose timeZone sat on line two.
+    const across = `x.toLocaleDateString("en-IN", {\n  weekday: "short",\n})`
+    const zonedAcross = `x.toLocaleDateString("en-IN", {\n  timeZone: "Asia/Kolkata",\n})`
+    const countIn = (src: string) => {
+      LOCALE_FORMAT_CALL.lastIndex = 0
+      const m = LOCALE_FORMAT_CALL.exec(src)!
+      let i = m.index + m[0].length - 1, depth = 0
+      for (; i < src.length; i += 1) {
+        if (src[i] === "(") depth += 1
+        else if (src[i] === ")") { depth -= 1; if (depth === 0) break }
+      }
+      return src.slice(m.index, i + 1).includes("timeZone")
+    }
+    expect(countIn(across), "unzoned across lines must read as unzoned").toBe(false)
+    expect(countIn(zonedAcross), "zoned across lines must read as zoned").toBe(true)
+  })
+
+  it("does not count a comment describing the bug as committing it", () => {
+    const src = `{/* istClock, not toLocaleTimeString("en-IN"): a locale is not an offset */}\nconst x = 1`
+    expect(stripComments(src)).not.toContain("toLocaleTimeString(")
+  })
+})
+
+describe("istDate renders the estate's calendar date", () => {
+  it("gives the IST date for an instant that is still yesterday in UTC", () => {
+    // 2026-09-20 20:00 UTC == 2026-09-21 01:30 IST.
+    expect(istDate("2026-09-20T20:00:00Z", { day: "numeric", month: "short" })).toBe("21 Sept")
+  })
+
+  it("does not shift for a viewer west of Greenwich", () => {
+    // The off-by-one this replaces: new Date("2026-11-15") is UTC midnight, and printing its local
+    // parts at UTC-5 reads 14 Nov. Asserted as the instant, since TZ is the runner's accident.
+    expect(istDate("2026-11-15T00:00:00Z", { day: "numeric", month: "short" })).toBe("15 Nov")
+  })
+
+  it("survives a missing or unparseable value instead of throwing", () => {
+    expect(istDate(null)).toBe("--")
+    expect(istDate("not a date")).toBe("--")
+  })
+})
+
+/**
+ * THE SEVENTH SIGNATURE: date-fns.
+ *
+ * `format(d, "yyyy-MM-dd")`, `startOfWeek(d)`, `isToday(d)` all read a Date's LOCAL parts, so
+ * seeding any of them with `new Date()` puts the screen on the VIEWER's calendar. Nothing above
+ * could see it: it is not toISOString, not a getMonth() access, and not a toLocale* call.
+ *
+ * Nineteen sites had it across thirteen files, including three that decide a WRITTEN date --
+ * processing's process_date default, sales' default sale date, and the muster's selected day. The
+ * muster is the same tab the original Africa report came from: its week strip was built from
+ * `startOfWeek(new Date())`, so for a viewer west of India between 00:00 and 05:30 IST it showed
+ * the week that had already ended, with the estate's actual today not on it at all.
+ *
+ * `isToday`/`isFuture`/`isPast` are banned outright rather than counted. They take no reference
+ * date, so there is no correct way to call them here -- they are always the host's opinion.
+ */
+const HOST_RELATIVE_PREDICATES = /\bimport\s*\{[^}]*\b(isToday|isFuture|isPast|isYesterday|isTomorrow)\b[^}]*\}\s*from\s*["']date-fns["']/
+const DATE_FNS_ON_NOW = /\b(format|startOfWeek|endOfWeek|startOfMonth|endOfMonth|startOfDay|addDays|subDays|addWeeks|subWeeks|addMonths|subMonths|addYears|subYears|differenceInDays|differenceInCalendarDays)\s*\(\s*new Date\(\)/g
+
+/**
+ * Download filenames only. A CSV named with the viewer's date is a cosmetic mismatch on a file the
+ * user is holding, not a figure anybody is paid on -- the same carve-out ACCEPTED already makes for
+ * the toISOString form. THESE NUMBERS MUST ONLY EVER GO DOWN.
+ */
+const DATE_FNS_ON_NOW_ACCEPTED: Record<string, { count: number; why: string }> = {
+  "components/pepper-tab.tsx": { count: 1, why: "date inside a CSV download filename" },
+  "components/processing-tab.tsx": { count: 1, why: "date inside a CSV download filename" },
+  "lib/date-utils.ts": { count: 1, why: "inside todayIso() itself — the IST-correct implementation everything else calls" },
+}
+
+const dateFnsOnNowCounts = (): Record<string, number> => {
+  const files = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
+    .split("\n")
+    .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+  const counts: Record<string, number> = {}
+  for (const file of files) {
+    const src = stripComments(readFileSync(resolve(process.cwd(), file), "utf8"))
+    const hits = src.match(DATE_FNS_ON_NOW)?.length ?? 0
+    if (hits) counts[file] = hits
+  }
+  return counts
+}
+
+describe("date-fns is never handed the host's now", () => {
+  it("has no new Date() flowing into a date-fns call outside the accepted set", () => {
+    const counts = dateFnsOnNowCounts()
+    const offenders = Object.entries(counts)
+      .filter(([file, n]) => n > (DATE_FNS_ON_NOW_ACCEPTED[file]?.count ?? 0))
+      .map(([file, n]) => `${file}: ${n} (accepted ${DATE_FNS_ON_NOW_ACCEPTED[file]?.count ?? 0})`)
+    expect(offenders, "use estateTodayDate() or todayIso() — date-fns reads LOCAL parts").toEqual([])
+  })
+
+  it("every accepted entry is still a real occurrence, at the count claimed", () => {
+    const counts = dateFnsOnNowCounts()
+    const stale = Object.entries(DATE_FNS_ON_NOW_ACCEPTED)
+      .filter(([file, { count }]) => (counts[file] ?? 0) < count)
+      .map(([file, { count }]) => `${file}: accepted ${count}, found ${counts[file] ?? 0}`)
+    expect(stale, "lower the number (or delete the entry) in DATE_FNS_ON_NOW_ACCEPTED").toEqual([])
+  })
+
+  it("nothing imports a host-relative date predicate", () => {
+    const files = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
+      .split("\n")
+      .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+    const offenders = files.filter((f) =>
+      HOST_RELATIVE_PREDICATES.test(stripComments(readFileSync(resolve(process.cwd(), f), "utf8"))),
+    )
+    expect(
+      offenders,
+      "isToday/isFuture/isPast take no reference date, so they are always the HOST's opinion. " +
+        "Compare YYYY-MM-DD strings against todayIso() instead.",
+    ).toEqual([])
+  })
+
+  it("estateTodayDate is the estate's day, and survives a date-fns round trip", () => {
+    vi.useFakeTimers()
+    // 2026-09-20 20:00 UTC == 2026-09-21 01:30 IST. The estate is on the 21st; UTC is on the 20th.
+    vi.setSystemTime(new Date("2026-09-20T20:00:00Z"))
+    // The round trip that matters: this is exactly what the muster does to pick a day.
+    const roundTripped = `${estateTodayDate().getFullYear()}-${String(estateTodayDate().getMonth() + 1).padStart(2, "0")}-${String(estateTodayDate().getDate()).padStart(2, "0")}`
+    expect(roundTripped, "date-fns reads these same local parts").toBe(todayIso())
+    expect(roundTripped).toBe("2026-09-21")
   })
 })

@@ -6,6 +6,7 @@ import { BookOpen, Users, Coins, CloudRain, Leaf } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getSeasonBadge, getSeasonContextLine } from "@/lib/season-utils"
 import { format } from "date-fns"
+import { estateTodayDate } from "@/lib/date-utils"
 
 type TabItem = {
   value: string
@@ -82,7 +83,7 @@ export default function WorkspaceLauncher({
   const [contextLine, setContextLine] = useState("")
 
   useEffect(() => {
-    setDateLabel(format(new Date(), "EEEE, d MMMM"))
+    setDateLabel(format(estateTodayDate(), "EEEE, d MMMM"))
     setSeasonBadge(getSeasonBadge())
     setContextLine(getSeasonContextLine())
   }, [])

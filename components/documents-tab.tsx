@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { formatDateOnly } from "@/lib/date-utils"
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 
@@ -58,7 +59,7 @@ const formatDate = (value: string | null | undefined) => {
   if (!value) return ""
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleDateString()
+  return formatDateOnly(value)
 }
 
 const formatBytes = (bytes: number) => {

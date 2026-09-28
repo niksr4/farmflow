@@ -2,7 +2,7 @@ import Image from "next/image"
 
 export default function DashboardLoading() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-50 via-white to-white px-6">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-50 via-white to-white px-6 dark:from-emerald-950/30 dark:via-slate-950 dark:to-slate-950">
       <div className="flex w-full max-w-xs flex-col items-center rounded-3xl border border-emerald-100 bg-white/90 p-6 text-center shadow-sm backdrop-blur">
         <Image src="/brand-mark.svg" alt="FarmFlow" width={64} height={64} className="h-16 w-16" priority />
         <p className="mt-3 text-sm font-semibold text-emerald-900">Opening FarmFlow</p>

@@ -12,6 +12,7 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { format, subDays } from "date-fns"
 import { toast } from "sonner"
 import { useSingleFlight } from "@/hooks/use-single-flight"
+import { estateTodayDate, todayIso } from "@/lib/date-utils"
 
 type ActivityCode = { code: string; reference: string }
 type RecentCode = ActivityCode & { useCount: number; lastUsedDate: string }
@@ -30,8 +31,8 @@ const ESTATE_TOP_CODES: ActivityCode[] = [
   { code: "163", reference: "Irrigation" },
 ]
 
-function todayStr() { return format(new Date(), "yyyy-MM-dd") }
-function yesterdayStr() { return format(subDays(new Date(), 1), "yyyy-MM-dd") }
+function todayStr() { return todayIso() }
+function yesterdayStr() { return format(subDays(estateTodayDate(), 1), "yyyy-MM-dd") }
 
 function activityEmoji(ref: string): string {
   const r = ref.toLowerCase()

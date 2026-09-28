@@ -18,6 +18,7 @@ import { adminSql as sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 import { escapeHtml } from "@/lib/html-escape"
+import { istDate } from "@/lib/date-utils"
 
 type YesterdayActivity = {
   tenantId: string
@@ -271,7 +272,7 @@ function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSum
       <td style="padding:10px 12px;">${statusBadge(s.status)}</td>
       <td style="padding:10px 12px;font-size:13px;color:${activityColor};">${activityText}</td>
       <td style="padding:10px 12px;font-size:13px;color:#374151;">${activity ? `${activity.activeDaysLast7} of 7` : "—"}${s.loginsLast7d ? ` <span style="color:#9ca3af;">· ${s.loginsLast7d} login${s.loginsLast7d !== 1 ? "s" : ""}</span>` : ""}</td>
-      <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.lastLoginAt ? s.lastLoginAt.toLocaleDateString("en-IN") : "—"}</td>
+      <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.lastLoginAt ? istDate(s.lastLoginAt) : "—"}</td>
       <td style="padding:10px 12px;font-size:12px;color:#6b7280;">${s.flags.length > 0 ? s.flags.join(" · ") : "—"}</td>
     </tr>
   `

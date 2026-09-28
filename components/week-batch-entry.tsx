@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import { format, startOfWeek, addDays } from "date-fns"
 import { formatCurrency } from "@/lib/format"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { estateTodayDate } from "@/lib/date-utils"
 
 type ActivityCode = { code: string; reference: string; labor_count?: number; expense_count?: number }
 
@@ -39,7 +40,7 @@ type WeekBatchEntryProps = {
 }
 
 function getWeekDays(): { iso: string; short: string; letter: string }[] {
-  const monday = startOfWeek(new Date(), { weekStartsOn: 1 })
+  const monday = startOfWeek(estateTodayDate(), { weekStartsOn: 1 })
   return Array.from({ length: 6 }, (_, i) => {
     const d = addDays(monday, i)
     return {

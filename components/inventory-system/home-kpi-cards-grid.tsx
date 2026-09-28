@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import type { FiscalYear } from "@/lib/fiscal-year-utils"
+import { istDate } from "@/lib/date-utils"
 
 const fmt = (n: number, dp = 0) => formatNumber(n, dp)
 const fmtCur = (n: number) => formatCurrency(n, 0)
@@ -337,7 +338,7 @@ export default function HomeKpiCardsGrid({
                             ? "text-amber-600 dark:text-amber-400"
                             : "text-stone-700 dark:text-stone-300",
                       )}>
-                        {new Date(seasonProjection.projectedEndDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                        {istDate(seasonProjection.projectedEndDate, { day: "numeric", month: "short" })}
                         {seasonProjection.trendDirection !== "flat" && (
                           <span className="ml-1.5">
                             {seasonProjection.trendDirection === "rising" ? "↑" : "↓"}

@@ -21,7 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { formatDateOnly } from "@/lib/date-utils"
+import { estateTodayDate, formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { buildSalesCsv } from "@/lib/sales-export"
@@ -94,7 +94,7 @@ export default function SalesTab({
   } = useFiscalYearSelection()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const [date, setDate] = useState<Date>(new Date())
+  const [date, setDate] = useState<Date>(estateTodayDate())
   const [batchNo, setBatchNo] = useState<string>("")
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [salesFilterLocationId, setSalesFilterLocationId] = useState<string>(LOCATION_ALL)
@@ -853,7 +853,10 @@ export default function SalesTab({
     // visible changing (same bug already fixed in dispatch-tab.tsx).
     setActiveSection("new-sale")
     setEditingRecord(record)
-    setDate(new Date(record.sale_date))
+    // Anchored at noon: record.sale_date is a calendar date, and new Date("2026-11-15") is UTC
+    // midnight -- whose LOCAL parts read 14 Nov anywhere west of Greenwich. Editing a sale would
+    // then silently save it a day earlier than it was.
+    setDate(new Date(String(record.sale_date).slice(0, 10) + "T12:00:00"))
     setBatchNo(record.batch_no || "")
     const resolvedLocationId =
       record.location_id || resolveLocationIdFromLabel(record.location_name || record.location_code || record.estate)

@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useLocale } from "@/components/locale-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { formatDateOnly, istTodayParts, todayIso } from "@/lib/date-utils"
+import { estateTodayDate, formatDateOnly, istTodayParts, todayIso } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
@@ -128,8 +128,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     },
     defaultSort: "date",
   })
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(estateTodayDate())
+  const [calendarMonth, setCalendarMonth] = useState<Date>(estateTodayDate())
   const [inches, setInches] = useState("")
   const [cents, setCents] = useState("")
   const [rainUnit, setRainUnit] = useState<"in" | "cm">("in")
