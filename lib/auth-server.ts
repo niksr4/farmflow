@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/nextjs"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { DEFAULT_APP_LOCALE, normalizeAppLocale } from "@/lib/i18n"
-import { sql } from "@/lib/server/db"
+import { isDbConfigured, sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { normalizeUsernameLookup } from "@/lib/usernames"
 
@@ -112,7 +112,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
 
   const ownerContext = normalizeTenantContext(undefined, "owner")
 
-  if (user?.id && sql) {
+  if (user?.id && isDbConfigured) {
     let rows: UserLookupRow[] = []
     try {
       rows = (await runTenantQuery(
@@ -199,12 +199,20 @@ export async function requireSessionUser(): Promise<SessionUser> {
   }
 
   /**
-   * NO DATABASE TO ASK. Distinct from the case above: nothing has told us the user is
-   * gone, we simply cannot check. Routes gate on `isDbConfigured` and return
-   * databaseNotConfiguredResponse() well before this matters, so this exists to keep a
-   * DB-less local boot behaving as it always has rather than throwing Unauthorized.
+   * NO DATABASE TO ASK. Distinct from the case above: nothing has told us the user is gone,
+   * we simply cannot check. Routes gate on `isDbConfigured` and return
+   * databaseNotConfiguredResponse() well before this matters, so this keeps a DB-less local
+   * boot working rather than failing.
+   *
+   * GATED ON `isDbConfigured`, NOT ON `sql` BEING FALSY -- `sql` is never falsy.
+   * lib/server/db.ts line 80 is `baseUrl ? neon(baseUrl) : createUnavailableClient()`, so an
+   * unconfigured database yields a stub that THROWS on use rather than an absent client.
+   * Testing `sql` as a boolean therefore reads as "configured" always: the three guards here
+   * would enter their lookups, the stub would throw "Database not configured", and since that
+   * is not one of the missing-column errors the catch re-raises it. A DB-less boot got a driver
+   * error instead of a session, and this branch could never be reached at all.
    */
-  if (!sql && user?.id && user?.tenantId && user?.role) {
+  if (!isDbConfigured && user?.id && user?.tenantId && user?.role) {
     return toSessionUser({
       id: user.id,
       username: user.name || "",
@@ -218,7 +226,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
     })
   }
 
-  if (user?.name && sql) {
+  if (user?.name && isDbConfigured) {
     const normalizedUsername = normalizeUsernameLookup(user.name)
     let rows: UserLookupRow[] = []
     try {

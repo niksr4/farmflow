@@ -22,9 +22,8 @@ const { sqlTag, runTenantQuery, getServerSession, state } = vi.hoisted(() => ({
   sqlTag: ((strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })) as any,
   runTenantQuery: vi.fn(),
   getServerSession: vi.fn(),
-  // `sql` is read at call time (`if (user?.id && sql)`), so the "no database configured"
-  // branch needs the binding itself to change between tests -- hence a getter over a holder
-  // rather than a fixed value in the mock factory.
+  // `isDbConfigured` is read at call time, so the "no database" case needs the binding itself
+  // to change between tests -- hence a getter over a holder rather than a fixed value.
   state: { dbConfigured: true },
 }))
 
@@ -39,9 +38,24 @@ vi.mock("next-auth/next", () => ({
 
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
+/**
+ * MIRRORS PRODUCTION, WHICH NEVER HAS A FALSY `sql`.
+ *
+ * lib/server/db.ts exports `baseUrl ? neon(baseUrl) : createUnavailableClient()` -- an
+ * unconfigured database gives a stub that THROWS when used, not `undefined`. An earlier version
+ * of this file mocked `sql` as undefined, which made the no-database test pass against a shape
+ * that cannot occur: it was pinning the mock rather than the behaviour, and it hid that the
+ * three guards were testing `sql` for truthiness and so always read as "configured".
+ *
+ * So `sql` stays truthy here in both states, and throws when unconfigured. A test that reaches
+ * the database while claiming there is none now fails loudly instead of passing quietly.
+ */
 vi.mock("@/lib/server/db", () => ({
   get sql() {
-    return state.dbConfigured ? sqlTag : undefined
+    if (state.dbConfigured) return sqlTag
+    return (() => {
+      throw new Error("Database not configured. Set DATABASE_URL_DEV or DATABASE_URL.")
+    }) as any
   },
   get isDbConfigured() {
     return state.dbConfigured
@@ -143,7 +157,12 @@ describe("the token is still trusted when there is no database to ask", () => {
     /**
      * Distinct from a deleted user: nothing has said the account is gone, there is simply
      * nothing to check against. Routes gate on isDbConfigured long before this matters, so
-     * this keeps a DB-less local boot working rather than throwing.
+     * this keeps a DB-less local boot working rather than failing.
+     *
+     * Note the mocked `sql` throws in this state, exactly as the real unavailable client does.
+     * If the guards went back to testing `sql` for truthiness they would enter the lookup, the
+     * stub would throw, and this test would fail on that error rather than passing -- which is
+     * the point of mocking it that way.
      */
     state.dbConfigured = false
     getServerSession.mockResolvedValue(staleSession({ role: "admin", tenantId: "tenant-x" }))
