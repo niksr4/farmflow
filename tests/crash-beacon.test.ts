@@ -6,6 +6,7 @@ import {
   pruneRecords,
   sessionDurationSeconds,
   MAX_RECORD_AGE_MS,
+  MAX_CRASH_RETURN_GAP_MS,
   MIN_CRASH_INTERACTIONS,
   STALE_AFTER_MS,
   type SessionRecord,
@@ -53,13 +54,18 @@ describe("classifySession", () => {
   })
 
   it("reports a stale foreground session with no teardown as a crash", () => {
-    // startedAt moved back with lastSeenAt. It used to be left at the default, which put the
-    // session's last heartbeat four minutes BEFORE it started -- an impossible record that only
-    // passed because nothing looked at duration. sessionDurationSeconds clamps such a record to
-    // zero, so it now reads as a page that never ran.
+    /**
+     * Two things this record has had to be corrected about, both of which made it pass for the
+     * wrong reason:
+     *  - startedAt used to be left at the default, putting the last heartbeat four minutes
+     *    BEFORE the session started. sessionDurationSeconds clamps that to zero, so it read as
+     *    a page that never ran.
+     *  - the gap to this load used to be exactly five minutes, landing precisely ON
+     *    MAX_CRASH_RETURN_GAP_MS once that ceiling was added. One minute is comfortably inside.
+     */
     expect(
       classifySession(
-        record({ startedAt: NOW - 10 * 60_000, lastSeenAt: NOW - 5 * 60_000, visibility: "visible" }),
+        record({ startedAt: NOW - 10 * 60_000, lastSeenAt: NOW - 60_000, visibility: "visible" }),
         NOW,
       ),
     ).toBe("crashed")
@@ -220,5 +226,78 @@ describe("sessionDurationSeconds", () => {
   it("never returns a negative duration when clocks disagree", () => {
     // localStorage survives system clock changes; a negative duration would be nonsense.
     expect(sessionDurationSeconds(record({ startedAt: NOW, lastSeenAt: NOW - 10_000 }))).toBe(0)
+  })
+})
+
+describe("a crash means they came back", () => {
+  /**
+   * The ceiling that turned this beacon from a working-day counter back into a crash detector.
+   * Note the 21 tests above ALL passed before it existed, which is why these are separate: none
+   * of them was describing the return gap, so none of them could notice it going away.
+   */
+  it("does not report a session whose next load came the following morning", () => {
+    // Fifteen hours, the production median. A person, not a crash.
+    expect(
+      classifySession(
+        record({ startedAt: NOW - 15 * 3600_000 - 145_000, lastSeenAt: NOW - 15 * 3600_000 }),
+        NOW,
+      ),
+    ).toBe("backgrounded")
+  })
+
+  it("reports one where they relaunched within the minute", () => {
+    expect(
+      classifySession(record({ startedAt: NOW - 200_000, lastSeenAt: NOW - 64_000 }), NOW),
+    ).toBe("crashed")
+  })
+
+  it("holds the boundary from both sides", () => {
+    const at = (gapMs: number) =>
+      classifySession(record({ startedAt: NOW - gapMs - 120_000, lastSeenAt: NOW - gapMs }), NOW)
+    expect(at(MAX_CRASH_RETURN_GAP_MS - 1_000)).toBe("crashed")
+    expect(at(MAX_CRASH_RETURN_GAP_MS + 1_000)).toBe("backgrounded")
+  })
+
+  it("the ceiling cannot override a clean teardown or a live session", () => {
+    // Ordering matters: a pagehide is an answer, and a beating heartbeat is the current tab.
+    // Neither should be reclassified by a gap that, for a live session, is meaninglessly small.
+    expect(classifySession(record({ closedAt: NOW - 20 * 3600_000 }), NOW)).toBe("clean")
+    expect(classifySession(record({ lastSeenAt: NOW - 1_000 }), NOW)).toBe("active")
+  })
+
+  it("still refuses a hidden session regardless of how fast they came back", () => {
+    expect(
+      classifySession(record({ lastSeenAt: NOW - 60_000, visibility: "hidden" }), NOW),
+    ).toBe("backgrounded")
+  })
+
+  /**
+   * REPLAYED FROM PRODUCTION, not invented. These are the ten sampled events behind
+   * JAVASCRIPT-NEXTJS-D over 90 days -- [durationSeconds, secondsSinceLastHeartbeat] exactly as
+   * Sentry recorded them. Nine were reported as crashes. One person had actually come back.
+   *
+   * Hand-written fixtures are how a threshold gets tuned to agree with itself; this asserts
+   * against what the estates' phones actually did.
+   */
+  it("silences nine of the ten real production reports, and keeps the tenth", () => {
+    const observed: Array<[number, number]> = [
+      [63, 2290], [145, 76928], [145, 344402], [21340, 65010], [85, 30966],
+      [31, 38215], [35, 110483], [7735, 9369], [50, 55410], [310, 64],
+    ]
+    const outcomes = observed.map(([durationSeconds, gapSeconds]) =>
+      classifySession(
+        record({
+          startedAt: NOW - gapSeconds * 1000 - durationSeconds * 1000,
+          lastSeenAt: NOW - gapSeconds * 1000,
+          visibility: "visible",
+          interactions: 20,
+        }),
+        NOW,
+      ),
+    )
+    const crashes = outcomes.filter((outcome) => outcome === "crashed")
+    expect(crashes, `outcomes were ${outcomes.join(", ")}`).toHaveLength(1)
+    // The survivor is the 64-second return -- the last entry, and the only plausible crash.
+    expect(outcomes[outcomes.length - 1]).toBe("crashed")
   })
 })
