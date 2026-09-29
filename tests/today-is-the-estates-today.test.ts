@@ -606,13 +606,27 @@ const HOST_RELATIVE_NAMED = new RegExp(
  * built around. Raised by CodeRabbit on PR #53.
  */
 const HOST_RELATIVE_NAMESPACE = new RegExp(String.raw`\b\w+\.(${HOST_RELATIVE_NAMES})\s*\(`)
+const DATE_FNS_NAMES = String.raw`format|startOfWeek|endOfWeek|startOfMonth|endOfMonth|startOfDay|addDays|subDays|addWeeks|subWeeks|addMonths|subMonths|addYears|subYears|differenceInDays|differenceInCalendarDays`
+
 /**
  * NOT PRECEDED BY A DOT. `\bformat(` also matches `Intl.DateTimeFormat(...).format(new Date())`,
- * which is correct code -- it is how todayIso() is implemented. That false positive is the only
+ * which is correct code -- it is how todayIso() is implemented. That false positive was the only
  * reason lib/date-utils.ts needed an entry in the accepted list below, so the scanner was
  * manufacturing its own exemption. Raised by CodeRabbit on PR #53.
  */
-const DATE_FNS_ON_NOW = /(?<![.\w$])(format|startOfWeek|endOfWeek|startOfMonth|endOfMonth|startOfDay|addDays|subDays|addWeeks|subWeeks|addMonths|subMonths|addYears|subYears|differenceInDays|differenceInCalendarDays)\s*\(\s*new Date\(\)/g
+const DATE_FNS_ON_NOW = new RegExp(String.raw`(?<![.\w$])(${DATE_FNS_NAMES})\s*\(\s*new Date\(\)`, "g")
+
+/**
+ * ...WHICH THEN EXCLUDED THE NAMESPACE FORM TOO. `import * as dateFns from "date-fns"` followed by
+ * `dateFns.format(new Date())` is dotted, so the lookbehind above skips it -- the same asymmetry
+ * I had just closed for isToday/isFuture and left open here, in the same commit. Raised by
+ * CodeRabbit on PR #53's second pass.
+ *
+ * Only counted in files that actually import date-fns, so `Intl.DateTimeFormat(...).format(...)`
+ * in a file with no date-fns import stays unflagged.
+ */
+const DATE_FNS_NAMESPACE_ON_NOW = new RegExp(String.raw`\b\w+\.(${DATE_FNS_NAMES})\s*\(\s*new Date\(\)`, "g")
+const IMPORTS_DATE_FNS = /from\s*["']date-fns["']/
 
 /**
  * Download filenames only. A CSV named with the viewer's date is a cosmetic mismatch on a file the
@@ -629,14 +643,30 @@ const DATE_FNS_ON_NOW_ACCEPTED: Record<string, { count: number; why: string }> =
   "components/processing-tab.tsx": { count: 1, why: "date inside a CSV download filename" },
 }
 
+/**
+ * date-fns-on-`new Date()` hits in one source string.
+ *
+ * Source text, not a path -- for the same reason findUnzonedLocaleCalls and findRuntimeDdlLines
+ * take it: the first version of the namespace fixture below asserted on the two regexes inline,
+ * which is re-deriving the rule in the test AGAIN, inside the fix for exactly that. Third time in
+ * one PR, so it is clearly the default mistake rather than a slip.
+ */
+const countDateFnsOnNow = (source: string): number => {
+  const src = stripComments(source)
+  const direct = src.match(DATE_FNS_ON_NOW)?.length ?? 0
+  // Namespace calls only count where date-fns is actually imported, so a DateTimeFormat
+  // `.format(new Date())` in an unrelated file is not swept up.
+  const viaNamespace = IMPORTS_DATE_FNS.test(src) ? src.match(DATE_FNS_NAMESPACE_ON_NOW)?.length ?? 0 : 0
+  return direct + viaNamespace
+}
+
 const dateFnsOnNowCounts = (): Record<string, number> => {
   const files = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
     .split("\n")
     .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
   const counts: Record<string, number> = {}
   for (const file of files) {
-    const src = stripComments(readFileSync(resolve(process.cwd(), file), "utf8"))
-    const hits = src.match(DATE_FNS_ON_NOW)?.length ?? 0
+    const hits = countDateFnsOnNow(readFileSync(resolve(process.cwd(), file), "utf8"))
     if (hits) counts[file] = hits
   }
   return counts
@@ -672,6 +702,26 @@ describe("date-fns is never handed the host's now", () => {
       "isToday/isFuture/isPast take no reference date, so they are always the HOST's opinion. " +
         "Compare YYYY-MM-DD strings against todayIso() instead.",
     ).toEqual([])
+  })
+
+  it("counts a date-fns call made through a namespace import", () => {
+    /**
+     * The lookbehind that killed the `Intl...format(` false positive also skipped
+     * `dateFns.format(new Date())`, because that is dotted too. I closed this asymmetry for
+     * isToday/isFuture and left it open for the function calls in the very same commit -- which is
+     * a tidy demonstration of why "fix the instance" is not the same as "fix the class".
+     */
+    expect(
+      countDateFnsOnNow('import * as dateFns from "date-fns"\nconst d = dateFns.format(new Date(), "yyyy-MM-dd")'),
+    ).toBe(1)
+    // Named import, the form already covered:
+    expect(countDateFnsOnNow('import { format } from "date-fns"\nformat(new Date(), "yyyy-MM-dd")')).toBe(1)
+    // And the false positive it must NOT resurrect: a DateTimeFormat method call in a file with no
+    // date-fns import. This is todayIso()'s own implementation.
+    expect(
+      countDateFnsOnNow('const parts = new Intl.DateTimeFormat("en-CA", opts).format(new Date())'),
+      "Intl.DateTimeFormat is not date-fns",
+    ).toBe(0)
   })
 
   it("rejects a host-relative predicate reached through a namespace import", () => {

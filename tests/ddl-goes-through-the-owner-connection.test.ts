@@ -10,18 +10,20 @@ import { describe, expect, it } from "vitest"
  * preference. `sql` is the app_runtime connection: least-privilege, non-BYPASSRLS, DML-only, and
  * NOT the owner of any table. `adminSql` is neondb_owner and exists for DDL and self-healing.
  *
- * app/api/migrate-sales/route.ts issued twelve ALTER TABLEs through `sql`. ALTER TABLE checks
- * ownership before anything else, so every one of them would have been refused wherever
- * APP_DATABASE_URL is set -- which per CLAUDE.md is both dev and prod. Verified against production:
- * sales_records and dispatch_records are both owned by neondb_owner, and the runtime role is
- * app_runtime.
+ * WHERE THIS CAME FROM. app/api/migrate-sales/route.ts issued twelve ALTER TABLEs through `sql`.
+ * ALTER TABLE checks ownership before anything else, so every one would have been refused wherever
+ * APP_DATABASE_URL is set -- both dev and prod. Verified against production: sales_records and
+ * dispatch_records are owned by neondb_owner and the runtime role is app_runtime. `IF NOT EXISTS`
+ * does not rescue it; that suppresses the "already exists" error, not the privilege check.
  *
- * `IF NOT EXISTS` does not rescue it. That suppresses the "already exists" error, not the
- * privilege check.
+ * That route has since been DELETED rather than repaired, so this guard now protects against the
+ * class rather than a live instance -- which is the point of it. Nothing in the tree offends
+ * today, and the scanner's own behaviour is asserted below so it cannot quietly stop working while
+ * the tree stays clean.
  *
- * Failure mode is why this is a guard and not a fixed bug: the route is owner-gated and rarely
- * called, so a permission error sits there indefinitely without anyone noticing -- the project's
- * usual shape, where nothing throws in front of a person.
+ * The failure mode is why a guard is worth more than the one fix: an owner-gated, rarely-called
+ * route can sit broken indefinitely without anyone noticing -- the project's usual shape, where
+ * nothing throws in front of a person.
  */
 
 const DDL = /\b(ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE|CREATE\s+INDEX|DROP\s+INDEX|CREATE\s+(?:OR\s+REPLACE\s+)?(?:VIEW|FUNCTION)|ALTER\s+TYPE|CREATE\s+TYPE|GRANT|REVOKE)\b/i
