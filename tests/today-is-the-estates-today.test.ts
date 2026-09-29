@@ -618,12 +618,21 @@ const HOST_RELATIVE_NAMESPACE = new RegExp(String.raw`\b\w+\.(${HOST_RELATIVE_NA
  * the Intl false positive for free: a file with no date-fns import has no bindings, so
  * `Intl.DateTimeFormat(...).format(new Date())` cannot match anything.
  */
-const IMPORTS_DATE_FNS = /from\s*["']date-fns["']/
+/**
+ * Matches the package AND its subpaths. `import format from "date-fns/format"` is a normal way to
+ * import it -- and the bare-package pattern returned false for such a file, so the whole scan
+ * counted zero. A guard that silently skips a legitimate import style is not narrower, it is blind.
+ * Raised by CodeRabbit on PR #53's fourth pass.
+ */
+const IMPORTS_DATE_FNS = /from\s*["']date-fns(?:\/[\w./-]+)?["']/
 
 /** Local binding names a file actually pulls out of date-fns, aliases resolved to the LOCAL name. */
 const dateFnsNamedBindings = (src: string): string[] => {
   const bindings: string[] = []
-  for (const block of src.matchAll(/import\s*(?:type\s+)?\{([^}]*)\}\s*from\s*["']date-fns["']/g)) {
+  // Default import off a subpath: `import format from "date-fns/format"`, where the local name is
+  // the whole binding.
+  for (const d of src.matchAll(/import\s+(\w+)\s+from\s*["']date-fns\/[\w./-]+["']/g)) bindings.push(d[1])
+  for (const block of src.matchAll(/import\s*(?:type\s+)?\{([^}]*)\}\s*from\s*["']date-fns(?:\/[\w./-]+)?["']/g)) {
     for (const spec of block[1].split(",")) {
       const trimmed = spec.trim().replace(/^type\s+/, "")
       if (!trimmed) continue
@@ -638,7 +647,7 @@ const dateFnsNamedBindings = (src: string): string[] => {
 
 /** `import * as dateFns from "date-fns"` -> ["dateFns"]. */
 const dateFnsNamespaceBindings = (src: string): string[] =>
-  [...src.matchAll(/import\s*\*\s*as\s+(\w+)\s*from\s*["']date-fns["']/g)].map((m) => m[1])
+  [...src.matchAll(/import\s*\*\s*as\s+(\w+)\s*from\s*["']date-fns(?:\/[\w./-]+)?["']/g)].map((m) => m[1])
 
 /**
  * Download filenames only. A CSV named with the viewer's date is a cosmetic mismatch on a file the
@@ -764,6 +773,9 @@ describe("date-fns is never handed the host's now", () => {
       countDateFnsOnNow('import { addDays } from "date-fns"\nsomeOtherHelper(new Date())'),
       "only bindings this file actually imported count",
     ).toBe(0)
+    // Subpath imports, both shapes -- the bare-package check used to return 0 for these files.
+    expect(countDateFnsOnNow('import format from "date-fns/format"\nformat(new Date(), "yyyy")')).toBe(1)
+    expect(countDateFnsOnNow('import { startOfWeek } from "date-fns/startOfWeek"\nstartOfWeek(new Date())')).toBe(1)
     // And the Intl false positive stays dead, now for free: no date-fns import, no bindings.
     expect(countDateFnsOnNow('const p = new Intl.DateTimeFormat("en-CA", o).format(new Date())')).toBe(0)
     // Even alongside a date-fns import, the dotted method call is still excluded.
