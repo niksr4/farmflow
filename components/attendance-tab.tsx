@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { addDays, format, isToday, isFuture, startOfWeek } from "date-fns"
+import { addDays, format, startOfWeek } from "date-fns"
 import {
   Check,
   ChevronLeft,
@@ -43,6 +43,7 @@ import { formatCurrency } from "@/lib/format"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 import ActivityCodeReference from "@/components/attendance/activity-code-reference"
 import WorkerAllocation from "@/components/attendance/worker-allocation"
+import { estateTodayDate, todayIso } from "@/lib/date-utils"
 
 type AttendanceWorker = {
   id: string
@@ -135,10 +136,24 @@ const formatDurationHours = (checkInIso: string | null, checkOutIso: string | nu
 
 function dateToStr(d: Date): string { return format(d, "yyyy-MM-dd") }
 
+/**
+ * THE ESTATE'S WEEK, not the viewer's.
+ *
+ * This was seeded with `new Date()`. date-fns reads local parts, so between 00:00 and 05:30 IST a
+ * viewer west of India got the PREVIOUS day -- and therefore, on a Monday, the previous WEEK: the
+ * strip showed Mon-Sun of a week that had already ended, and the estate's actual today was not on
+ * it at all. That window is exactly when a muster gets taken, and this is the tab the original
+ * "04:31 for an 08:01 punch" report came from. The clock half of that was fixed; this is the
+ * calendar half, in a date-fns shape the existing guard could not see.
+ */
 function getWeekDays(weekOffset: number): Date[] {
-  const start = addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7)
+  const start = addDays(startOfWeek(estateTodayDate(), { weekStartsOn: 1 }), weekOffset * 7)
   return Array.from({ length: 7 }, (_, i) => addDays(start, i))
 }
+
+/** Day comparisons on the estate's calendar. YYYY-MM-DD compares correctly as a string. */
+const isEstateToday = (d: Date) => dateToStr(d) === todayIso()
+const isAfterEstateToday = (d: Date) => dateToStr(d) > todayIso()
 
 type AttendanceTabProps = {
   /**
@@ -155,7 +170,7 @@ type AttendanceTabProps = {
 
 export default function AttendanceTab({ selectedEstate = null }: AttendanceTabProps) {
   const [weekOffset, setWeekOffset] = useState(0)
-  const [selectedDate, setSelectedDate] = useState(dateToStr(new Date()))
+  const [selectedDate, setSelectedDate] = useState(todayIso())
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
   // The date this estate started recording labour on the muster, or null if it never did.
   // Allocation is only counted from that date, so it is also the only date range worth offering.
@@ -276,7 +291,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
 
   useEffect(() => {
     const days = getWeekDays(weekOffset)
-    setSelectedDate(dateToStr(weekOffset === 0 ? new Date() : days[0]))
+    setSelectedDate(weekOffset === 0 ? todayIso() : dateToStr(days[0]))
   }, [weekOffset])
 
   const loadSnapshot = useCallback(
@@ -806,7 +821,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
           {weekDays.map((day) => {
             const str = dateToStr(day)
             const isSelected = str === selectedDate
-            const isFut = isFuture(day) && !isToday(day)
+            const isFut = isAfterEstateToday(day)
             return (
               <button
                 key={str}
@@ -827,10 +842,10 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                   {format(day, "EEE").slice(0, 1)}
                 </span>
                 <span className={cn("text-base font-black leading-tight mt-0.5",
-                  isSelected ? "text-white" : isToday(day) ? "text-emerald-700" : "")}>
+                  isSelected ? "text-white" : isEstateToday(day) ? "text-emerald-700" : "")}>
                   {format(day, "d")}
                 </span>
-                {isToday(day) && !isSelected && (
+                {isEstateToday(day) && !isSelected && (
                   <span className="h-1 w-1 rounded-full bg-emerald-500 mt-0.5" />
                 )}
               </button>

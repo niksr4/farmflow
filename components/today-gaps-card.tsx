@@ -22,6 +22,7 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 import { getSeasonBadge } from "@/lib/season-utils"
 import { isNetworkError } from "@/lib/network-error"
 import { totalRainfallBetween } from "@/lib/rainfall"
+import { estateTodayDate, todayIso } from "@/lib/date-utils"
 
 type GapDay = { date: string; label: string; isToday: boolean }
 
@@ -35,7 +36,7 @@ type WeekStats = {
 type Props = { onNavigate: (tab: string) => void; className?: string }
 
 function getWeekRange() {
-  const start = startOfWeek(new Date(), { weekStartsOn: 1 })
+  const start = startOfWeek(estateTodayDate(), { weekStartsOn: 1 })
   return {
     startDate: format(start, "yyyy-MM-dd"),
     endDate: format(addDays(start, 6), "yyyy-MM-dd"),
@@ -93,7 +94,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
 
       setStats({ laborCost, expenseCost, rainfallInches, rainfallDays })
 
-      const todayStr = format(new Date(), "yyyy-MM-dd")
+      const todayStr = todayIso()
       // Only flag today — past days without a labour entry are not necessarily "missing"
       // (rest days, off-season lulls, and days with no work are all normal on a farm).
       const gapDays: GapDay[] = !datesWithLabor.has(todayStr)
@@ -202,7 +203,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
                 <div className="flex items-center justify-center rounded-xl bg-amber-400 px-2.5 py-1.5 min-w-[52px]">
                   <div className="text-center">
                     <p className="text-[10px] font-bold uppercase tracking-wide leading-none text-amber-950">TODAY</p>
-                    <p className="text-base font-black leading-tight text-amber-950">{format(new Date(), "d")}</p>
+                    <p className="text-base font-black leading-tight text-amber-950">{format(estateTodayDate(), "d")}</p>
                   </div>
                 </div>
                 <span className="text-sm font-bold text-amber-900">Log today&apos;s labour</span>

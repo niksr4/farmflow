@@ -23,7 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { formatDateOnly } from "@/lib/date-utils"
+import { estateTodayDate, formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
@@ -82,7 +82,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   } = useFiscalYearSelection()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const [date, setDate] = useState<Date>(new Date())
+  const [date, setDate] = useState<Date>(estateTodayDate())
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [coffeeType, setCoffeeType] = useState<string>("Arabica")
   const [bagType, setBagType] = useState<string>("Dry Parchment")

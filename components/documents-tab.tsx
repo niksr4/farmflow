@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { istDate } from "@/lib/date-utils"
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 
@@ -54,11 +55,15 @@ const documentTypeOptions = [
 
 const typeLabel = (value: string) => documentTypeOptions.find((option) => option.value === value)?.label || value
 
+/**
+ * created_at is a timestamptz -- the moment of upload, not a calendar date. formatDateOnly reads
+ * LOCAL parts for any value that is not midnight, so it still rendered the viewer's day. An
+ * instant needs its zone pinned.
+ */
 const formatDate = (value: string | null | undefined) => {
   if (!value) return ""
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleDateString()
+  if (Number.isNaN(new Date(value).getTime())) return value
+  return istDate(value)
 }
 
 const formatBytes = (bytes: number) => {

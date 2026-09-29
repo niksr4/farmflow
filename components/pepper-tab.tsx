@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CalendarIcon, Download, FileSpreadsheet, Loader2, Save, Leaf, Edit, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
-import { formatDateOnly } from "@/lib/date-utils"
+import { estateTodayDate, formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
@@ -61,7 +61,7 @@ export function PepperTab() {
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(LOCATION_ALL)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(estateTodayDate())
   const [kgPicked, setKgPicked] = useState("")
   const [greenPepper, setGreenPepper] = useState("")
   const [dryPepper, setDryPepper] = useState("")

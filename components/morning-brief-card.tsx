@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatNumber } from "@/lib/format"
 import type { WeatherFarmAdvice } from "@/lib/coffee-agronomy"
+import { istDate } from "@/lib/date-utils"
 
 type BriefAction = { label: string; tab: string }
 type CostCode = { code: string; reference: string; totalAmount: number; entryCount: number }
@@ -105,7 +106,7 @@ export default function MorningBriefCard({
         )}
         {!loading && hasContent && (
           <span className="rounded-full bg-emerald-400/[0.12] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-300 ring-1 ring-emerald-400/20">
-            {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+            {istDate(new Date(), { weekday: "short", day: "numeric", month: "short" })}
           </span>
         )}
       </div>

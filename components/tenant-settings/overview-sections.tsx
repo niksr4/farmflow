@@ -181,7 +181,7 @@ export function EstateIdentitySection({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-amber-50/70 p-4 shadow-sm">
+          <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-amber-50/70 dark:from-emerald-950/30 dark:via-slate-900 dark:to-amber-950/20 p-4 shadow-sm">
             <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Live preview</p>
             <p className="mt-3 text-xl font-semibold text-foreground">{estateLabelPreview}</p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -233,7 +233,7 @@ export function EstateProfileSection({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="space-y-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/40 p-4 shadow-sm">
+          <div className="space-y-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/40 dark:from-emerald-950/25 dark:via-slate-900 dark:to-emerald-950/15 p-4 shadow-sm">
             <div className="space-y-1">
               <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
                 Planning baseline
@@ -281,7 +281,7 @@ export function EstateProfileSection({
             </div>
           </div>
 
-          <div className="space-y-4 rounded-2xl border border-cyan-100 bg-gradient-to-br from-cyan-50/70 via-white to-sky-50/50 p-4 shadow-sm">
+          <div className="space-y-4 rounded-2xl border border-cyan-100 bg-gradient-to-br from-cyan-50/70 via-white to-sky-50/50 dark:from-cyan-950/25 dark:via-slate-900 dark:to-sky-950/15 p-4 shadow-sm">
             <div className="space-y-1">
               <Badge variant="outline" className="border-cyan-200 bg-white text-cyan-700">
                 Exact weather pin
@@ -515,7 +515,7 @@ export function DataImportSection() {
         <CardDescription>Upload CSVs to onboard a new tenant faster.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-muted-foreground">
-        <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/50 p-4 text-amber-950 shadow-sm">
+        <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/50 dark:from-amber-950/25 dark:via-slate-900 dark:to-amber-950/15 p-4 text-amber-950 shadow-sm">
           <p className="font-semibold">Best used during onboarding or history backfill</p>
           <p className="mt-1 text-sm leading-6 text-amber-900/80">
             Use this when you already have CSVs from paper records, Excel sheets, or a previous system. Once the estate

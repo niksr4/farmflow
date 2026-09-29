@@ -11,7 +11,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, istClock, istDate } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { buildTenantWeatherQuery, formatTenantWeatherCoordinates } from "@/lib/tenant-estate-profile"
 import { parseWeatherCoordinates, WEATHER_REGIONS, type WeatherRegion } from "@/lib/weather-config"
@@ -238,9 +238,7 @@ export default function WeatherTab() {
         const shortLabel =
           index === 0
             ? "Today"
-            : new Date(day.date_epoch * 1000).toLocaleDateString("en-IN", {
-                weekday: "short",
-              })
+            : istDate(new Date(day.date_epoch * 1000), { weekday: "short" })
         return {
           dateEpoch: day.date_epoch,
           label,
@@ -430,7 +428,7 @@ export default function WeatherTab() {
                 Exact coordinates: {selectedRegionQuery}
                 {locationLabel ? ` · Provider location: ${locationLabel}` : ""}
                 {" · "}
-                Last updated: {new Date(location.localtime_epoch * 1000).toLocaleTimeString("en-IN")}
+                Last updated: {istClock(new Date(location.localtime_epoch * 1000))}
               </CardDescription>
             </div>
             <div className="w-full sm:w-[220px]">

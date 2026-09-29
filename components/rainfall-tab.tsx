@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useLocale } from "@/components/locale-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { formatDateOnly, istTodayParts, todayIso } from "@/lib/date-utils"
+import { estateTodayDate, formatDateOnly, istTodayParts, todayIso } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
@@ -128,8 +128,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     },
     defaultSort: "date",
   })
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(estateTodayDate())
+  const [calendarMonth, setCalendarMonth] = useState<Date>(estateTodayDate())
   const [inches, setInches] = useState("")
   const [cents, setCents] = useState("")
   const [rainUnit, setRainUnit] = useState<"in" | "cm">("in")
@@ -267,12 +267,15 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     setCm("")
     setMm("")
     setNotes("")
-    setSelectedDate(new Date())
-    setCalendarMonth(new Date())
+    // The estate's today, not the viewer's -- same reason as the initialisers above. Fixing only
+    // those left this reverting to the browser's date on every save, so the very first entry after
+    // a submit was the one that went to the wrong day.
+    setSelectedDate(estateTodayDate())
+    setCalendarMonth(estateTodayDate())
   }
 
   const handleEditRecord = (record: RainfallRecord) => {
-    const date = parseRecordDate(record.record_date) || new Date()
+    const date = parseRecordDate(record.record_date) || estateTodayDate()
     setEditingId(record.id)
     setSelectedDate(date)
     setCalendarMonth(date)
@@ -1427,7 +1430,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                   </div>
                   <Calendar mode="single" selected={selectedDate} month={calendarMonth} onMonthChange={setCalendarMonth}
                     onSelect={(date) => { if (date) { setSelectedDate(date); setCalendarMonth(date) } }}
-                    disabled={{ after: new Date() }} />
+                    disabled={{ after: estateTodayDate() }} />
                 </PopoverContent>
               </Popover>
             </div>

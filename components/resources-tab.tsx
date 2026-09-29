@@ -326,7 +326,7 @@ export default function ResourcesTab() {
 
   return (
     <div className="space-y-6 pb-4">
-      <Card id="overview" className="scroll-mt-24 overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-amber-50 shadow-sm">
+      <Card id="overview" className="scroll-mt-24 overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-emerald-950/30 dark:via-slate-900 dark:to-amber-950/20 shadow-sm">
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
             <CardTitle className="flex items-center gap-2 text-xl">

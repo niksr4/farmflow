@@ -35,7 +35,7 @@ export function ConsoleOverviewSection({
   return (
     <Card
       id="console-overview"
-      className="scroll-mt-24 border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50"
+      className="scroll-mt-24 border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-emerald-950/30 dark:via-slate-900 dark:to-amber-950/20"
     >
       <CardHeader>
         <CardTitle>{isOwner ? "Owner Console" : "Admin Console"}</CardTitle>

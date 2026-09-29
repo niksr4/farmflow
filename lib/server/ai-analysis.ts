@@ -5,7 +5,7 @@ import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { CROP_LABEL, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 import { EXCLUDE_REVALUATION_SQL } from "@/lib/revaluation-notes"
-import { istTodayParts } from "@/lib/date-utils"
+import { istDate, istTodayParts } from "@/lib/date-utils"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
 
@@ -414,7 +414,7 @@ function buildDataSummary(data: DataSummaryInput): string {
   sections.push(`## Crop: ${CROP_LABEL}`)
 
   sections.push(`## Fiscal Year: ${data.fiscalYear}`)
-  sections.push(`## Analysis Date: ${new Date().toLocaleDateString("en-IN")}`)
+  sections.push(`## Analysis Date: ${istDate(new Date())}`)
 
   const history =
     data.transactionHistory && data.transactionHistory.length > 0

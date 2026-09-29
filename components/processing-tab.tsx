@@ -24,7 +24,7 @@ import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { formatDateOnly } from "@/lib/date-utils"
+import { estateTodayDate, formatDateOnly, todayIso } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
@@ -75,7 +75,7 @@ interface ProcessingRecord {
 
 const emptyRecord: Omit<ProcessingRecord, "id"> = {
   lot_id: "",
-  process_date: format(new Date(), "yyyy-MM-dd"),
+  process_date: todayIso(),
   crop_today: null,
   crop_todate: 0,
   ripe_today: null,
@@ -156,7 +156,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const [showAutoCalc, setShowAutoCalc] = useState(false)
   const [showAllRecords, setShowAllRecords] = useState(false)
 
-  const [date, setDate] = useState<Date>(new Date())
+  const [date, setDate] = useState<Date>(estateTodayDate())
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [coffeeType, setCoffeeType] = useState<string>(COFFEE_TYPES[0])

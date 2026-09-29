@@ -89,4 +89,14 @@ export const processingSql = sql
 export const adminSql = adminUrl ? neon(adminUrl) : sql
 
 export const isDbConfigured = Boolean(baseUrl)
+
+/**
+ * Whether a SEPARATE schema-owning connection exists. Not the same question as isDbConfigured.
+ *
+ * `adminSql` falls back to `sql` when no owner URL is configured (line above), so a caller that
+ * gates DDL on isDbConfigured can be handed the least-privilege runtime client and issue
+ * ALTER TABLE through a role that owns nothing -- which is exactly the bug this was added to
+ * close in app/api/migrate-sales. isDbConfigured reads the APP url; this reads the owner's.
+ */
+export const isAdminDbConfigured = Boolean(adminUrl)
 export const databaseUrlSource = baseUrlSource

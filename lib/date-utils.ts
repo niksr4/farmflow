@@ -265,6 +265,53 @@ export function istClock(instant: DateInput): string {
 }
 
 /**
+ * The estate's today, as a Date object safe to hand to date-fns.
+ *
+ * THE SEVENTH SIGNATURE. date-fns `format(d, "yyyy-MM-dd")`, `startOfWeek(d)`, `isToday(d)` and
+ * friends all read a Date's LOCAL parts, so seeding any of them with `new Date()` puts the whole
+ * screen on the viewer's calendar. Eight tabs did exactly that, including the muster -- the surface
+ * the original Africa report came from -- where it meant the week strip and the default day were
+ * the viewer's, not the estate's. Between 00:00 and 05:30 IST that is the previous day, and that
+ * window is when a muster is actually taken.
+ *
+ * Anchored at LOCAL NOON of the estate's date, deliberately. date-fns stays in local time
+ * throughout -- startOfWeek returns a local midnight, addDays keeps local midnights, format reads
+ * local parts -- so the arithmetic is self-consistent, and noon leaves twelve hours of headroom in
+ * either direction so no host offset can push the date across a boundary. An instant (`new Date()`)
+ * or a UTC midnight both can.
+ */
+export function estateTodayDate(): Date {
+  return new Date(`${todayIso()}T12:00:00`)
+}
+
+/**
+ * An instant rendered as an IST CALENDAR DATE. The date-shaped twin of istClock().
+ *
+ * Same defect, other half. istClock() exists because toLocaleTimeString() without a timeZone
+ * renders the viewer's clock; toLocaleDateString() without a timeZone renders the viewer's
+ * CALENDAR, and for the 5.5 hours either side of IST midnight that is a different day. Nine call
+ * sites had hand-rolled it, several passing "en-IN" and reading as though that settled the zone --
+ * it does not. A locale picks the format; only timeZone picks the offset.
+ *
+ * TAKES AN INSTANT, NOT A CALENDAR DATE. A "YYYY-MM-DD" string is already a wall-clock date with
+ * no zone to convert, and pushing one through here would re-anchor it at UTC midnight and shift it
+ * back a day west of Greenwich -- the exact bug this prevents elsewhere. Use formatDateOnly() for
+ * those; readDateParts() reads their literal parts and never touches an offset.
+ */
+export function istDate(
+  instant: DateInput,
+  options: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" },
+): string {
+  const date = resolveDate(instant)
+  if (!date) return "--"
+  // OPTIONS FIRST, timeZone LAST. Spreading them after the zone let a caller pass
+  // `{ timeZone: "UTC" }` and silently defeat the one thing this function exists to guarantee --
+  // a helper named istDate that can be talked out of IST is worse than no helper, because every
+  // call site reads as though it is safe.
+  return new Intl.DateTimeFormat("en-IN", { ...options, timeZone: "Asia/Kolkata" }).format(date)
+}
+
+/**
  * The last COMPLETED Monday-to-Sunday week on the estate's calendar, as two YYYY-MM-DD strings.
  *
  * Extracted from the weekly digest agent, which derived it from `new Date().getDay()` -- the HOST's
