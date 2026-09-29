@@ -520,3 +520,80 @@ describe("a biometric punch shows its times, a manual mark shows the rate", () =
     expect(overtimeInput?.value).toBe("2")
   })
 })
+
+describe("undoing a day is findable", () => {
+  /**
+   * REPORTED BY HONEYFARM, 2026-09-29. A worker (Chitra) was ticked present by mistake. The muster
+   * correctly refused to untick her while she had work recorded -- deleting a money record as a
+   * side effect of a tap is not a decision a screen should make. But the writer then could not
+   * find how to remove the work, and stopped.
+   *
+   * He was looking straight at it. The control was an unpadded `×` glyph in text-stone-300 whose
+   * only affordance was `hover:text-red-500`, and a phone has no hover. Every other control in
+   * that row already had a sized target and an active: state; this one was missed.
+   *
+   * Mounted rather than source-scanned deliberately. A className assertion would pass on the
+   * string "h-8" appearing anywhere in the file, and the thing that actually failed was whether a
+   * person could FIND the control -- which is an accessible name and a real element, not a class.
+   */
+  const withWork = () => {
+    const workers = [worker({ id: "a", name: "Chitra" })]
+    return {
+      workers,
+      snapshot: {
+        workers,
+        presentWorkerIds: ["a"],
+        assignments: [
+          {
+            id: "j1", workerId: "a", activityCode: "105", activityName: "Weeding",
+            locationId: "L1", locationName: "PG", dayFraction: 1, rate: 494,
+            headcount: 1, lumpSum: null, totalCost: 494,
+          },
+        ],
+      },
+    }
+  }
+
+  it("offers a named control to remove the work", async () => {
+    const { workers, snapshot } = withWork()
+    mockMuster(snapshot)
+    await openMuster({ workers })
+
+    // Found the way a person finds it: by what it says it does, not by its class list.
+    const remove = screen.getByRole("button", { name: /remove 105 work allocation/i })
+    expect(remove).toBeInTheDocument()
+  })
+
+  it("the control is an element you can actually hit, not a bare glyph", async () => {
+    const { workers, snapshot } = withWork()
+    mockMuster(snapshot)
+    await openMuster({ workers })
+
+    const remove = screen.getByRole("button", { name: /remove 105 work allocation/i })
+    // A bare `×` text node has no box. This asserts the button carries an explicit size, which is
+    // the difference between an 8px glyph and something reachable with a thumb.
+    expect(remove.className, "the remove control needs a sized touch target").toMatch(/\bh-8\b/)
+    expect(remove.className).toMatch(/\bw-8\b/)
+    // And a touch device gets feedback, since hover: never fires on one.
+    expect(remove.className, "hover: alone is invisible on a phone").toMatch(/active:/)
+  })
+
+  it("refusing to untick says WHERE the work is removed, not just that it must be", async () => {
+    /**
+     * The original message was "Remove their work first — you cannot mark someone absent who has a
+     * job recorded." Correct, and a dead end: it names an action without saying where to perform
+     * it. HoneyFarm's writer read it, agreed with it, and had to ask a person.
+     */
+    const { workers, snapshot } = withWork()
+    mockMuster(snapshot)
+    const { user } = await openMuster({ workers })
+
+    await user.click(screen.getByRole("button", { name: /chitra present/i }))
+
+    expect(toastError).toHaveBeenCalled()
+    const message = String(toastError.mock.calls.at(-1)?.[0] ?? "")
+    expect(message, "must still refuse").toMatch(/remove their work first/i)
+    expect(message, "must point at the control").toMatch(/✕/)
+    expect(message, "and name the block it sits beside").toContain("PG")
+  })
+})
