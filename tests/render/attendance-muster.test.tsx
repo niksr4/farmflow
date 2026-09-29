@@ -560,7 +560,7 @@ describe("undoing a day is findable", () => {
     await openMuster({ workers })
 
     // Found the way a person finds it: by what it says it does, not by its class list.
-    const remove = screen.getByRole("button", { name: /remove 105 work allocation/i })
+    const remove = screen.getByRole("button", { name: /remove weeding at PG work allocation/i })
     expect(remove).toBeInTheDocument()
   })
 
@@ -569,13 +569,60 @@ describe("undoing a day is findable", () => {
     mockMuster(snapshot)
     await openMuster({ workers })
 
-    const remove = screen.getByRole("button", { name: /remove 105 work allocation/i })
-    // A bare `×` text node has no box. This asserts the button carries an explicit size, which is
-    // the difference between an 8px glyph and something reachable with a thumb.
-    expect(remove.className, "the remove control needs a sized touch target").toMatch(/\bh-8\b/)
-    expect(remove.className).toMatch(/\bw-8\b/)
-    // And a touch device gets feedback, since hover: never fires on one.
-    expect(remove.className, "hover: alone is invisible on a phone").toMatch(/active:/)
+    const remove = screen.getByRole("button", { name: /remove weeding at PG work allocation/i })
+    /**
+     * UNPREFIXED TOKENS, deliberately.
+     *
+     * The first version matched /\bh-8\b/, which is also satisfied by `sm:h-8` -- a class that
+     * gives a PHONE nothing at all, while the assertion stays green. The one device this control
+     * has to work on is the one the guard could not see. Same vacuousness this repo keeps
+     * relearning: a pattern that matches a MENTION rather than the thing itself.
+     */
+    const tokens = remove.className.split(/\s+/)
+    expect(tokens, "needs an unprefixed sized target — sm:h-8 leaves the phone with nothing").toContain("h-8")
+    expect(tokens).toContain("w-8")
+    // And a touch device gets feedback, since hover: never fires on one. Unprefixed for the same
+    // reason: sm:active: is feedback only on the screens that did not need it.
+    expect(
+      tokens.some((t) => t.startsWith("active:")),
+      "hover: alone is invisible on a phone, and sm:active: is feedback only where it is not needed",
+    ).toBe(true)
+  })
+
+  it("gives a split day two distinguishable controls, not two identical ones", async () => {
+    /**
+     * THE CASE THAT MAKES THE LABEL MATTER. The day cap allows two jobs per worker per day
+     * (scripts/145), so a half-day in each of two blocks renders two of these buttons. Labelled by
+     * activity code alone they read identically -- and on the same code in two blocks, which is an
+     * ordinary way to split a day, they are literally the same string.
+     *
+     * Two identical controls with different consequences is the same findability failure this
+     * whole fix is about, one level down. Raised by CodeRabbit on PR #54.
+     */
+    const workers = [worker({ id: "a", name: "Chitra" })]
+    mockMuster({
+      workers,
+      presentWorkerIds: ["a"],
+      assignments: [
+        {
+          id: "j1", workerId: "a", activityCode: "105", activityName: "Weeding",
+          locationId: "L1", locationName: "PG", dayFraction: 0.5, rate: 494,
+          headcount: 1, lumpSum: null, totalCost: 247,
+        },
+        {
+          id: "j2", workerId: "a", activityCode: "105", activityName: "Weeding",
+          locationId: "L2", locationName: "Tirtha", dayFraction: 0.5, rate: 494,
+          headcount: 1, lumpSum: null, totalCost: 247,
+        },
+      ],
+    })
+    await openMuster({ workers })
+
+    const pg = screen.getByRole("button", { name: /remove weeding at PG work allocation/i })
+    const tirtha = screen.getByRole("button", { name: /remove weeding at Tirtha work allocation/i })
+    expect(pg).not.toBe(tirtha)
+    // Same activity, same code, different block -- the block is the only thing telling them apart.
+    expect(pg.getAttribute("aria-label")).not.toBe(tirtha.getAttribute("aria-label"))
   })
 
   it("refusing to untick says WHERE the work is removed, not just that it must be", async () => {

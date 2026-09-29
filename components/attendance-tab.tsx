@@ -1271,8 +1271,17 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                               whose primary target is the toggle. */}
                           <button
                             type="button"
-                            aria-label={`Remove ${a.activityCode} work allocation`}
-                            title="Remove this work"
+                            /**
+                             * NAMES THE JOB, NOT JUST THE CODE. The day cap allows two jobs per
+                             * worker per day (scripts/145), so a split day renders two of these
+                             * buttons -- and labelling both "Remove 105 work allocation" makes
+                             * them indistinguishable to anyone not reading the pixels beside them.
+                             * On a screen reader that is two identical controls with different
+                             * consequences, which is the same findability failure this fix is for,
+                             * one level down.
+                             */
+                            aria-label={`Remove ${a.activityName || a.activityCode}${a.locationName ? ` at ${a.locationName}` : ""} work allocation`}
+                            title={`Remove this work${a.locationName ? ` at ${a.locationName}` : ""}`}
                             onClick={(event) => { event.stopPropagation(); void handleRemoveAssignment(a.id) }}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-400 touch-manipulation hover:text-red-500 active:bg-red-50 active:text-red-600 dark:text-stone-500 dark:active:bg-red-950/40"
                           >
