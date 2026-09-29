@@ -606,27 +606,39 @@ const HOST_RELATIVE_NAMED = new RegExp(
  * built around. Raised by CodeRabbit on PR #53.
  */
 const HOST_RELATIVE_NAMESPACE = new RegExp(String.raw`\b\w+\.(${HOST_RELATIVE_NAMES})\s*\(`)
-const DATE_FNS_NAMES = String.raw`format|startOfWeek|endOfWeek|startOfMonth|endOfMonth|startOfDay|addDays|subDays|addWeeks|subWeeks|addMonths|subMonths|addYears|subYears|differenceInDays|differenceInCalendarDays`
-
 /**
- * NOT PRECEDED BY A DOT. `\bformat(` also matches `Intl.DateTimeFormat(...).format(new Date())`,
- * which is correct code -- it is how todayIso() is implemented. That false positive was the only
- * reason lib/date-utils.ts needed an entry in the accepted list below, so the scanner was
- * manufacturing its own exemption. Raised by CodeRabbit on PR #53.
- */
-const DATE_FNS_ON_NOW = new RegExp(String.raw`(?<![.\w$])(${DATE_FNS_NAMES})\s*\(\s*new Date\(\)`, "g")
-
-/**
- * ...WHICH THEN EXCLUDED THE NAMESPACE FORM TOO. `import * as dateFns from "date-fns"` followed by
- * `dateFns.format(new Date())` is dotted, so the lookbehind above skips it -- the same asymmetry
- * I had just closed for isToday/isFuture and left open here, in the same commit. Raised by
- * CodeRabbit on PR #53's second pass.
+ * DERIVED FROM EACH FILE'S OWN IMPORTS, not a list of names I happened to think of.
  *
- * Only counted in files that actually import date-fns, so `Intl.DateTimeFormat(...).format(...)`
- * in a file with no date-fns import stays unflagged.
+ * This was sixteen hardcoded function names. date-fns exports hundreds, so `startOfYear(new Date())`
+ * or `isSameDay(new Date(), x)` were invisible, and `import { format as fmt }` defeated it entirely
+ * -- a hand-kept list, which is the failure CLAUDE.md names outright: "A list of two or three is how
+ * the next instance hides. Derive the set instead." Raised by CodeRabbit on PR #53's third pass.
+ *
+ * Reading the imports covers every date-fns function automatically, including aliases, and covers
+ * the Intl false positive for free: a file with no date-fns import has no bindings, so
+ * `Intl.DateTimeFormat(...).format(new Date())` cannot match anything.
  */
-const DATE_FNS_NAMESPACE_ON_NOW = new RegExp(String.raw`\b\w+\.(${DATE_FNS_NAMES})\s*\(\s*new Date\(\)`, "g")
 const IMPORTS_DATE_FNS = /from\s*["']date-fns["']/
+
+/** Local binding names a file actually pulls out of date-fns, aliases resolved to the LOCAL name. */
+const dateFnsNamedBindings = (src: string): string[] => {
+  const bindings: string[] = []
+  for (const block of src.matchAll(/import\s*(?:type\s+)?\{([^}]*)\}\s*from\s*["']date-fns["']/g)) {
+    for (const spec of block[1].split(",")) {
+      const trimmed = spec.trim().replace(/^type\s+/, "")
+      if (!trimmed) continue
+      // `format as fmt` is called as fmt(...), so the LOCAL name is what appears at the call site.
+      const aliased = /^(\w+)\s+as\s+(\w+)$/.exec(trimmed)
+      const local = aliased ? aliased[2] : trimmed
+      if (/^\w+$/.test(local)) bindings.push(local)
+    }
+  }
+  return bindings
+}
+
+/** `import * as dateFns from "date-fns"` -> ["dateFns"]. */
+const dateFnsNamespaceBindings = (src: string): string[] =>
+  [...src.matchAll(/import\s*\*\s*as\s+(\w+)\s*from\s*["']date-fns["']/g)].map((m) => m[1])
 
 /**
  * Download filenames only. A CSV named with the viewer's date is a cosmetic mismatch on a file the
@@ -653,11 +665,23 @@ const DATE_FNS_ON_NOW_ACCEPTED: Record<string, { count: number; why: string }> =
  */
 const countDateFnsOnNow = (source: string): number => {
   const src = stripComments(source)
-  const direct = src.match(DATE_FNS_ON_NOW)?.length ?? 0
-  // Namespace calls only count where date-fns is actually imported, so a DateTimeFormat
-  // `.format(new Date())` in an unrelated file is not swept up.
-  const viaNamespace = IMPORTS_DATE_FNS.test(src) ? src.match(DATE_FNS_NAMESPACE_ON_NOW)?.length ?? 0 : 0
-  return direct + viaNamespace
+  if (!IMPORTS_DATE_FNS.test(src)) return 0
+
+  const named = dateFnsNamedBindings(src)
+  const namespaces = dateFnsNamespaceBindings(src)
+  let hits = 0
+
+  if (named.length) {
+    // NOT PRECEDED BY A DOT: `Intl.DateTimeFormat(...).format(new Date())` is a method call and is
+    // correct code -- it is how todayIso() is implemented.
+    const direct = new RegExp(String.raw`(?<![.\w$])(${named.join("|")})\s*\(\s*new Date\(\)`, "g")
+    hits += src.match(direct)?.length ?? 0
+  }
+  for (const ns of namespaces) {
+    const viaNamespace = new RegExp(String.raw`\b${ns}\.(\w+)\s*\(\s*new Date\(\)`, "g")
+    hits += src.match(viaNamespace)?.length ?? 0
+  }
+  return hits
 }
 
 const dateFnsOnNowCounts = (): Record<string, number> => {
@@ -721,6 +745,31 @@ describe("date-fns is never handed the host's now", () => {
     expect(
       countDateFnsOnNow('const parts = new Intl.DateTimeFormat("en-CA", opts).format(new Date())'),
       "Intl.DateTimeFormat is not date-fns",
+    ).toBe(0)
+  })
+
+  it("covers date-fns functions the old hardcoded list never named, and aliases", () => {
+    /**
+     * The list had sixteen entries. date-fns exports hundreds, so anything outside those sixteen
+     * was invisible -- and an alias defeated it whatever the name. Deriving from the file's own
+     * imports is what CLAUDE.md asks for in so many words: "A list of two or three is how the next
+     * instance hides. Derive the set instead." Raised by CodeRabbit on PR #53's third pass.
+     */
+    // startOfYear was never in the list.
+    expect(countDateFnsOnNow('import { startOfYear } from "date-fns"\nstartOfYear(new Date())')).toBe(1)
+    // Aliased: the call site says fmt(), so that is the name to look for.
+    expect(countDateFnsOnNow('import { format as fmt } from "date-fns"\nfmt(new Date(), "yyyy")')).toBe(1)
+    // A name NOT imported from date-fns is not a date-fns call, even if date-fns is imported.
+    expect(
+      countDateFnsOnNow('import { addDays } from "date-fns"\nsomeOtherHelper(new Date())'),
+      "only bindings this file actually imported count",
+    ).toBe(0)
+    // And the Intl false positive stays dead, now for free: no date-fns import, no bindings.
+    expect(countDateFnsOnNow('const p = new Intl.DateTimeFormat("en-CA", o).format(new Date())')).toBe(0)
+    // Even alongside a date-fns import, the dotted method call is still excluded.
+    expect(
+      countDateFnsOnNow('import { format } from "date-fns"\nnew Intl.DateTimeFormat("en-CA", o).format(new Date())'),
+      "a dotted .format( is a method call, not the imported binding",
     ).toBe(0)
   })
 
