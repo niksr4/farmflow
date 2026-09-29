@@ -1280,7 +1280,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                              * consequences, which is the same findability failure this fix is for,
                              * one level down.
                              */
-                            aria-label={`Remove ${a.activityName || a.activityCode}${a.locationName ? ` at ${a.locationName}` : ""} work allocation`}
+                            aria-label={`Remove ${a.activityName || a.activityCode} work${a.locationName ? ` at ${a.locationName}` : ""}`}
                             title={`Remove this work${a.locationName ? ` at ${a.locationName}` : ""}`}
                             onClick={(event) => { event.stopPropagation(); void handleRemoveAssignment(a.id) }}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-400 touch-manipulation hover:text-red-500 active:bg-red-50 active:text-red-600 dark:text-stone-500 dark:active:bg-red-950/40"

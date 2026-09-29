@@ -560,7 +560,7 @@ describe("undoing a day is findable", () => {
     await openMuster({ workers })
 
     // Found the way a person finds it: by what it says it does, not by its class list.
-    const remove = screen.getByRole("button", { name: /remove weeding at PG work allocation/i })
+    const remove = screen.getByRole("button", { name: /remove weeding work at PG/i })
     expect(remove).toBeInTheDocument()
   })
 
@@ -569,7 +569,7 @@ describe("undoing a day is findable", () => {
     mockMuster(snapshot)
     await openMuster({ workers })
 
-    const remove = screen.getByRole("button", { name: /remove weeding at PG work allocation/i })
+    const remove = screen.getByRole("button", { name: /remove weeding work at PG/i })
     /**
      * UNPREFIXED TOKENS, deliberately.
      *
@@ -583,9 +583,17 @@ describe("undoing a day is findable", () => {
     expect(tokens).toContain("w-8")
     // And a touch device gets feedback, since hover: never fires on one. Unprefixed for the same
     // reason: sm:active: is feedback only on the screens that did not need it.
+    /**
+     * A VISIBLE pressed state, not merely a class starting with "active:".
+     *
+     * `tokens.some(t => t.startsWith("active:"))` is satisfied by `active:cursor-pointer`, which
+     * changes nothing a thumb can see. Third time in this PR that an assertion accepted something
+     * weaker than the thing it guards -- first `h-8` matching `sm:h-8`, then the code-only label,
+     * now this. Requiring a background change makes the press actually visible.
+     */
     expect(
-      tokens.some((t) => t.startsWith("active:")),
-      "hover: alone is invisible on a phone, and sm:active: is feedback only where it is not needed",
+      tokens.some((t) => /^active:bg-/.test(t)),
+      "needs a visible pressed state — active:cursor-pointer changes nothing a thumb can see",
     ).toBe(true)
   })
 
@@ -618,8 +626,8 @@ describe("undoing a day is findable", () => {
     })
     await openMuster({ workers })
 
-    const pg = screen.getByRole("button", { name: /remove weeding at PG work allocation/i })
-    const tirtha = screen.getByRole("button", { name: /remove weeding at Tirtha work allocation/i })
+    const pg = screen.getByRole("button", { name: /remove weeding work at PG/i })
+    const tirtha = screen.getByRole("button", { name: /remove weeding work at Tirtha/i })
     expect(pg).not.toBe(tirtha)
     // Same activity, same code, different block -- the block is the only thing telling them apart.
     expect(pg.getAttribute("aria-label")).not.toBe(tirtha.getAttribute("aria-label"))
