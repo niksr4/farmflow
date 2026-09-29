@@ -48,6 +48,34 @@ export const STALE_AFTER_MS = 30_000
 export const MIN_CRASH_DURATION_MS = 2_000
 export const MIN_CRASH_INTERACTIONS = 1
 
+/**
+ * A CRASH IS DEFINED BY THE USER COMING BACK.
+ *
+ * "Visible at the last heartbeat, and no pagehide" does not mean the app died. On Android --
+ * which is where essentially all of this traffic is -- putting the phone in your pocket ends
+ * the renderer without pagehide, while the last heartbeat is still `visible` because the
+ * person was looking at the screen right up until they stopped. A crash and "I finished and
+ * left" are the same record from inside the page.
+ *
+ * The floor above (2s + one interaction) was meant to fix this and did not. Production, 90
+ * days, sampled: 42 events, 6 users, and the gap between the session dying and the next page
+ * load had a MEDIAN OF 15.4 HOURS -- max 95.7. Seven of ten reports arrived between 08:11 and
+ * 09:50 IST. They are writers opening the app to start the working day, and the beacon
+ * reporting yesterday's "crash". Heap was 23-30 MB throughout, so nothing was under pressure.
+ * It was measuring how many days somebody used FarmFlow.
+ *
+ * The one thing that does separate the two is whether they came straight back. A writer whose
+ * app dies mid-muster relaunches it immediately, because they are standing in a field halfway
+ * through a task. Somebody who was done reopens tomorrow morning.
+ *
+ * KNOWN BLIND SPOT, accepted deliberately: a crash bad enough that the user gives up for the
+ * day now looks identical to a clean exit. That is the right trade against the alternative,
+ * which is 42 events of "someone finished work" drowning the real ones. The reporting window
+ * is also bounded below by STALE_AFTER_MS -- a relaunch inside 30s reads as a still-live tab
+ * and is not reported, which is pre-existing and not worth trading a false-positive guard for.
+ */
+export const MAX_CRASH_RETURN_GAP_MS = 5 * 60 * 1000
+
 /** Cap on stored records so a pathological loop can never grow localStorage without bound. */
 export const MAX_STORED_RECORDS = 10
 
@@ -104,6 +132,7 @@ export function classifySession(
   record: SessionRecord,
   now: number,
   staleAfterMs: number = STALE_AFTER_MS,
+  maxReturnGapMs: number = MAX_CRASH_RETURN_GAP_MS,
 ): SessionOutcome {
   if (record.closedAt !== null) return "clean"
   if (now - record.lastSeenAt <= staleAfterMs) return "active"
@@ -119,6 +148,11 @@ export function classifySession(
   const lastedLongEnough = sessionDurationSeconds(record) * 1000 >= MIN_CRASH_DURATION_MS
   const wasUsed = record.interactions >= MIN_CRASH_INTERACTIONS
   if (!lastedLongEnough || !wasUsed) return "backgrounded"
+
+  // They did not come back. See MAX_CRASH_RETURN_GAP_MS: a long gap to this load is somebody
+  // who finished for the day, not somebody whose app died underneath them. Same "not worth
+  // alerting on" bucket as a background reclaim, for the same reason as the floor above.
+  if (now - record.lastSeenAt > maxReturnGapMs) return "backgrounded"
 
   return "crashed"
 }
