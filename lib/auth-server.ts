@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/nextjs"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { DEFAULT_APP_LOCALE, normalizeAppLocale } from "@/lib/i18n"
-import { sql } from "@/lib/server/db"
+import { isDbConfigured, sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { normalizeUsernameLookup } from "@/lib/usernames"
 
@@ -112,7 +112,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
 
   const ownerContext = normalizeTenantContext(undefined, "owner")
 
-  if (user?.id && sql) {
+  if (user?.id && isDbConfigured) {
     let rows: UserLookupRow[] = []
     try {
       rows = (await runTenantQuery(
@@ -167,9 +167,52 @@ export async function requireSessionUser(): Promise<SessionUser> {
         requiresGuidedSetup: Boolean(rows[0].requires_guided_setup),
       })
     }
+
+    /**
+     * THE DATABASE WAS ASKED AND SAID THIS USER DOES NOT EXIST. That is an answer, not a
+     * gap, so it ends the request.
+     *
+     * This used to fall through to the JWT-claims branch below, which handed back the
+     * `role` and `tenantId` baked into the cookie at login. Sessions here are 30 days
+     * (a deliberate decision — estate managers use personal devices), so deleting a user
+     * or moving them between tenants left a token that kept working, with its old
+     * permissions, for up to a month. Revoking access did not revoke access.
+     *
+     * That is the shared root cause behind four separate fixes: #32 and #35 made the
+     * location and module resolvers fail closed instead of open, and #42 and #47 closed
+     * the cache and identity holes those two still had. Each was a downstream defence
+     * against a principal that no longer exists. This is the upstream cause.
+     *
+     * It deliberately does NOT fall through to the username lookup either. A username can
+     * be reused, so resolving a stale id by name risks handing the session to a DIFFERENT
+     * account that has since taken that name — a worse outcome than the stale claims. The
+     * username path exists for legacy tokens carrying no id at all, and is reached below.
+     *
+     * Verified before changing: under the exact runtime path (app_runtime role, RLS
+     * enforced, the same three GUCs runTenantQuery sets) every real user resolves by id --
+     * 11/11 on prod and 10/10 on dev, across 6 tenants, with the owner among them. The
+     * `users` RLS policy grants `app.role = 'owner'` a full bypass (script 98) and
+     * ownerContext sets exactly that, so this lookup is not tenant-scoped and cannot
+     * silently return zero rows for a legitimate user in another tenant.
+     */
+    throw new Error("Unauthorized")
   }
 
-  if (user?.id && user?.tenantId && user?.role) {
+  /**
+   * NO DATABASE TO ASK. Distinct from the case above: nothing has told us the user is gone,
+   * we simply cannot check. Routes gate on `isDbConfigured` and return
+   * databaseNotConfiguredResponse() well before this matters, so this keeps a DB-less local
+   * boot working rather than failing.
+   *
+   * GATED ON `isDbConfigured`, NOT ON `sql` BEING FALSY -- `sql` is never falsy.
+   * lib/server/db.ts line 80 is `baseUrl ? neon(baseUrl) : createUnavailableClient()`, so an
+   * unconfigured database yields a stub that THROWS on use rather than an absent client.
+   * Testing `sql` as a boolean therefore reads as "configured" always: the three guards here
+   * would enter their lookups, the stub would throw "Database not configured", and since that
+   * is not one of the missing-column errors the catch re-raises it. A DB-less boot got a driver
+   * error instead of a session, and this branch could never be reached at all.
+   */
+  if (!isDbConfigured && user?.id && user?.tenantId && user?.role) {
     return toSessionUser({
       id: user.id,
       username: user.name || "",
@@ -183,7 +226,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
     })
   }
 
-  if (user?.name && sql) {
+  if (user?.name && isDbConfigured) {
     const normalizedUsername = normalizeUsernameLookup(user.name)
     let rows: UserLookupRow[] = []
     try {
