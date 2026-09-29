@@ -28,6 +28,7 @@ import {
   PlusCircle,
   Trash2,
   Users,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -607,10 +608,19 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     // records as a side effect of a tap is not something a screen should decide.
     const jobs = assignments.filter((a) => a.workerId === id)
     if (jobs.length > 0 && presentSet.has(id)) {
+      /**
+       * SAYS WHERE, not just what. This read "Remove their work first" and stopped there, which is
+       * correct and useless: HoneyFarm's writer read it, agreed, and then could not find the
+       * control. A refusal that names an action the reader cannot locate is a dead end, and the
+       * only route left is to ask someone.
+       *
+       * Names the block the work is on, because that is the word on screen next to the button.
+       */
+      const where = jobs.length === 1 && jobs[0].locationName ? ` next to ${jobs[0].locationName}` : ""
       toast.error(
         jobs.length === 1
-          ? "Remove their work first — you cannot mark someone absent who has a job recorded."
-          : `Remove their ${jobs.length} jobs first — you cannot mark someone absent who has work recorded.`,
+          ? `Remove their work first — tap the ✕${where} on this row, then untick.`
+          : `Remove their ${jobs.length} jobs first — tap the ✕ beside each one on this row, then untick.`,
       )
       return
     }
@@ -1246,13 +1256,36 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                           <span className="truncate text-[11px] font-semibold text-stone-600 dark:text-stone-300">
                             {a.locationName ?? "no block"}
                           </span>
+                          {/* THE ONLY WAY TO UNDO A DAY, AND IT WAS A BARE GLYPH.
+                              Reported by HoneyFarm 2026-09-29: a worker was ticked present by
+                              mistake, the muster correctly refused to untick her while she had work
+                              recorded, and the writer could not find how to remove the work. He was
+                              looking straight at it -- an unpadded × in text-stone-300, whose only
+                              affordance was hover:text-red-500, and a phone has no hover.
+
+                              Every other control in this row already had the treatment: "Set work"
+                              is a full-width h-8 with active: feedback, the trash is h-8 w-8, the
+                              present toggle is 44px as "the most-tapped control in the product".
+                              This one was missed, so the file's own standard is applied here now --
+                              32px like the trash rather than 44px, because it sits inside a row
+                              whose primary target is the toggle. */}
                           <button
                             type="button"
-                            aria-label={`Remove ${a.activityCode} allocation`}
+                            /**
+                             * NAMES THE JOB, NOT JUST THE CODE. The day cap allows two jobs per
+                             * worker per day (scripts/145), so a split day renders two of these
+                             * buttons -- and labelling both "Remove 105 work allocation" makes
+                             * them indistinguishable to anyone not reading the pixels beside them.
+                             * On a screen reader that is two identical controls with different
+                             * consequences, which is the same findability failure this fix is for,
+                             * one level down.
+                             */
+                            aria-label={`Remove ${a.activityName || a.activityCode} work${a.locationName ? ` at ${a.locationName}` : ""}`}
+                            title={`Remove this work${a.locationName ? ` at ${a.locationName}` : ""}`}
                             onClick={(event) => { event.stopPropagation(); void handleRemoveAssignment(a.id) }}
-                            className="shrink-0 text-stone-300 hover:text-red-500"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-stone-400 touch-manipulation hover:text-red-500 active:bg-red-50 active:text-red-600 dark:text-stone-500 dark:active:bg-red-950/40"
                           >
-                            ×
+                            <X className="h-4 w-4" />
                           </button>
                         </>
                       ) : (

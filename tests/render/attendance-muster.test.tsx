@@ -520,3 +520,135 @@ describe("a biometric punch shows its times, a manual mark shows the rate", () =
     expect(overtimeInput?.value).toBe("2")
   })
 })
+
+describe("undoing a day is findable", () => {
+  /**
+   * REPORTED BY HONEYFARM, 2026-09-29. A worker (Chitra) was ticked present by mistake. The muster
+   * correctly refused to untick her while she had work recorded -- deleting a money record as a
+   * side effect of a tap is not a decision a screen should make. But the writer then could not
+   * find how to remove the work, and stopped.
+   *
+   * He was looking straight at it. The control was an unpadded `×` glyph in text-stone-300 whose
+   * only affordance was `hover:text-red-500`, and a phone has no hover. Every other control in
+   * that row already had a sized target and an active: state; this one was missed.
+   *
+   * Mounted rather than source-scanned deliberately. A className assertion would pass on the
+   * string "h-8" appearing anywhere in the file, and the thing that actually failed was whether a
+   * person could FIND the control -- which is an accessible name and a real element, not a class.
+   */
+  const withWork = () => {
+    const workers = [worker({ id: "a", name: "Chitra" })]
+    return {
+      workers,
+      snapshot: {
+        workers,
+        presentWorkerIds: ["a"],
+        assignments: [
+          {
+            id: "j1", workerId: "a", activityCode: "105", activityName: "Weeding",
+            locationId: "L1", locationName: "PG", dayFraction: 1, rate: 494,
+            headcount: 1, lumpSum: null, totalCost: 494,
+          },
+        ],
+      },
+    }
+  }
+
+  it("offers a named control to remove the work", async () => {
+    const { workers, snapshot } = withWork()
+    mockMuster(snapshot)
+    await openMuster({ workers })
+
+    // Found the way a person finds it: by what it says it does, not by its class list.
+    const remove = screen.getByRole("button", { name: /remove weeding work at PG/i })
+    expect(remove).toBeInTheDocument()
+  })
+
+  it("the control is an element you can actually hit, not a bare glyph", async () => {
+    const { workers, snapshot } = withWork()
+    mockMuster(snapshot)
+    await openMuster({ workers })
+
+    const remove = screen.getByRole("button", { name: /remove weeding work at PG/i })
+    /**
+     * UNPREFIXED TOKENS, deliberately.
+     *
+     * The first version matched /\bh-8\b/, which is also satisfied by `sm:h-8` -- a class that
+     * gives a PHONE nothing at all, while the assertion stays green. The one device this control
+     * has to work on is the one the guard could not see. Same vacuousness this repo keeps
+     * relearning: a pattern that matches a MENTION rather than the thing itself.
+     */
+    const tokens = remove.className.split(/\s+/)
+    expect(tokens, "needs an unprefixed sized target — sm:h-8 leaves the phone with nothing").toContain("h-8")
+    expect(tokens).toContain("w-8")
+    // And a touch device gets feedback, since hover: never fires on one. Unprefixed for the same
+    // reason: sm:active: is feedback only on the screens that did not need it.
+    /**
+     * A VISIBLE pressed state, not merely a class starting with "active:".
+     *
+     * `tokens.some(t => t.startsWith("active:"))` is satisfied by `active:cursor-pointer`, which
+     * changes nothing a thumb can see. Third time in this PR that an assertion accepted something
+     * weaker than the thing it guards -- first `h-8` matching `sm:h-8`, then the code-only label,
+     * now this. Requiring a background change makes the press actually visible.
+     */
+    expect(
+      tokens.some((t) => /^active:bg-/.test(t)),
+      "needs a visible pressed state — active:cursor-pointer changes nothing a thumb can see",
+    ).toBe(true)
+  })
+
+  it("gives a split day two distinguishable controls, not two identical ones", async () => {
+    /**
+     * THE CASE THAT MAKES THE LABEL MATTER. The day cap allows two jobs per worker per day
+     * (scripts/145), so a half-day in each of two blocks renders two of these buttons. Labelled by
+     * activity code alone they read identically -- and on the same code in two blocks, which is an
+     * ordinary way to split a day, they are literally the same string.
+     *
+     * Two identical controls with different consequences is the same findability failure this
+     * whole fix is about, one level down. Raised by CodeRabbit on PR #54.
+     */
+    const workers = [worker({ id: "a", name: "Chitra" })]
+    mockMuster({
+      workers,
+      presentWorkerIds: ["a"],
+      assignments: [
+        {
+          id: "j1", workerId: "a", activityCode: "105", activityName: "Weeding",
+          locationId: "L1", locationName: "PG", dayFraction: 0.5, rate: 494,
+          headcount: 1, lumpSum: null, totalCost: 247,
+        },
+        {
+          id: "j2", workerId: "a", activityCode: "105", activityName: "Weeding",
+          locationId: "L2", locationName: "Tirtha", dayFraction: 0.5, rate: 494,
+          headcount: 1, lumpSum: null, totalCost: 247,
+        },
+      ],
+    })
+    await openMuster({ workers })
+
+    const pg = screen.getByRole("button", { name: /remove weeding work at PG/i })
+    const tirtha = screen.getByRole("button", { name: /remove weeding work at Tirtha/i })
+    expect(pg).not.toBe(tirtha)
+    // Same activity, same code, different block -- the block is the only thing telling them apart.
+    expect(pg.getAttribute("aria-label")).not.toBe(tirtha.getAttribute("aria-label"))
+  })
+
+  it("refusing to untick says WHERE the work is removed, not just that it must be", async () => {
+    /**
+     * The original message was "Remove their work first — you cannot mark someone absent who has a
+     * job recorded." Correct, and a dead end: it names an action without saying where to perform
+     * it. HoneyFarm's writer read it, agreed with it, and had to ask a person.
+     */
+    const { workers, snapshot } = withWork()
+    mockMuster(snapshot)
+    const { user } = await openMuster({ workers })
+
+    await user.click(screen.getByRole("button", { name: /chitra present/i }))
+
+    expect(toastError).toHaveBeenCalled()
+    const message = String(toastError.mock.calls.at(-1)?.[0] ?? "")
+    expect(message, "must still refuse").toMatch(/remove their work first/i)
+    expect(message, "must point at the control").toMatch(/✕/)
+    expect(message, "and name the block it sits beside").toContain("PG")
+  })
+})
