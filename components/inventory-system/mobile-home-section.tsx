@@ -10,6 +10,23 @@ import type { DrilldownOptions, HeroStat } from "@/components/inventory-system/t
 type Props = {
   estateName: string
   canShowAccounts: boolean
+  /**
+   * True once this estate's cutover DATE has arrived -- the same value labor-deployment-tab calls
+   * `cutoverReached`, computed once in the shell so the two cannot disagree.
+   *
+   * WHY IT HAS TO BE HERE. QuickLogPanel and WeekBatchEntry both POST to /api/labor-neon, which
+   * refuses any date on or after the cutover with a 409 -- correctly, because such an entry would
+   * save and count toward nothing. labor-deployment-tab learned that and hides its form. This
+   * component never did, so on the writer's mobile home -- the primary entry point on the device
+   * the product is actually used on -- both panels have returned 409 on every tap since each
+   * tenant's cutover in August 2026. All four real estates.
+   *
+   * Nothing threw and nothing was silent either: the writer got told off by a message explaining
+   * that the thing they just tried is not how this estate works any more. The WorkspaceLauncher on
+   * this same screen already routes "Log today" to the muster, so hiding these leaves a working
+   * path rather than a gap.
+   */
+  musterRecordsLabour: boolean
   canShowRainfallSection: boolean
   selectedLocationId: string | null
   defaultWage: number | undefined
@@ -30,6 +47,7 @@ type Props = {
 export default function MobileHomeSection({
   estateName,
   canShowAccounts,
+  musterRecordsLabour,
   canShowRainfallSection,
   selectedLocationId,
   defaultWage,
@@ -131,13 +149,13 @@ export default function MobileHomeSection({
 
       <TodayGapsCard onNavigate={onTabChange} />
 
-      {canShowAccounts && (
+      {canShowAccounts && !musterRecordsLabour && (
         <QuickLogPanel
           locationId={realLocationId}
           onNavigateToFull={() => onTabChange("accounts")}
         />
       )}
-      {canShowAccounts && (
+      {canShowAccounts && !musterRecordsLabour && (
         <WeekBatchEntry
           locationId={realLocationId}
           defaultWage={defaultWage}
