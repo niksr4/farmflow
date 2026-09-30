@@ -59,6 +59,34 @@ describe("no build step reaches out to Google for a font", () => {
     ).toEqual([])
   })
 
+  it("the scan actually reaches the root, and would flag a file there", () => {
+    /**
+     * Tamper-testing the WIDENING, which the previous version of this file did not do: I broadened
+     * the pathspec and then asserted nothing about whether it had worked. A regression in the
+     * pathspec would leave root-level files unscanned while every other assertion here stayed green.
+     *
+     * Two halves, because one without the other proves nothing:
+     *   1. the discovered set contains real root-level files -- instrumentation-client.ts above all,
+     *      since it is the ONLY browser entry point on Sentry SDK v10
+     *   2. the detector does flag next/font/google when it sees it
+     *
+     * Asserted this way rather than by writing a temporary tracked fixture into the repo root: a test
+     * that git-adds and removes a file mutates the working tree of whoever runs it, and a failure
+     * midway leaves that file behind. These two together cover the same ground without that risk.
+     */
+    expect(trackedSources, "the pathspec must reach the repository root").toContain("instrumentation-client.ts")
+    expect(trackedSources).toContain("proxy.ts")
+    expect(trackedSources.some((f) => !f.includes("/")), "at least one root-level file").toBe(true)
+    // ...and tests/ stays excluded, or this file would flag itself.
+    expect(trackedSources.some((f) => f.startsWith("tests/"))).toBe(false)
+
+    // The detector half: a root-level file importing the font loader must read as an offender.
+    const offending = 'import { Manrope } from "next/font/google"\nconst f = Manrope({ subsets: ["latin"] })'
+    expect(/next\/font\/google/.test(stripComments(offending))).toBe(true)
+    // And a comment mentioning it must not.
+    expect(/next\/font\/google/.test(stripComments('// never import next/font/google here'))).toBe(false)
+  })
+
   it("the woff2 files are committed and are really woff2", () => {
     // A LFS pointer, an HTML error page saved under a .woff2 name, or a truncated download would
     // all "exist". wOF2 is the magic number; anything else is not a font.
