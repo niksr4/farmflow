@@ -17,6 +17,7 @@ import {
   type YearlyAttendanceInput,
 } from "@/lib/attendance-yearly"
 import { ATTENDANCE_SCHEMA_ERROR_HELP, isMissingBiometricSchemaError } from "@/lib/biometric-attendance"
+import { todayIso } from "@/lib/date-utils"
 
 /**
  * The yearly summary — a month per line per worker, the sheet the estate office files.
@@ -42,8 +43,10 @@ export async function GET(request: Request) {
 
     // The estate's calendar, not the server's. A report opened at 01:00 IST on the 1st would
     // otherwise still be building last month, because the server clock is UTC.
-    const istNow = new Date(Date.now() + 5.5 * 3600_000)
-    const todayIst = istNow.toISOString().slice(0, 10)
+    // todayIso() rather than Date.now() + 5.5h: the arithmetic is right only while India has no
+    // DST, and lib/date-utils.ts declines to rely on that. Same answer, stated as a zone instead of
+    // encoded as a number.
+    const todayIst = todayIso()
     const thisMonth = todayIst.slice(0, 7)
 
     const requestedFrom = String(searchParams.get("from") || "").trim()
