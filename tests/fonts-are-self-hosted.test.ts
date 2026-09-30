@@ -23,10 +23,18 @@ import { describe, expect, it } from "vitest"
 
 const repoFile = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8")
 
-/** Every tracked source file, so this cannot be a hand-kept list of the two that used to offend. */
-const trackedSources = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
+/**
+ * EVERY tracked TS/TSX file outside tests, so this cannot be a hand-kept list of the two that used
+ * to offend.
+ *
+ * Repository-wide rather than `app components lib hooks`, which skipped the root entirely --
+ * including instrumentation-client.ts, the ONLY browser entry point on Sentry SDK v10 and therefore
+ * exactly the kind of file that could pull in a font. A scan whose blind spot is the root of the
+ * repo is a scan with a blind spot. Raised by CodeRabbit on PR #57.
+ */
+const trackedSources = execSync("git ls-files '*.ts' '*.tsx'", { encoding: "utf8" })
   .split("\n")
-  .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+  .filter((f) => f && !f.startsWith("tests/"))
 
 const stripComments = (src: string): string =>
   src
