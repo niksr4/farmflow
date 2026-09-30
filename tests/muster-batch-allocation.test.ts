@@ -60,9 +60,23 @@ describe("the unallocated-work flag only counts people who earn a daily wage", (
      */
     const start = source.indexOf("const unallocatedCount")
     expect(start, "the unallocatedCount memo must still exist").toBeGreaterThan(-1)
-    // useMemo(() => { ... }, [deps]) — the dependency array closes it.
-    const end = source.indexOf("])", start)
-    const block = source.slice(start, end > start ? end : start + 600)
+    /**
+     * The window ends where the MEMO ends. Two wrong answers already:
+     *
+     *  - `start + 600` measured a byte distance, so a docstring pushed the code out of view.
+     *  - `indexOf("])")` matched the `])` closing `workers.map((w) => [w.id, ...])` -- INSIDE the
+     *    memo, before the `return presentWorkerIds.filter(...)` this test exists to inspect. It
+     *    passed on isPaidDaily appearing in the map and covered none of the filter.
+     *
+     * No length fallback: if the boundary is not found the assertion should fail loudly rather than
+     * quietly reverting to the byte-distance version it replaced.
+     */
+    const end = source.indexOf("\n  }, [", start)
+    expect(end, "the unallocatedCount memo must still close with a dependency array").toBeGreaterThan(start)
+    const block = source.slice(start, end)
+    expect(block, "the window must reach the filter, not stop inside workers.map").toContain(
+      "presentWorkerIds.filter",
+    )
     expect(block).toContain("isPaidDaily")
     // Imported from the shared module, however many other names come with it. Pinning the whole
     // import line made this fail the day a second export was added alongside it -- the assertion

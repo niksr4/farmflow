@@ -55,6 +55,25 @@ DECLARE
   max_jobs CONSTANT INTEGER := 2;    -- morning and afternoon; a third is a data-entry slip
   where_txt TEXT;
 BEGIN
+  -- SERIALIZE THIS WORKER-DAY BEFORE READING EITHER SUM.
+  --
+  -- Without it the guard is a read-then-write race: two transactions -- one filing picking, one
+  -- filing day-work -- both read the same pre-write totals under READ COMMITTED, both find room,
+  -- and both commit. The stored result is over a day, and nothing raised an error anywhere, which
+  -- is this project's signature failure rather than an exotic one. The same race lets a third job
+  -- past the two-job limit.
+  --
+  -- scripts/145 has always had this hole for labour-against-labour. Making the budget shared widens
+  -- it to two tables and two tabs that different people use at the same time during harvest, so it
+  -- is worth closing here rather than inheriting.
+  --
+  -- Transaction-scoped: it releases on commit or rollback, with no unlock path to forget.
+  -- hashtextextended for the 64-bit key space -- hashtext is int4 and collides far sooner, and a
+  -- collision costs two unrelated worker-days a needless wait rather than costing correctness.
+  -- Same mechanism as lib/server/password-reset.ts.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(p_tenant_id::text || ':' || p_worker_id::text || ':' || p_day::text, 0));
+
   /**
    * SELF-EXCLUSION IS PER TABLE. `id <> p_row_id` across both tables would be wrong: a
    * picking_records id could coincidentally equal a labour_assignments id (both uuid, different
@@ -118,9 +137,17 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- MOVING A ROW IS AN INSERT AS FAR AS THE DESTINATION DAY IS CONCERNED, so the job-count check
+  -- must run for it too. `TG_OP = 'INSERT'` alone let an edit that re-dated an entry onto a day
+  -- already holding two jobs skip the count entirely: the day-fraction check can pass while the row
+  -- becomes a third job on a day this very file calls "a data-entry slip". Inherited from 145,
+  -- which has the same gap.
   PERFORM assert_worker_day_budget(
     NEW.tenant_id, NEW.worker_id, NEW.work_date, NEW.day_fraction,
-    'labour_assignments', NEW.id, TG_OP = 'INSERT');
+    'labour_assignments', NEW.id,
+    TG_OP = 'INSERT'
+      OR NEW.worker_id IS DISTINCT FROM OLD.worker_id
+      OR NEW.work_date IS DISTINCT FROM OLD.work_date);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -137,9 +164,13 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Same as the labour wrapper: a re-dated or reassigned row is new to its destination day.
   PERFORM assert_worker_day_budget(
     NEW.tenant_id, NEW.worker_id, NEW.pick_date, NEW.day_fraction,
-    'picking_records', NEW.id, TG_OP = 'INSERT');
+    'picking_records', NEW.id,
+    TG_OP = 'INSERT'
+      OR NEW.worker_id IS DISTINCT FROM OLD.worker_id
+      OR NEW.pick_date IS DISTINCT FROM OLD.pick_date);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

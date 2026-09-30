@@ -80,6 +80,41 @@ describe("the database will not store more than a day", () => {
     expect(downward.length, "both wrappers need the downward-edit exemption").toBe(2)
   })
 
+  it("locks the worker-day before summing, so two writers cannot both find room", () => {
+    /**
+     * Without a lock the guard is a read-then-write race: two transactions -- one filing picking,
+     * one filing day-work -- read the same pre-write totals under READ COMMITTED, both find room,
+     * both commit, and the stored day is over one with no error raised anywhere.
+     *
+     * Raised by CodeRabbit on PR #55 as Major, and correct: scripts/145 has had this hole for
+     * labour-against-labour since it shipped, and sharing the budget widens it to two tabs that
+     * different people use simultaneously during harvest.
+     *
+     * Verified on dev that the lock is genuinely taken -- pg_locks reports one advisory lock held by
+     * the backend during the write.
+     */
+    expect(cap).toContain("pg_advisory_xact_lock")
+    // Keyed on the worker-DAY, not the worker: locking per worker would serialise a whole harvest.
+    expect(cap).toMatch(/hashtextextended\([\s\S]{0,120}p_worker_id[\s\S]{0,60}p_day/)
+    // Before either sum, or it serialises nothing that matters.
+    expect(
+      cap.indexOf("pg_advisory_xact_lock"),
+      "the lock must be taken before the totals are read",
+    ).toBeLessThan(cap.indexOf("INTO labour_used"))
+  })
+
+  it("treats a re-dated or reassigned row as new to its destination day", () => {
+    /**
+     * `TG_OP = 'INSERT'` alone skipped the job-count check on every UPDATE. So an edit that moved a
+     * half-day entry onto a day already holding two jobs passed -- the fractions fit, the count was
+     * never consulted, and the day quietly became three jobs. Both wrappers had it; 145 had it
+     * first. Proven on dev: the move is now refused with "already has 2 jobs".
+     */
+    const moved = cap.match(/IS DISTINCT FROM OLD\.(worker_id|work_date|pick_date)/g) ?? []
+    // worker_id + work_date on the labour wrapper, worker_id + pick_date on the picking one.
+    expect(moved.length, "both wrappers must check a move, on worker AND date").toBe(4)
+  })
+
   it("says WHERE the rest of the day went, so the writer knows which tab to open", () => {
     // "already has a day booked" sends somebody hunting across two tabs. Naming the split is the
     // same lesson as the muster's remove-work message.

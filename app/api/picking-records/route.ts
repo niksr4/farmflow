@@ -98,6 +98,10 @@ export async function GET(request: Request) {
             pr.crop,
             pr.kg_picked,
             pr.rate_per_kg,
+            -- Returned because POST and PUT both accept it. Without it a client cannot read back a
+            -- stored 0.5 to show or re-submit, and would silently push the day back to a full 1.0
+            -- on the next edit.
+            pr.day_fraction,
             (pr.kg_picked * pr.rate_per_kg) AS amount,
             pr.location_id,
             pr.notes,
@@ -136,6 +140,7 @@ export async function GET(request: Request) {
         pickDate: String(r.pick_date),
         kgPicked: Number(r.kg_picked),
         ratePerKg: Number(r.rate_per_kg),
+        dayFraction: Number(r.day_fraction),
         amount: Number(r.amount),
         crop: r.crop ? String(r.crop) : "coffee",
         locationId: r.location_id ? String(r.location_id) : null,
