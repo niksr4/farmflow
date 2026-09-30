@@ -51,7 +51,18 @@ describe("batch allocation cannot be bypassed from a row", () => {
  */
 describe("the unallocated-work flag only counts people who earn a daily wage", () => {
   it("excludes monthly staff via the shared predicate", () => {
-    const block = source.slice(source.indexOf("const unallocatedCount"), source.indexOf("const unallocatedCount") + 600)
+    /**
+     * The window ends where the statement ends, not 600 characters later.
+     *
+     * A fixed byte distance measures the PROSE as well as the code: adding a docstring inside this
+     * block pushed `isPaidDaily` past character 600 and failed the assertion on a change that did
+     * not touch the logic. Same arbitrary-slice trap CodeRabbit caught three times on PR #40.
+     */
+    const start = source.indexOf("const unallocatedCount")
+    expect(start, "the unallocatedCount memo must still exist").toBeGreaterThan(-1)
+    // useMemo(() => { ... }, [deps]) — the dependency array closes it.
+    const end = source.indexOf("])", start)
+    const block = source.slice(start, end > start ? end : start + 600)
     expect(block).toContain("isPaidDaily")
     // Imported from the shared module, however many other names come with it. Pinning the whole
     // import line made this fail the day a second export was added alongside it -- the assertion

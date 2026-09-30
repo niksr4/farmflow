@@ -22,7 +22,17 @@ import { describe, expect, it } from "vitest"
  * deliberately, so a block is not shown twice the labour it received -- so the client has never
  * once sent day_fraction > 1. The ceiling permitted nothing legitimate and exactly one mistake.
  */
-const cap = readFileSync("scripts/145-labour-day-cap-one-day.sql", "utf8")
+/**
+ * ⚠ 145 IS HISTORY; 152 IS WHAT RUNS.
+ *
+ * scripts/152 replaces labour_assignments_day_cap()'s body so picking and day-work share one day
+ * budget. These assertions used to read 145 and would have kept passing after that -- green against
+ * a file whose contents no longer execute, which is the most comfortable kind of dead guard. The
+ * ceiling, the job limit and the self-exclusion are therefore checked against 152, and 145 is read
+ * only to prove its no-rewrite promise still holds.
+ */
+const legacyCap = readFileSync("scripts/145-labour-day-cap-one-day.sql", "utf8")
+const cap = readFileSync("scripts/152-picking-shares-the-day-budget.sql", "utf8")
 const route = readFileSync("app/api/attendance/assignments/route.ts", "utf8")
 const panel = readFileSync("components/attendance/worker-allocation.tsx", "utf8")
 const muster = readFileSync("components/attendance-tab.tsx", "utf8")
@@ -38,14 +48,52 @@ describe("the database will not store more than a day", () => {
     expect(cap).toContain("jobs + 1 > max_jobs")
   })
 
-  it("checks siblings, excluding the row being updated", () => {
-    // Without `id <> NEW.id` an ordinary edit counts itself and every correction fails.
-    expect(cap).toContain("AND id <> NEW.id")
+  it("checks siblings, excluding the row being updated -- from its OWN table only", () => {
+    /**
+     * Without excluding the row being written, an ordinary edit counts itself and every correction
+     * fails. But the exclusion has to be PER TABLE now that two tables share the budget: a bare
+     * `id <> p_row_id` applied to both would drop a picking row whose uuid happened to equal a
+     * labour row's, silently raising the ceiling for that worker on that day.
+     */
+    expect(cap).toContain("p_source = 'labour_assignments' AND id = p_row_id")
+    expect(cap).toContain("p_source = 'picking_records' AND id = p_row_id")
+  })
+
+  it("counts BOTH arms of the day, not each table on its own", () => {
+    // Per-table sums would make the real ceiling two days and the real job limit four.
+    expect(cap).toMatch(/FROM labour_assignments/)
+    expect(cap).toMatch(/FROM picking_records/)
+    expect(cap).toContain("used := labour_used + picking_used")
+    expect(cap).toContain("jobs := labour_jobs + picking_jobs")
+  })
+
+  it("puts the same wall in front of picking, not only day-work", () => {
+    // A cap on one table is not a shared budget; it is the same hole with a longer name.
+    expect(cap).toMatch(/CREATE TRIGGER trg_picking_records_day_cap[\s\S]*?ON picking_records/)
+    expect(cap).toMatch(/BEFORE INSERT OR UPDATE ON picking_records/)
+  })
+
+  it("lets a correction go DOWN on both tables", () => {
+    // 145 had to invent this for labour because HoneyFarm already had 81 over-booked days. Picking
+    // needs it for the same reason the day it has rows: halving one of two jobs must not be refused.
+    const downward = cap.match(/NEW\.day_fraction <= OLD\.day_fraction/g) ?? []
+    expect(downward.length, "both wrappers need the downward-edit exemption").toBe(2)
+  })
+
+  it("says WHERE the rest of the day went, so the writer knows which tab to open", () => {
+    // "already has a day booked" sends somebody hunting across two tabs. Naming the split is the
+    // same lesson as the muster's remove-work message.
+    expect(cap).toContain("from picking")
+    expect(cap).toContain("from day-work on the muster")
   })
 
   it("leaves the already-over-booked rows alone rather than rewriting a wage ledger", () => {
-    expect(cap).not.toMatch(/\bDELETE FROM labour_assignments\b/)
-    expect(cap).not.toMatch(/\bUPDATE labour_assignments\b/)
+    for (const [name, sql] of [["152", cap], ["145", legacyCap]] as const) {
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bDELETE FROM labour_assignments\b/)
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bUPDATE labour_assignments\b/)
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bDELETE FROM picking_records\b/)
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bUPDATE picking_records\b/)
+    }
   })
 })
 
