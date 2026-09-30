@@ -191,12 +191,10 @@ export function toLocalIso(dateInput?: DateInput): string {
  * is unchanged. Just never call it as toLocalIso(new Date()) to mean "today".
  */
 export function todayIso(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date())
+  // Delegates rather than building a second identical formatter. Two copies of the same
+  // Intl.DateTimeFormat config is precisely the drift this PR removed from four other files, and
+  // leaving one inside date-utils itself would be the worst place to keep it. Raised by CodeRabbit.
+  return istDateIso(new Date())
 }
 
 /**
