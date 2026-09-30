@@ -561,9 +561,19 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
    */
   const unallocatedCount = useMemo(() => {
     const withWork = new Set(assignments.map((a) => a.workerId))
+    /**
+     * A PICKER'S WORK IS SET -- just not here. They are paid by weight from picking_records, so
+     * they have no labour_assignment by design, and counting them as "No work set" is the same
+     * false amber this block already excludes monthly staff from. It would fire on every picker on
+     * every day of harvest, which is the busiest fortnight of the year and the worst possible time
+     * to be training somebody to dismiss an amber number.
+     */
+    const picking = new Set(pickingWorkerIds)
     const paidDailyById = new Map(workers.map((w) => [w.id, isPaidDaily(w.workerType)]))
-    return presentWorkerIds.filter((id) => !withWork.has(id) && (paidDailyById.get(id) ?? true)).length
-  }, [assignments, presentWorkerIds, workers])
+    return presentWorkerIds.filter(
+      (id) => !withWork.has(id) && !picking.has(id) && (paidDailyById.get(id) ?? true),
+    ).length
+  }, [assignments, presentWorkerIds, workers, pickingWorkerIds])
   // Only people who are SUPPOSED to have a day rate. Staff, staff_pf and proprietors are paid a
   // monthly salary and carry no daily rate by design -- the DB even forbids both (scripts/141,
   // attendance_workers_one_pay_basis). Counting them as "missing" told HoneyFarm to go and fix
@@ -1407,9 +1417,17 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                     </p>
                   )}
 
+                  {/* A STATEMENT NOW, NOT AN ACCUSATION.
+                      This was amber because picking plus day-work on one date meant being paid
+                      twice for the same day -- the double-count scripts/116 flagged and nothing
+                      enforced. scripts/152 makes that impossible: the two now share one day budget
+                      and the second entry is refused unless the fractions fit inside a day.
+                      So this line can only appear on a split day the writer chose and the database
+                      approved, and amber for an approved action is the false-alarm pattern this
+                      file keeps having to undo. */}
                   {pickingWorkerIds.includes(worker.id) && rows.length > 0 && (
-                    <p className="pb-1 text-[11px] font-bold text-amber-600">
-                      Also picked today — paid by weight and by day
+                    <p className="pb-1 text-[11px] font-semibold text-stone-500 dark:text-stone-400">
+                      Split day — picked by weight and worked by day
                     </p>
                   )}
                 </div>
