@@ -32,7 +32,59 @@ import { describe, expect, it } from "vitest"
  * only to prove its no-rewrite promise still holds.
  */
 const legacyCap = readFileSync("scripts/145-labour-day-cap-one-day.sql", "utf8")
-const cap = readFileSync("scripts/152-picking-shares-the-day-budget.sql", "utf8")
+
+/**
+ * COMMENTS REMOVED, THE WAY PLPGSQL READS THEM.
+ *
+ * Every assertion below is about what the database EXECUTES. Reading the raw file means a control
+ * that has been commented out still satisfies its own test -- and commenting out is how a control
+ * actually gets disabled, far more often than deleting it. My tamper tests only ever DELETED the
+ * lock and the move conditions, which is the easier half, so the guard was verified against the
+ * tamper it could survive. Raised by CodeRabbit on PR #55.
+ *
+ * Dollar-quoted bodies are deliberately NOT treated as opaque. SQL sees `$$ … $$` as one string,
+ * but plpgsql then parses what is inside it, and that is where every rule in this file lives -- so
+ * `--` and nested `/* … *\/` are stripped in there too. Single-quoted literals ARE preserved,
+ * because the RAISE EXCEPTION messages are data and contain apostrophes and punctuation that would
+ * otherwise be read as syntax.
+ */
+const executableSql = (sql: string): string => {
+  let out = ""
+  let i = 0
+  let inString = false
+  let blockDepth = 0
+  while (i < sql.length) {
+    const two = sql.slice(i, i + 2)
+    if (inString) {
+      out += sql[i]
+      if (sql[i] === "'") {
+        if (sql[i + 1] === "'") { out += "'"; i += 2; continue }
+        inString = false
+      }
+      i += 1
+      continue
+    }
+    if (blockDepth > 0) {
+      if (two === "/*") { blockDepth += 1; i += 2; continue }
+      if (two === "*/") { blockDepth -= 1; i += 2; continue }
+      // Newlines kept so reported positions and ordering checks stay meaningful.
+      out += sql[i] === "\n" ? "\n" : " "
+      i += 1
+      continue
+    }
+    if (two === "/*") { blockDepth = 1; i += 2; continue }
+    if (two === "--") {
+      while (i < sql.length && sql[i] !== "\n") i += 1
+      continue
+    }
+    if (sql[i] === "'") { inString = true; out += sql[i]; i += 1; continue }
+    out += sql[i]
+    i += 1
+  }
+  return out
+}
+
+const cap = executableSql(readFileSync("scripts/152-picking-shares-the-day-budget.sql", "utf8"))
 const route = readFileSync("app/api/attendance/assignments/route.ts", "utf8")
 const panel = readFileSync("components/attendance/worker-allocation.tsx", "utf8")
 const muster = readFileSync("components/attendance-tab.tsx", "utf8")
@@ -129,6 +181,52 @@ describe("the database will not store more than a day", () => {
       expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bDELETE FROM picking_records\b/)
       expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bUPDATE picking_records\b/)
     }
+  })
+})
+
+describe("the guard reads what the database executes, not what the file says", () => {
+  /**
+   * The assertions above are only worth anything if a DISABLED control fails them. Deleting a line
+   * is the tamper I originally tested; commenting one out is the tamper that actually happens, and
+   * against the raw file text every one of those assertions survived it.
+   *
+   * These cases comment the controls out rather than removing them. Raised by CodeRabbit on PR #55.
+   */
+  const raw = readFileSync("scripts/152-picking-shares-the-day-budget.sql", "utf8")
+
+  it("a commented-out advisory lock does not count as a lock", () => {
+    const disabled = raw.replace(
+      /^(\s*)PERFORM pg_advisory_xact_lock\(/m,
+      "$1-- PERFORM pg_advisory_xact_lock(",
+    )
+    expect(disabled, "the tamper must actually change the file").not.toBe(raw)
+    // Still present in the text -- which is exactly why reading the raw file was not enough.
+    expect(disabled).toContain("pg_advisory_xact_lock")
+    expect(executableSql(disabled), "but gone from what runs").not.toContain("pg_advisory_xact_lock")
+  })
+
+  it("a commented-out move condition does not count as a check", () => {
+    const disabled = raw.replace(/^(\s*)OR NEW\.worker_id IS DISTINCT FROM OLD\.worker_id/gm, "$1-- $&")
+    expect(disabled).not.toBe(raw)
+    const stillThere = (disabled.match(/IS DISTINCT FROM OLD\.(worker_id|work_date|pick_date)/g) ?? []).length
+    const executing = (executableSql(disabled).match(/IS DISTINCT FROM OLD\.(worker_id|work_date|pick_date)/g) ?? []).length
+    expect(stillThere, "the raw file still shows all four").toBe(4)
+    expect(executing, "only the two date conditions still run").toBe(2)
+  })
+
+  it("keeps the RAISE messages intact, because they are data not syntax", () => {
+    // The stripper must not eat single-quoted literals: the exception text is what a writer reads,
+    // and it contains apostrophes ("A worker''s day") that a naive stripper would mangle.
+    expect(cap).toContain("from day-work on the muster")
+    expect(cap).toMatch(/A worker''s day is one day/)
+  })
+
+  it("strips a block comment even inside a dollar-quoted function body", () => {
+    // SQL sees $$ … $$ as one opaque string; plpgsql parses what is inside it, and every rule in
+    // this file lives in there. Treating the body as opaque would strip nothing that matters.
+    const sample = "CREATE FUNCTION f() RETURNS void AS $$\nBEGIN\n  /* PERFORM banned(); */\n  PERFORM ok();\nEND;\n$$ LANGUAGE plpgsql;"
+    expect(executableSql(sample)).not.toContain("banned")
+    expect(executableSql(sample)).toContain("PERFORM ok()")
   })
 })
 
