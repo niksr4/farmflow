@@ -28,11 +28,23 @@ Primary market: India (INR billing via Razorpay planned)
 - Every table has a `tenant_id` column. RLS enforces isolation at the DB level.
 - `lib/server/tenant-db.ts` — wraps all DB calls with tenant context
 - `lib/server/db.ts` — Neon connection; uses `DATABASE_URL_DEV` in non-prod, `DATABASE_URL` in prod
+  - ⚠ **`sql` is NEVER falsy.** It is `baseUrl ? neon(baseUrl) : createUnavailableClient()`, so an
+    unconfigured database gives a stub that THROWS on use, not `undefined`. Every `if (!sql)` and
+    `if (x && sql)` therefore reads as "configured" unconditionally. Gate on **`isDbConfigured`**.
+    This shipped a dead branch in `requireSessionUser` and a test that mocked `sql` as `undefined` —
+    a shape production cannot produce — which passed while pinning the mock instead of the behaviour.
+  - `adminSql` **falls back to `sql`** when no owner URL is set, so gating DDL on `isDbConfigured`
+    can still hand you the DML-only runtime role. Use **`isAdminDbConfigured`** for DDL.
 - Tenant schema bootstrapped by `scripts/20-tenant-schema.sql` and subsequent migrations
 
 ### Auth
 - Credentials-based (username + password). `lib/auth.ts` (client), `lib/server/auth.ts` (server)
 - Sessions are always 30 days (`sessionMode: "app"`) — no short web sessions
+- **A session whose `users` row is gone is refused** (since 2026-09-29). `requireSessionUser` used to
+  fall back to the JWT's own `role`/`tenantId` when the lookup found nobody, so deleting a user — or
+  moving them between tenants — left a working token with the old permissions for up to a month.
+  Revoking access did not revoke access. That was the upstream cause of four separate downstream
+  fixes (#32, #35, #42, #47), which remain as defence-in-depth.
 - Email verification via one-time tokens (signup flow)
 - MFA supported (`scripts/43-mfa.sql`, `lib/server/mfa.ts`)
 - Roles: `owner`, `manager`, `user` — owner bypasses all module checks
@@ -195,15 +207,22 @@ Route: `app/admin/`
 
 ## Component Architecture
 
-`components/inventory-system.tsx` is the main dashboard shell — **5,064 lines** as of 2026-09-18.
-This line previously said "~8,300", which was true at some point and then quietly was not; check it
-with `wc -l` rather than trusting the number here.
+`components/inventory-system.tsx` is the main dashboard shell — **4,974 lines** as of 2026-09-30.
+This line has now been wrong twice: it said "~8,300" until 2026-09-18 and "5,064" until today. It
+will be wrong again. **Measure it, do not read it here** — and the same goes for the two numbers
+below, which were also both wrong (42 files, and "20 over 1000 lines"):
 
-Extracted modules live in `components/inventory-system/` (42 files) and `lib/`. **Read the
-directory, not a list in this file** — an inventory of forty-two filenames in a doc is a list that
+```bash
+wc -l components/inventory-system.tsx
+ls components/inventory-system/ | wc -l
+git ls-files '*.ts' '*.tsx' | grep -v ^tests/ | xargs wc -l | awk '$1>1000 && $2!="total"' | wc -l
+```
+
+Extracted modules live in `components/inventory-system/` (**45 files**) and `lib/`. **Read the
+directory, not a list in this file** — an inventory of forty-five filenames in a doc is a list that
 rots, and the last one did.
 
-**20 files are still over 1000 lines.** To see them, in size order:
+**19 files are still over 1000 lines.** To see them, in size order:
 
 ```bash
 git ls-files '*.ts' '*.tsx' | grep -v ^tests/ | xargs wc -l | sort -rn | head -25
@@ -302,13 +321,19 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-09-18 the highest file is `151-update-inventory-onconflict-partial-index.sql`; prod has
-**149** rows in `schema_migrations` and dev has **150**. This line said `130-*` and "as of
+As of **2026-09-30** the highest file on `main` is `151-update-inventory-onconflict-partial-index.sql`;
+prod has **149** rows in `schema_migrations`, dev has **151**. This line said `130-*` and "as of
 2026-08-20" for four weeks after that stopped being true — **count it, do not read it here**:
 
 ```bash
 ls scripts/*.sql | sed 's#scripts/##' | sort -t- -k1 -n | tail -1   # highest file
 ```
+
+⚠ **DEV CAN BE AHEAD OF `main`, AND IS.** Applying a migration to dev is how you test it, so a
+migration on an unmerged branch is already in dev's ledger while its file does not exist on `main`.
+Right now dev's highest row is `152-picking-shares-the-day-budget.sql`, from an open PR. So
+"dev minus prod" is not a list of what is waiting to ship — it can include work that may never ship
+in that form. Compare against the *files on the branch you are on*, not against dev.
 
 ⚠ **A fresh database does NOT run migrations 1–87.** `migrate.mjs` has
 `BOOTSTRAP_CUTOFF = "87-default-activity-codes.sql"`: when `schema_migrations` is *empty*,
@@ -391,6 +416,34 @@ A formatted string cannot be re-offset by anybody. Send instants **as well** whe
 them, name the two differently (`checkInClock` vs `checkInTime`), and say in a comment which is for
 display.
 
+**In the browser, use the helpers in `lib/date-utils.ts` and never hand-roll any of this:**
+
+| want | use |
+|---|---|
+| the estate's today, `YYYY-MM-DD` | `todayIso()` |
+| any instant as the estate's date | `istDateIso(instant)` |
+| any instant as an IST wall clock | `istClock(instant)` |
+| an instant as a human IST date | `istDate(instant, opts)` |
+| the estate's today for **date-fns** | `estateTodayDate()` |
+| a stored `YYYY-MM-DD` for display | `formatDateOnly(value)` — reads its literal parts, no zone |
+
+⚠ **SEVEN SIGNATURES OF ONE BUG, and each new guard was blind to the next.** The count is the point:
+five were known by 2026-09-24, and two more were found on 2026-09-30 in a sweep for something else.
+`tests/today-is-the-estates-today.test.ts` holds all of them.
+
+1. `new Date().toISOString().slice(0,10)` — UTC, not IST
+2. the same via `.split("T")`
+3. `new Date().getMonth()` / `getDate()` / `getDay()` / `getHours()` — the host's calendar
+4. the **variable** form of 3 (`const now = new Date()` on one line, `now.getMonth()` on another)
+5. `getDay()`/`getHours()` against estate-time windows
+6. `toLocaleDateString` / `toLocaleTimeString` **with no `timeZone`** — a locale picks the FORMAT, not
+   the offset, so `"en-IN"` does not make it IST
+7. **date-fns**: `format(d, …)`, `startOfWeek(d)`, `isToday(d)` all read a Date's LOCAL parts, so
+   seeding any of them with `new Date()` puts the whole screen on the viewer's calendar
+
+`isToday`/`isFuture`/`isPast` from date-fns are **banned outright** — they take no reference date, so
+they are always the host's opinion. Compare `YYYY-MM-DD` strings against `todayIso()` instead.
+
 ### Three ways this has actually broken, all silent
 
 1. **`String(dateObject)` renders the SERVER's zone** and appends a human zone name. `lib/server/db`
@@ -467,6 +520,27 @@ PostHog deliberately: a single blocked transport is what hid the original proble
 
 Only a session that went stale **while visible** with no `pagehide` is reported as a crash — a
 stale *hidden* session is a routine iOS background reclaim and alerting on it would bury the signal.
+
+⚠ **THAT WAS NOT ENOUGH, AND THE BEACON SPENT A MONTH MEASURING THE WRONG THING.** "Visible, no
+`pagehide`" does not mean the app died. On Android — which is where essentially all this traffic is —
+putting the phone in your pocket ends the renderer without `pagehide`, while the last heartbeat still
+reads `visible` because the person was looking at the screen until they stopped. A crash and "I
+finished and left" are the same record from inside the page.
+
+Production, 90 days, sampled: 42 events, 6 users, and the gap between the session dying and the next
+load had a **median of 15.4 hours** (max 95.7). Seven of ten reports arrived between 08:11 and 09:50
+IST — writers opening the app to start the day, with the beacon reporting *yesterday's* "crash". Peak
+heap was 2.3% of the device limit, so nothing was ever under pressure. It was counting how many days
+somebody used FarmFlow, while sitting at the top of Sentry as the loudest issue in the project.
+
+So there is a third condition (`MAX_CRASH_RETURN_GAP_MS`, 5 minutes): **a crash is defined by the user
+coming back.** Somebody whose app dies mid-muster relaunches immediately, because they are standing in
+a field halfway through a task. Known blind spot, accepted: a crash bad enough that they give up for
+the day now looks like a clean exit.
+
+**Before doing stabilisation work on a crash number, check what the number is counting.** Two agent
+reports and one of my own theories all said "iOS memory pressure"; the data said Android, 2.3% heap,
+and 15 hours.
 
 ### Request cancellation
 
