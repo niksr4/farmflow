@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import type { YearlyAttendanceRow } from "@/lib/attendance-yearly"
 import { formatHoursHm } from "@/lib/attendance-hours"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
+import { todayIso } from "@/lib/date-utils"
 
 /**
  * The yearly summary — a month per line per worker, laid out like the sheet the office files.
@@ -43,7 +44,10 @@ type Summary = {
  *
  * Two derivations of "now" in one file is the bug; using one is the fix.
  */
-const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)
+// todayIso() rather than the offset: same answer, but it states the zone instead of encoding an
+// assumption about India never adopting DST. This file already argues that two derivations of "now"
+// is the bug and one is the fix -- the shared helper is the logical end of that.
+const istToday = () => todayIso()
 const thisYearStart = () => `${istToday().slice(0, 4)}-01`
 const thisMonth = () => istToday().slice(0, 7)
 

@@ -20,7 +20,7 @@ import {
 import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
 import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
 import { formatCurrency } from "@/lib/format"
-import { istTodayParts } from "@/lib/date-utils"
+import { istDateIso, istTodayParts } from "@/lib/date-utils"
 
 type DigestResult = {
   tenantId: string
@@ -36,8 +36,19 @@ const toRows = <T = any>(value: unknown): T[] => {
   return Array.isArray(candidate) ? (candidate as T[]) : []
 }
 
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
-const istDateString = (date: Date): string => new Date(date.getTime() + IST_OFFSET_MS).toISOString().split("T")[0]
+/**
+ * THE ESTATE'S CALENDAR DATE, from the shared helper rather than arithmetic.
+ *
+ * This was `new Date(d.getTime() + 5.5 * 60 * 60 * 1000).toISOString().split("T")[0]`. It gives the
+ * right answer today, and only because India has never observed DST -- which lib/date-utils.ts
+ * declines to rely on in so many words: "the arithmetic version is correct only because IST happens
+ * to have no DST, which is a fact about India the code should not quietly rely on."
+ *
+ * It also sat outside every guard. tests/today-is-the-estates-today.test.ts keys on `new Date()`,
+ * and this is `new Date(expr)` -- so the file whose whole job is telling an estate what happened
+ * yesterday was the one place the date rules were not enforced.
+ */
+const istDateString = (date: Date): string => istDateIso(date)
 
 /**
  * The shared helper, not a local near-copy.
