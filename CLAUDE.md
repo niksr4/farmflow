@@ -40,11 +40,17 @@ Primary market: India (INR billing via Razorpay planned)
 ### Auth
 - Credentials-based (username + password). `lib/auth.ts` (client), `lib/server/auth.ts` (server)
 - Sessions are always 30 days (`sessionMode: "app"`) — no short web sessions
-- **A session whose `users` row is gone is refused** (since 2026-09-29). `requireSessionUser` used to
-  fall back to the JWT's own `role`/`tenantId` when the lookup found nobody, so deleting a user — or
-  moving them between tenants — left a working token with the old permissions for up to a month.
-  Revoking access did not revoke access. That was the upstream cause of four separate downstream
-  fixes (#32, #35, #42, #47), which remain as defence-in-depth.
+- **A session carrying a user id whose `users` row is gone is refused** (since 2026-09-29).
+  `requireSessionUser` used to fall back to the JWT's own `role`/`tenantId` when the lookup found
+  nobody, so deleting a user — or moving them between tenants — left a working token with the old
+  permissions for up to a month. Revoking access did not revoke access. That was the upstream cause
+  of four separate downstream fixes (#32, #35, #42, #47), which remain as defence-in-depth.
+  - **Read "carrying a user id" literally.** Every token minted by `authorize()` has one, so that is
+    the live path. A legacy token with only a `name` still reaches the username lookup, which can
+    resolve a DIFFERENT account if that username has since been reused — so revocation is not
+    absolute for those. The id path deliberately does not fall through to it for exactly that reason.
+  - When the database is unconfigured (`!isDbConfigured`) the claims are trusted, because nothing has
+    said the account is gone — that is a configuration state, not a deletion.
 - Email verification via one-time tokens (signup flow)
 - MFA supported (`scripts/43-mfa.sql`, `lib/server/mfa.ts`)
 - Roles: `owner`, `manager`, `user` — owner bypasses all module checks
