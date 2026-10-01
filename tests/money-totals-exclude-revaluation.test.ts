@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import ts from "typescript"
 import { describe, expect, it } from "vitest"
 import { EXCLUDE_REVALUATION_SQL, REVALUATION_NOTE_PREFIXES, isRevaluationNote } from "@/lib/revaluation-notes"
 
@@ -37,20 +38,33 @@ import { EXCLUDE_REVALUATION_SQL, REVALUATION_NOTE_PREFIXES, isRevaluationNote }
 const MONEY_COLUMN = /\b(total_cost|price)\b/i
 const TOUCHES_TABLE = /\btransaction_history\b/i
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
 /**
- * The exclusion, however it is spelled at the call site: the shared constant, the row-level
- * predicate, or a hand-written NOT ILIKE. A hand-written one is not preferred -- the whole point of
- * lib/revaluation-notes.ts is that both spellings live in one place -- but a query that excludes
- * them correctly by hand is not the failure this guards against.
+ * The exclusion, however it is spelled at the call site.
+ *
+ * ⚠ EVERY PREFIX, NOT ANY PREFIX. This was an alternation across REVALUATION_NOTE_PREFIXES, so a
+ * query excluding only "Price updated" and not "Price correction" counted as guarded -- the precise
+ * half-fix lib/revaluation-notes.ts opens by warning about ("excluding only one spelling is not a
+ * partial fix, it is a silent wrong answer, and it has happened before"). The guard against that bug
+ * accepted that bug.
+ *
+ * Two ways to be guarded:
+ *   - interpolate the shared constant, which covers every prefix by construction and stays correct
+ *     when a third spelling is added. This is what all three real aggregates do.
+ *   - hand-write a NOT ILIKE for ALL of them. Not preferred -- the point of the shared constant is
+ *     that the spellings live in one place -- but excluding them correctly by hand is not the
+ *     failure this guards against.
+ *
+ * `isRevaluationNote` used to be a third way and is deliberately gone: it is a JS predicate over a
+ * row in hand, so it cannot appear inside a SQL body except as prose. Accepting it there was a
+ * loophole, not a spelling.
  */
-const EXCLUDES_REVALUATION = new RegExp(
-  [
-    "EXCLUDE_REVALUATION_SQL",
-    "isRevaluationNote",
-    ...REVALUATION_NOTE_PREFIXES.map((p) => `NOT ILIKE '${p}`),
-  ].join("|"),
-  "i",
-)
+const excludesRevaluation = (body: string): boolean =>
+  /\$\{[^}]*\bEXCLUDE_REVALUATION_SQL\b[^}]*\}/.test(body) ||
+  REVALUATION_NOTE_PREFIXES.every((prefix) =>
+    new RegExp(`NOT\\s+ILIKE\\s+'${escapeRegExp(prefix)}`, "i").test(body),
+  )
 
 /**
  * SQL comments removed before anything is matched.
@@ -90,6 +104,42 @@ const sumsMoney = (body: string): boolean => {
   return false
 }
 
+type Template = { text: string; line: number }
+
+/**
+ * Every template literal in a source file, parsed rather than pattern-matched.
+ *
+ * Every query in this codebase is a tagged template, so the template is the unit a finding belongs
+ * to -- one query's exclusion must not be able to cover a different query's aggregate.
+ *
+ * ⚠ THIS WAS `[...src.matchAll(/`/g)]` PAIRED TWO AT A TIME, which is only correct while every
+ * backtick in the file opens or closes a query. One in a `//` comment, a JSDoc, or a quoted string
+ * shifts every pair after it by one, so the "bodies" become the JS BETWEEN templates and the real
+ * queries stop being examined -- while the floor of three below still passes, because some other
+ * file supplies them. All 27 files that touch the table happen to have an even count today, which
+ * is luck, not a property. Parsing removes the class.
+ *
+ * Nested templates are not visited: the outer text already contains them, so an aggregate is
+ * attributed once, to the outermost query it appears in.
+ */
+const sqlTemplates = (src: string, file: string): Template[] => {
+  const parsed = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true)
+  const out: Template[] = []
+  const visit = (node: ts.Node) => {
+    if (ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
+      const start = node.getStart(parsed)
+      out.push({
+        text: src.slice(start, node.getEnd()),
+        line: parsed.getLineAndCharacterOfPosition(start).line + 1,
+      })
+      return
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(parsed)
+  return out
+}
+
 type Finding = { file: string; line: number; guarded: boolean }
 
 /** Every money aggregate over transaction_history in the tree, derived from git rather than listed. */
@@ -101,19 +151,11 @@ const moneyAggregates = (): Finding[] => {
   for (const file of files) {
     const src = readFileSync(resolve(process.cwd(), file), "utf8")
     if (!TOUCHES_TABLE.test(src)) continue
-    // Backtick-delimited regions: every query in this codebase is a tagged template, including the
-    // ones that splice a plain string in via sql.unsafe(...).
-    const ticks = [...src.matchAll(/`/g)].map((m) => m.index!)
-    for (let k = 0; k + 1 < ticks.length; k += 2) {
-      const raw = src.slice(ticks[k] + 1, ticks[k + 1])
-      if (!TOUCHES_TABLE.test(raw)) continue
-      const body = stripSqlComments(raw)
+    for (const template of sqlTemplates(src, file)) {
+      if (!TOUCHES_TABLE.test(template.text)) continue
+      const body = stripSqlComments(template.text)
       if (!sumsMoney(body)) continue
-      found.push({
-        file,
-        line: src.slice(0, ticks[k]).split("\n").length,
-        guarded: EXCLUDES_REVALUATION.test(body),
-      })
+      found.push({ file, line: template.line, guarded: excludesRevaluation(body) })
     }
   }
   return found
@@ -152,22 +194,32 @@ describe("no money total counts a price correction as trade", () => {
      * exclude revaluation rows while doing no such thing.
      */
     /**
-     * Each comment style carries a token the check looks for, deliberately. An earlier version of
-     * this fixture put "Price updated rows must be excluded here" in the `--` comment -- prose that
-     * matches NONE of the patterns -- so disabling the `--` stripper changed nothing and the test
-     * kept passing. A fixture that cannot fail is the same defect as a guard that cannot fail.
+     * EACH COMMENT STYLE CARRIES A COMPLETE EXCLUSION, deliberately, so that disabling EITHER
+     * stripper on its own flips the guard to true and fails this test.
+     *
+     * Two earlier versions of this fixture could not fail. The first put prose ("Price updated rows
+     * must be excluded here") in the `--` comment, which matches none of the patterns, so removing
+     * the `--` stripper changed nothing. The second split one exclusion across the two comments --
+     * fatal once the guard began requiring every prefix, because half an exclusion is correctly
+     * rejected and the test would have passed with both strippers gone. A fixture that cannot fail
+     * is the same defect as a guard that cannot fail.
      */
     const essayOnly = `
       SELECT SUM(total_cost) FROM transaction_history
-      -- Add EXCLUDE_REVALUATION_SQL here; rows NOT ILIKE 'Price updated%' must go.
-      /* isRevaluationNote covers the other spelling, NOT ILIKE 'Price correction%'. */
+      -- Add \${sql.unsafe(EXCLUDE_REVALUATION_SQL)} to this query; it is missing.
+      /* By hand that is NOT ILIKE 'Price updated%' AND NOT ILIKE 'Price correction%'. */
       WHERE tenant_id = $1
     `
     expect(sumsMoney(stripSqlComments(essayOnly)), "it is a money aggregate").toBe(true)
     expect(
-      EXCLUDES_REVALUATION.test(stripSqlComments(essayOnly)),
+      excludesRevaluation(stripSqlComments(essayOnly)),
       "and the comments must not count as excluding anything",
     ).toBe(false)
+    // Each comment alone would satisfy the guard, which is what makes the two strippers testable.
+    expect(excludesRevaluation("-- \${sql.unsafe(EXCLUDE_REVALUATION_SQL)}")).toBe(true)
+    expect(
+      excludesRevaluation("NOT ILIKE 'Price updated%' AND NOT ILIKE 'Price correction%'"),
+    ).toBe(true)
   })
 
   it("sees a money column nested inside COALESCE and CASE, as the real ones are", () => {
@@ -191,6 +243,71 @@ describe("no money total counts a price correction as trade", () => {
      */
     const rowReader = "SELECT id, notes, total_cost FROM transaction_history WHERE tenant_id = $1 ORDER BY id"
     expect(sumsMoney(rowReader), "listing money columns is not totalling them").toBe(false)
+  })
+
+  it("excluding one spelling is not enough, because that is the original bug", () => {
+    /**
+     * 59 HoneyFarm rows carry "Price updated" and the rest carry "Price correction". A query that
+     * excludes one and not the other is wrong by whatever the other spelling holds -- Rs 8.42 lakh
+     * of restock on the older form alone -- and reads as a clean fix.
+     *
+     * The guard accepted this until 2026-10-01: it was an alternation, so ANY one prefix passed.
+     */
+    const half = `
+      SELECT COALESCE(SUM(total_cost), 0) FROM transaction_history
+      WHERE tenant_id = $1 AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
+    `
+    expect(sumsMoney(half), "it is a money aggregate").toBe(true)
+    expect(excludesRevaluation(half), "and one prefix out of two is not excluded").toBe(false)
+
+    const whole = `${half}\n      AND COALESCE(notes, '') NOT ILIKE 'Price correction%'`
+    expect(excludesRevaluation(whole), "both by hand is excluded").toBe(true)
+    // The shared constant carries every prefix by construction, which is why it is preferred.
+    expect(
+      excludesRevaluation("WHERE tenant_id = $1 ${sql.unsafe(EXCLUDE_REVALUATION_SQL)}"),
+      "the constant is enough on its own",
+    ).toBe(true)
+    expect(
+      excludesRevaluation("WHERE tenant_id = $1 -- remember EXCLUDE_REVALUATION_SQL"),
+      "but naming it without interpolating it does nothing to the query",
+    ).toBe(false)
+  })
+
+  it("finds a query after a stray backtick, which the old pairing did not", () => {
+    /**
+     * The scan used to pair every backtick in the file two at a time. This fixture has one in prose,
+     * so every pair after it is offset and the two real queries fall into the gaps BETWEEN pairs.
+     * Written as a source string rather than by editing a real route, so it keeps proving the point
+     * after the routes change.
+     */
+    const src = [
+      "// The old pairing broke on a backtick in prose like don`t, shifting everything after it.",
+      "export const totals = async () => {",
+      "  const guarded = await sql`",
+      "    SELECT COALESCE(SUM(total_cost), 0) FROM transaction_history",
+      "    WHERE tenant_id = $1 ${sql.unsafe(EXCLUDE_REVALUATION_SQL)}",
+      "  `",
+      "  const forgotten = await sql`",
+      "    SELECT COALESCE(SUM(total_cost), 0) FROM transaction_history WHERE tenant_id = $1",
+      "  `",
+      "  return [guarded, forgotten]",
+      "}",
+    ].join("\n")
+
+    // What the old algorithm saw: nothing at all, so the unguarded query was invisible.
+    const ticks = [...src.matchAll(/`/g)].map((m) => m.index!)
+    const pairedBodies: string[] = []
+    for (let k = 0; k + 1 < ticks.length; k += 2) pairedBodies.push(src.slice(ticks[k] + 1, ticks[k + 1]))
+    expect(
+      pairedBodies.filter((b) => TOUCHES_TABLE.test(b) && sumsMoney(b)).length,
+      "the fixture must actually defeat backtick pairing, or it proves nothing",
+    ).toBe(0)
+
+    // What parsing sees: both queries, and that the second one forgot.
+    const aggregates = sqlTemplates(src, "fixture.ts")
+      .filter((t) => TOUCHES_TABLE.test(t.text) && sumsMoney(stripSqlComments(t.text)))
+      .map((t) => excludesRevaluation(stripSqlComments(t.text)))
+    expect(aggregates, "both aggregates found, the second unguarded").toEqual([true, false])
   })
 
   it("both note spellings are covered, and the constant is what carries them", () => {
