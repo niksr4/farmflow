@@ -115,16 +115,28 @@ type Template = { text: string; line: number }
 /**
  * True when a template literal is the text of a DATABASE QUERY rather than prose or an AI prompt.
  *
- * Both shapes are live in the three real aggregates, so both are recognised:
- *   sql`…`                    finance-balance-sheet, handed to runOptionalQuery
+ * Two shapes, both live in the three real aggregates:
+ *   <tag>`…`                  finance-balance-sheet, handed to runOptionalQuery
  *   sql.query(`…`, [params])  both season-summary totals
+ *
+ * ⚠ KEYED ON BEING TAGGED, NOT ON THE TAG'S NAME. This tested the tag against /\bsql\b/, which is a
+ * regex pinned to the identifier that happened to be in front of it -- and there is no word boundary
+ * between "y" and "S", so `inventorySql` did not match. FIVE client names were invisible:
+ * inventorySql (13 templates over this table), txn (5), accountsSql (4), db (2) and ensureSql() (1),
+ * against 11 for plain `sql`. The scan was watching 11 of 36 query sites. None of the 25 holds a
+ * money aggregate today, which is the only reason this was not already a wrong number -- but the
+ * whole purpose of a ratchet is the aggregate somebody adds tomorrow, and it could have gone into
+ * any of them unseen.
+ *
+ * Prose is not tagged, so "it has a tag" is the property that separates a query from a prompt here;
+ * the prompt templates in ai-analysis and assistant-search are plain literals. The test below
+ * derives the tag names actually in use and asserts each is recognised, so a sixth client name is
+ * covered when it appears rather than when someone remembers.
  */
 const isQueryTemplate = (node: ts.Node): boolean => {
   const parent = node.parent
   if (!parent) return false
-  if (ts.isTaggedTemplateExpression(parent) && parent.template === node) {
-    return /\bsql\b/i.test(parent.tag.getText())
-  }
+  if (ts.isTaggedTemplateExpression(parent) && parent.template === node) return true
   if (ts.isCallExpression(parent) && parent.arguments.some((arg) => arg === node)) {
     return /\b(query|unsafe)$/i.test(parent.expression.getText())
   }
@@ -313,6 +325,50 @@ describe("no money total counts a price correction as trade", () => {
       excludesRevaluation("WHERE tenant_id = $1 -- remember EXCLUDE_REVALUATION_SQL"),
       "but naming it without interpolating it does nothing to the query",
     ).toBe(false)
+  })
+
+  it("recognises every database client in use, not just the one called sql", () => {
+    /**
+     * DERIVED, NOT LISTED. The predicate used to test the tag against /\bsql\b/ and so saw 11 of the
+     * 36 query templates over this table: `inventorySql` has no word boundary before "Sql", and
+     * `txn`, `accountsSql`, `db` and `ensureSql()` share nothing with the pattern at all.
+     *
+     * A hand-kept list of five names would rot the moment a sixth client is bound, which is the
+     * failure this project has hit before. So the set comes from the tree: every tag that actually
+     * carries a query over transaction_history must be recognised. Add a client tomorrow and this
+     * covers it tomorrow.
+     */
+    const files = execSync("git ls-files app lib", { encoding: "utf8" })
+      .split("\n")
+      .filter((f) => f.endsWith(".ts"))
+    const unrecognised = new Set<string>()
+    const tags = new Set<string>()
+    for (const file of files) {
+      const src = readFileSync(resolve(process.cwd(), file), "utf8")
+      if (!TOUCHES_TABLE.test(src)) continue
+      const parsed = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true)
+      const visit = (node: ts.Node) => {
+        if (ts.isTaggedTemplateExpression(node)) {
+          const text = src.slice(node.template.getStart(parsed), node.template.getEnd())
+          if (TOUCHES_TABLE.test(text)) {
+            const tag = node.tag.getText()
+            tags.add(tag)
+            if (!isQueryTemplate(node.template)) unrecognised.add(tag)
+          }
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(parsed)
+    }
+
+    expect(
+      tags.size,
+      "the probe must find the clients at all, or it is asserting nothing",
+    ).toBeGreaterThanOrEqual(5)
+    expect(
+      [...unrecognised],
+      "every tag carrying a query over transaction_history must be scanned for money aggregates",
+    ).toEqual([])
   })
 
   it("an ILIKE with no wildcard excludes nothing, so it does not count", () => {
