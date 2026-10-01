@@ -43,6 +43,12 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 /**
  * The exclusion, however it is spelled at the call site.
  *
+ * ⚠ AND THE WILDCARD IS PART OF THE EXCLUSION. `NOT ILIKE 'Price updated'` with no `%` excludes
+ * NOTHING -- every real row reads "Price updated from 10 to 20", and ILIKE without a wildcard is an
+ * equality test. Confirmed against Postgres: that note ILIKE 'Price updated' is false, ILIKE
+ * 'Price updated%' is true. So a hand-written exclusion missing the `%` is a no-op that reads like a
+ * fix, and this guard accepted it.
+ *
  * ⚠ EVERY PREFIX, NOT ANY PREFIX. This was an alternation across REVALUATION_NOTE_PREFIXES, so a
  * query excluding only "Price updated" and not "Price correction" counted as guarded -- the precise
  * half-fix lib/revaluation-notes.ts opens by warning about ("excluding only one spelling is not a
@@ -63,7 +69,7 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 const excludesRevaluation = (body: string): boolean =>
   /\$\{[^}]*\bEXCLUDE_REVALUATION_SQL\b[^}]*\}/.test(body) ||
   REVALUATION_NOTE_PREFIXES.every((prefix) =>
-    new RegExp(`NOT\\s+ILIKE\\s+'${escapeRegExp(prefix)}`, "i").test(body),
+    new RegExp(`NOT\\s+ILIKE\\s+'${escapeRegExp(prefix)}%`, "i").test(body),
   )
 
 /**
@@ -107,37 +113,73 @@ const sumsMoney = (body: string): boolean => {
 type Template = { text: string; line: number }
 
 /**
- * Every template literal in a source file, parsed rather than pattern-matched.
+ * True when a template literal is the text of a DATABASE QUERY rather than prose or an AI prompt.
  *
- * Every query in this codebase is a tagged template, so the template is the unit a finding belongs
- * to -- one query's exclusion must not be able to cover a different query's aggregate.
+ * Both shapes are live in the three real aggregates, so both are recognised:
+ *   sql`…`                    finance-balance-sheet, handed to runOptionalQuery
+ *   sql.query(`…`, [params])  both season-summary totals
+ */
+const isQueryTemplate = (node: ts.Node): boolean => {
+  const parent = node.parent
+  if (!parent) return false
+  if (ts.isTaggedTemplateExpression(parent) && parent.template === node) {
+    return /\bsql\b/i.test(parent.tag.getText())
+  }
+  if (ts.isCallExpression(parent) && parent.arguments.some((arg) => arg === node)) {
+    return /\b(query|unsafe)$/i.test(parent.expression.getText())
+  }
+  return false
+}
+
+/**
+ * Every query in a source file, parsed rather than pattern-matched.
  *
- * ⚠ THIS WAS `[...src.matchAll(/`/g)]` PAIRED TWO AT A TIME, which is only correct while every
+ * The query is the unit a finding belongs to: ONE QUERY'S EXCLUSION MUST NOT COVER A DIFFERENT
+ * QUERY'S AGGREGATE. Two earlier versions each broke that invariant in their own way.
+ *
+ * ⚠ IT WAS `[...src.matchAll(/`/g)]` PAIRED TWO AT A TIME, which is only correct while every
  * backtick in the file opens or closes a query. One in a `//` comment, a JSDoc, or a quoted string
- * shifts every pair after it by one, so the "bodies" become the JS BETWEEN templates and the real
- * queries stop being examined -- while the floor of three below still passes, because some other
- * file supplies them. All 27 files that touch the table happen to have an even count today, which
- * is luck, not a property. Parsing removes the class.
+ * shifts every pair after it, so the "bodies" become the JS BETWEEN templates and the real queries
+ * stop being examined -- while the floor of three below still passes, because another file supplies
+ * them. All 27 files touching the table happen to have an even count today, which is luck.
  *
- * Nested templates are not visited: the outer text already contains them, so an aggregate is
- * attributed once, to the outermost query it appears in.
+ * ⚠ THEN IT TOOK EVERY TEMPLATE AND DID NOT VISIT NESTED ONES, which reintroduced the same hole it
+ * claimed to close: a query nested in an outer template was never examined on its own, and the outer
+ * text was checked as a whole, so one guarded query could vouch for an unguarded sibling. There are
+ * 20-odd nested templates in these files already (prompts in ai-analysis and assistant-search);
+ * none is a query holding this table today, which is one refactor away from being untrue.
+ *
+ * So: record only queries, recurse everywhere, and blank any query nested inside another so its
+ * aggregate and its exclusion belong to it alone. Blanking preserves newlines, keeping line numbers
+ * and the comment strippers honest.
  */
 const sqlTemplates = (src: string, file: string): Template[] => {
   const parsed = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true)
-  const out: Template[] = []
+  const queries: ts.Node[] = []
   const visit = (node: ts.Node) => {
-    if (ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
-      const start = node.getStart(parsed)
-      out.push({
-        text: src.slice(start, node.getEnd()),
-        line: parsed.getLineAndCharacterOfPosition(start).line + 1,
-      })
-      return
+    if (
+      (ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) &&
+      isQueryTemplate(node)
+    ) {
+      queries.push(node)
     }
     ts.forEachChild(node, visit)
   }
   visit(parsed)
-  return out
+
+  return queries.map((node) => {
+    const start = node.getStart(parsed)
+    const end = node.getEnd()
+    let text = src.slice(start, end)
+    for (const other of queries) {
+      if (other === node) continue
+      const innerStart = other.getStart(parsed)
+      if (innerStart <= start || other.getEnd() > end) continue
+      const blanked = src.slice(innerStart, other.getEnd()).replace(/[^\n]/g, " ")
+      text = text.slice(0, innerStart - start) + blanked + text.slice(other.getEnd() - start)
+    }
+    return { text, line: parsed.getLineAndCharacterOfPosition(start).line + 1 }
+  })
 }
 
 type Finding = { file: string; line: number; guarded: boolean }
@@ -271,6 +313,96 @@ describe("no money total counts a price correction as trade", () => {
       excludesRevaluation("WHERE tenant_id = $1 -- remember EXCLUDE_REVALUATION_SQL"),
       "but naming it without interpolating it does nothing to the query",
     ).toBe(false)
+  })
+
+  it("an ILIKE with no wildcard excludes nothing, so it does not count", () => {
+    /**
+     * `NOT ILIKE 'Price updated'` is an equality test, not a prefix test. Every real row reads
+     * "Price updated from 10 to 20", so that clause removes none of them while reading like a fix.
+     * Verified against Postgres: the note ILIKE 'Price updated' is FALSE, ILIKE 'Price updated%' is
+     * TRUE. EXCLUDE_REVALUATION_SQL has always written the `%`; a hand-written one can forget it.
+     */
+    const noWildcard = `
+      SELECT COALESCE(SUM(total_cost), 0) FROM transaction_history WHERE tenant_id = $1
+        AND COALESCE(notes, '') NOT ILIKE 'Price updated'
+        AND COALESCE(notes, '') NOT ILIKE 'Price correction'
+    `
+    expect(sumsMoney(noWildcard), "it is a money aggregate").toBe(true)
+    expect(excludesRevaluation(noWildcard), "both prefixes present, neither excludes anything").toBe(false)
+
+    const withWildcard = noWildcard.replace(/'(Price [a-z]+)'/g, "'$1%'")
+    expect(excludesRevaluation(withWildcard), "the same clauses with % do exclude").toBe(true)
+    // And the shared constant carries the wildcard, which is why it is the preferred spelling.
+    for (const prefix of REVALUATION_NOTE_PREFIXES) {
+      expect(EXCLUDE_REVALUATION_SQL).toContain(`'${prefix}%'`)
+    }
+  })
+
+  it("examines a query nested in another template, not the text around it", () => {
+    /**
+     * The hole the previous version left. One outer template holds a guarded query and an unguarded
+     * one; taking the outermost template and not visiting inside it checks the pair as a single
+     * body, where the guarded query's exclusion vouches for its unguarded sibling.
+     *
+     * Both real shapes appear here deliberately: a tagged sql`…` and a template handed to
+     * sql.query(…), which is how the two season-summary totals are written.
+     */
+    const src = [
+      "export const report = async (t: string) => `",
+      "  purchases: ${await sql`",
+      "    SELECT COALESCE(SUM(total_cost), 0) FROM transaction_history",
+      "    WHERE tenant_id = $1 ${sql.unsafe(EXCLUDE_REVALUATION_SQL)}",
+      "  `}",
+      "  outflow: ${await sql.query(`",
+      "    SELECT COALESCE(SUM(total_cost), 0) FROM transaction_history WHERE tenant_id = $1",
+      "  `, [t])}",
+      "`",
+    ].join("\n")
+
+    // What the previous version saw: the outer template only, reported as guarded.
+    const outer = src.slice(src.indexOf("`"), src.lastIndexOf("`") + 1)
+    expect(sumsMoney(outer), "the outer text is a money aggregate to any text scan").toBe(true)
+    expect(
+      excludesRevaluation(outer),
+      "and it looks guarded, because one of the two queries is -- this is the hole",
+    ).toBe(true)
+
+    // What it sees now: two queries, judged separately.
+    const found = sqlTemplates(src, "nested.ts")
+      .filter((t) => TOUCHES_TABLE.test(t.text) && sumsMoney(stripSqlComments(t.text)))
+    expect(found.length, "both nested queries are examined on their own").toBe(2)
+    expect(
+      found.map((t) => excludesRevaluation(stripSqlComments(t.text))),
+      "the sql.query one forgot, and is no longer covered by its sibling",
+    ).toEqual([true, false])
+  })
+
+  it("does not let an outer query vouch for a query nested inside it", () => {
+    /**
+     * The blanking path. A query spliced into another query is its own query, and the outer must not
+     * be credited with the inner's aggregate nor the inner with the outer's exclusion.
+     */
+    const src = [
+      "const q = sql`",
+      "  SELECT COALESCE(SUM(total_cost), 0) FROM transaction_history",
+      "  WHERE tenant_id = $1 ${sql.unsafe(EXCLUDE_REVALUATION_SQL)}",
+      "    AND id <> ANY(${sql.query(`",
+      "      SELECT COALESCE(SUM(price), 0) FROM transaction_history WHERE tenant_id = $1",
+      "    `, [t])})",
+      "`",
+    ].join("\n")
+
+    const found = sqlTemplates(src, "inner.ts")
+    expect(found.length, "outer and inner are both queries").toBe(2)
+    const outer = found.find((t) => t.line === 1)!
+    expect(
+      /\bSUM\s*\(\s*price/i.test(outer.text),
+      "the inner aggregate is blanked out of the outer, so the outer is not judged on it",
+    ).toBe(false)
+    expect(excludesRevaluation(outer.text), "the outer carries its own exclusion").toBe(true)
+    const inner = found.find((t) => t.line !== 1)!
+    expect(sumsMoney(inner.text), "the inner is a money aggregate").toBe(true)
+    expect(excludesRevaluation(inner.text), "and it is unguarded on its own terms").toBe(false)
   })
 
   it("finds a query after a stray backtick, which the old pairing did not", () => {
