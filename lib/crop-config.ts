@@ -8,8 +8,17 @@
  * `processingTerms` that justified the whole structure were read by exactly nothing.
  *
  * The product is coffee-first now and says so on its own landing page. Pepper and arecanut are
- * intercrops on the same land, tracked through Other Sales rather than by pretending the estate is
- * a different kind of farm.
+ * intercrops on the same land rather than a reason to pretend the estate is a different kind of farm.
+ *
+ * ⚠ "TRACKED THROUGH OTHER SALES" WAS HALF THE STORY, and this line said only that until 2026-10-03.
+ * Pepper has its own processing table too: `pepper_records` (kg_picked -> green_pepper -> dry_pepper,
+ * the same wide-column shape as coffee's processing_records), and HoneyFarm has 19 rows in it from
+ * February 2026 -- 2,815 kg picked, 744 kg dry. So pepper runs a real two-stage flow, with processing
+ * in `pepper_records` and revenue in `other_sales_records`. Only the REVENUE goes through Other Sales.
+ *
+ * That matters for anyone extending this: pepper already has a crop axis (its own table), a form axis
+ * (green vs dry, as columns), and no variety axis. Arecanut has none of the three and appears only as
+ * an `asset_type` on a sale.
  *
  * If a genuinely different crop ever needs supporting, it needs its own processing chain and its
  * own tables -- not a lookup table of nouns. Reintroducing the label map would buy the appearance
@@ -36,8 +45,9 @@
  *                  as peers. That union is the clearest statement of the conflation above.
  *
  * ⚠ WHY ONE RECOGNISER AND NOT EIGHT. Thirteen places used to decide Cherry-vs-Parchment and they did
- * not agree (four of them found by the guard, not by reading the code). HoneyFarm has one sales row and one dispatch row reading "Dry P", and that single value
- * was simultaneously:
+ * not agree (four of them found by the guard, not by reading the code). Estate Mock -- the demo
+ * tenant, NOT a customer -- has one sales row and one dispatch row reading "Dry P", and that single
+ * value was simultaneously:
  *
  *   "Dry P"           a third product category, in the sales and dispatch tabs (SQL CASE kept the
  *                     raw value in its ELSE, so the estate saw three bag types where it has two and

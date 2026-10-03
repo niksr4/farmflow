@@ -79,7 +79,7 @@ async function resolveBagsSentValue(
  * The SQL that identifies one stock slot, however its rows happen to be spelled.
  *
  * ⚠ THIS REPLACES `lower(bag_type) LIKE '%parchment%'`, WHICH UNDERSTATED STOCK. The old pattern
- * pair assumed every row was either "%cherry%" or "%parchment%", so HoneyFarm's dispatch row
+ * pair assumed every row was either "%cherry%" or "%parchment%", so the dispatch row
  * reading "Dry P" matched NEITHER -- its kilos were absent from the parchment slot and from the
  * cherry slot. This is the slot that gates a sale, so the effect was a real parchment bag the
  * estate owned and the app would not let them sell.

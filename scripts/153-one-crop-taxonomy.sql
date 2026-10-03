@@ -1,7 +1,8 @@
 -- 153: One spelling per variety and per form, enforced by the database.
 --
 -- WHAT WENT WRONG. `coffee_type` and `bag_type` are free text with no constraint, and on 2026-10-03
--- HoneyFarm had one sales row and one dispatch row reading 'Dry P' alongside 'Dry Parchment'. That
+-- Estate Mock -- the demo tenant, NOT a customer -- had one sales row and one dispatch row reading
+-- 'Dry P' alongside 'Dry Parchment'. That
 -- single value meant different things to different readers:
 --
 --   'Dry P'           a THIRD product category on the sales and dispatch tabs, because their SQL

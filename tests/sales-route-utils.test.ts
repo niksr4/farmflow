@@ -39,7 +39,7 @@ describe("sales route utils", () => {
   it("recognises the abbreviations an estate actually types", () => {
     /**
      * coffeePatternFor/bagPatternFor used to live here and returned LIKE patterns -- "%cherry%" or
-     * "%parchment%" -- on the assumption that every row is one or the other. HoneyFarm has a
+     * "%parchment%" -- on the assumption that every row is one or the other. Estate Mock has a
      * dispatch row and a sales row reading "Dry P", which matched NEITHER pattern, so those kilos
      * were missing from both halves of the stock slot that gates a sale.
      *

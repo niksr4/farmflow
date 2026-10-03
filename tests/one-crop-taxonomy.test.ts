@@ -23,7 +23,8 @@ import {
  * ONE PLACE DECIDES WHICH COFFEE AND WHICH FORM.
  *
  * Thirteen places used to re-derive "is this cherry or parchment" from free text, and they did not
- * agree. HoneyFarm has one sales row and one dispatch row reading "Dry P"; that single value was a
+ * agree. Estate Mock -- the demo tenant, not a customer -- has one sales row and one dispatch row
+ * reading "Dry P"; that single value was a
  * third product category on two tabs, null in the write validator, and "Dry Parchment" in five read
  * paths. Nothing threw -- the sales tab just showed three bag types for an estate that has two, and
  * resolveSlotStock could not see that bag at all, so the app would refuse to sell parchment the
@@ -188,7 +189,7 @@ describe("one place decides which coffee and which form", () => {
   })
 
   it("recognises the spellings an estate actually types", () => {
-    // "Dry P" is real: one sales row and one dispatch row on HoneyFarm.
+    // "Dry P" is real: one sales row and one dispatch row, on the Estate Mock demo tenant.
     expect(parseCoffeeForm("Dry P")).toBe("Dry Parchment")
     expect(parseCoffeeForm("dry p")).toBe("Dry Parchment")
     expect(parseCoffeeForm("DP")).toBe("Dry Parchment")
