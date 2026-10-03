@@ -561,26 +561,20 @@ export async function GET(request: NextRequest) {
       return breakdownMap.get(key)
     }
 
-    let totalCropKgs = 0
-    let totalRipeKgs = 0
     let totalGreenKgs = 0
     let totalFloatKgs = 0
     let totalWetKgs = 0
     let totalDryParchKgs = 0
     let totalDryCherryKgs = 0
-    let totalDryKgs = 0
     processingRows?.forEach((row: any) => {
       const coffeeType = displayCoffeeVariety(row.coffee_type)
       const dryParchmentKg = Number(row.dry_parchment) || 0
       const dryCherryKg = Number(row.dry_cherry) || 0
-      totalCropKgs += Number(row.crop_todate) || 0
-      totalRipeKgs += Number(row.ripe_todate) || 0
       totalGreenKgs += Number(row.green_todate) || 0
       totalFloatKgs += Number(row.float_todate) || 0
       totalWetKgs += Number(row.wet_parchment) || 0
       totalDryParchKgs += dryParchmentKg
       totalDryCherryKgs += dryCherryKg
-      totalDryKgs += dryParchmentKg + dryCherryKg
 
       const parch = ensureBreakdown(coffeeType, "Dry Parchment")
       parch.processedKgs += dryParchmentKg
@@ -595,6 +589,26 @@ export async function GET(request: NextRequest) {
     // lib/server/season-summary-utils.ts so that property has a test -- inlined here it had none,
     // and a tamper showed the whole suite passing with the summing removed.
     const { processingByType, yieldByCoffeeType } = summariseProcessingByVariety(processingRows)
+
+    /**
+     * The whole-season crop, ripe and dry kilos come OUT of the per-variety totals rather than being
+     * summed a second time from the same rows.
+     *
+     * They were two independent passes over one result set computing the same three numbers, which is
+     * the duplication this whole branch is about -- just at a smaller scale. Whichever one somebody
+     * edited next, the other would have kept the old answer, and these three are denominators:
+     * revenuePerKgCrop, revenuePerKgRipe, revenuePerKgDry and the processing-loss percentage all
+     * divide by them. green/float/wet/parchment/cherry stay in the loop above because the per-variety
+     * helper does not carry them.
+     */
+    let totalCropKgs = 0
+    let totalRipeKgs = 0
+    let totalDryKgs = 0
+    for (const totals of processingByType.values()) {
+      totalCropKgs += totals.crop
+      totalRipeKgs += totals.ripe
+      totalDryKgs += totals.dry
+    }
 
     // Coffee runs processing -> dispatch -> sale, and the breakdown below is that flow. Pepper,
     // arecanut and whatever else the planter sells never enters it, so folding those sales in

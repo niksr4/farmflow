@@ -59,6 +59,30 @@ BEGIN
       'Migration 153 stopped: bag_type value(s) (%) name both forms, so no rule can say which they are. Split the rows by hand -- a migration must not decide what a sale was.',
       ambiguous;
   END IF;
+
+  -- THE SAME CHECK ON THE VARIETY, because leaving it off was the same bug one column across.
+  -- 'Arabica / Robusta' would have been settled silently: the Arabica UPDATE below runs first and
+  -- rewrites the cell, the Robusta UPDATE then skips it because the value is already 'Arabica',
+  -- section 2 sees a canonical value and passes, and the CHECK locks it in. The original is gone and
+  -- the kilos belong to Arabica, with nothing reporting an error -- while parseCoffeeVariety returns
+  -- null for the same input. Today's data is clean, but this file has to be right on a database that
+  -- is not, which is the whole reason the variety UPDATEs exist at all.
+  SELECT string_agg(DISTINCT v, ', ') INTO ambiguous FROM (
+    SELECT coffee_type AS v FROM processing_records WHERE coffee_type IS NOT NULL
+    UNION
+    SELECT coffee_type FROM dispatch_records WHERE coffee_type IS NOT NULL
+    UNION
+    SELECT coffee_type FROM sales_records WHERE coffee_type IS NOT NULL
+    UNION
+    SELECT coffee_type FROM curing_records WHERE coffee_type IS NOT NULL
+  ) varieties
+  WHERE lower(trim(v)) ~ 'arabica' AND lower(trim(v)) ~ 'robusta';
+
+  IF ambiguous IS NOT NULL THEN
+    RAISE EXCEPTION
+      'Migration 153 stopped: coffee_type value(s) (%) name both varieties, so no rule can say which they are. Split the rows by hand -- a migration must not decide whose crop it was.',
+      ambiguous;
+  END IF;
 END $$;
 
 -- ── 1. Repair the drifted rows ──────────────────────────────────────────────────────────────────

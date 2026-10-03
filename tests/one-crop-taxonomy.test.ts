@@ -233,6 +233,18 @@ describe("one place decides which coffee and which form", () => {
     expect(abort).toMatch(/cherry/)
     expect(abort).toMatch(/parch/)
     expect(abort).toMatch(/\^dry\\s\*p\$/)
+    /**
+     * BOTH AXES. The first version guarded bag_type only, which left the identical hole one column
+     * across: 'Arabica / Robusta' would have been settled silently, because the Arabica UPDATE runs
+     * first and the Robusta UPDATE then skips a cell that already reads 'Arabica'. Section 2 would
+     * have accepted it and the CHECK locked it in.
+     */
+    expect(abort, "the variety must be checked for ambiguity too").toMatch(/arabica/i)
+    expect(abort).toMatch(/robusta/i)
+    expect(
+      (abort.match(/RAISE EXCEPTION/g) || []).length,
+      "one abort per axis",
+    ).toBe(2)
   })
 
   it("names what it cannot place instead of guessing or echoing it", () => {
