@@ -12,8 +12,12 @@
 
 BEGIN;
 
+-- Guarded on the tenant existing, like migrations 102-105: on a fresh database (CI, a new dev
+-- branch) the HoneyFarm tenant is absent, and an unguarded insert would fail the whole migration
+-- on the account_activities.tenant_id foreign key instead of doing nothing.
 INSERT INTO account_activities (tenant_id, code, activity)
-VALUES
+SELECT v.tenant_id::uuid, v.code, v.activity
+FROM (VALUES
   ('41b4b10c-428c-4155-882f-1cc7f6e89a78', '101',  'Salaries And Allowances'),
   ('41b4b10c-428c-4155-882f-1cc7f6e89a78', '101A', 'Writer Wage & Benefits'),
   ('41b4b10c-428c-4155-882f-1cc7f6e89a78', '101B', 'Supervisor'),
@@ -94,6 +98,8 @@ VALUES
   ('41b4b10c-428c-4155-882f-1cc7f6e89a78', '233',  'Capital Account'),
   ('41b4b10c-428c-4155-882f-1cc7f6e89a78', '245',  'Organic Compost Manure'),
   ('41b4b10c-428c-4155-882f-1cc7f6e89a78', '555',  'Solar Fence')
+) AS v(tenant_id, code, activity)
+WHERE EXISTS (SELECT 1 FROM tenants WHERE id = '41b4b10c-428c-4155-882f-1cc7f6e89a78'::uuid)
 ON CONFLICT ON CONSTRAINT account_activities_tenant_code_unique DO NOTHING;
 
 -- Restore the module_hint on 107 that migration 89 tagged before migration 90
