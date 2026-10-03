@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest"
 import { z } from "zod"
 
 import {
-  bagPatternFor,
   canonicalizeBagType,
   canonicalizeCoffeeType,
   coerceBagsSentValue,
-  coffeePatternFor,
   getZodErrorMessage,
   isScopedUserRole,
   resolveKgsSold,
@@ -31,13 +29,29 @@ describe("sales route utils", () => {
     expect(resolvePricePerKg(100, 0)).toBe(0)
   })
 
-  it("applies numeric coercion and role/pattern helpers", () => {
+  it("applies numeric coercion and role helpers", () => {
     expect(coerceBagsSentValue(10.7, "integer")).toBe(11)
     expect(coerceBagsSentValue(10.789, "numeric")).toBe(10.79)
     expect(isScopedUserRole("user")).toBe(true)
     expect(isScopedUserRole("admin")).toBe(false)
-    expect(coffeePatternFor("Arabica")).toBe("%arabica%")
-    expect(bagPatternFor("Dry Cherry")).toBe("%cherry%")
+  })
+
+  it("recognises the abbreviations an estate actually types", () => {
+    /**
+     * coffeePatternFor/bagPatternFor used to live here and returned LIKE patterns -- "%cherry%" or
+     * "%parchment%" -- on the assumption that every row is one or the other. HoneyFarm has a
+     * dispatch row and a sales row reading "Dry P", which matched NEITHER pattern, so those kilos
+     * were missing from both halves of the stock slot that gates a sale.
+     *
+     * They are gone. app/api/sales/route.ts now builds the slot predicate from the canonical form,
+     * so a slot is defined by what a value means rather than which substring it contains.
+     */
+    expect(canonicalizeBagType("Dry P")).toBe("Dry Parchment")
+    expect(canonicalizeBagType("DP")).toBe("Dry Parchment")
+    expect(canonicalizeBagType("dc")).toBe("Dry Cherry")
+    // ...and still refuses what it cannot place, because this validates writes.
+    expect(canonicalizeBagType("dry pepper")).toBeNull()
+    expect(canonicalizeBagType("")).toBeNull()
   })
 
   it("extracts user-friendly zod messages", () => {

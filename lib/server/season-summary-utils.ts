@@ -1,9 +1,18 @@
+import { displayCoffeeForm } from "@/lib/crop-config"
+
 export const DEFAULT_BAG_WEIGHT_KG = 50
 export const LOSS_ALERT_THRESHOLD = 0.03
 export const COST_SPIKE_MULTIPLIER = 1.5
 
-export const normalizeBagType = (value: string | null | undefined) =>
-  String(value || "").toLowerCase().includes("cherry") ? "Dry Cherry" : "Dry Parchment"
+/**
+ * Reading, so unrecognised becomes "Unspecified" rather than a guess.
+ *
+ * This used to be `includes("cherry") ? cherry : parchment`, which called anything it did not
+ * recognise parchment -- including a blank. The spellings now live in lib/crop-config.ts, which is
+ * also what the SQL grouping is generated from, so a label here cannot disagree with the bucket the
+ * database put the row in.
+ */
+export const normalizeBagType = displayCoffeeForm
 
 export const toLocationBucket = (locationName?: string | null, locationCode?: string | null) => {
   const rawCode = String(locationCode || "").trim()

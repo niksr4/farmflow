@@ -6,35 +6,53 @@
  *
  * NOTE: components/dispatch-tab.tsx has its own near-identical normalizeBagTypeKey /
  * formatBagTypeLabel pair with a DIFFERENT signature (string, not string | null | undefined).
- * They are deliberately not merged -- see the note in that file before unifying them.
+ * Both now take the cherry-or-parchment decision from lib/crop-config, so the SPELLINGS they accept
+ * can no longer drift apart; only the key vocabulary and the signature still differ.
  */
 
-import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
+import {
+  ARABICA,
+  COFFEE_FORMS,
+  DEFAULT_COFFEE_VARIETIES,
+  ROBUSTA,
+  parseCoffeeForm,
+  parseCoffeeVariety,
+} from "@/lib/crop-config"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 import type { DispatchSummaryRow, SalesRecord } from "./types"
 
 export const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
-export const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
+export const BAG_TYPES = COFFEE_FORMS
 export const LOCATION_ALL = "all"
 export const STOCK_EPSILON = 0.0001
 
+/**
+ * ⚠ THE PARCHMENT FALLBACK IS LOAD-BEARING HERE, unlike on the write paths.
+ *
+ * This tab's totals are objects with four fixed keys (arabica/robusta x parchment/cherry), so a
+ * third answer has nowhere to go -- returning null would index those objects with `undefined` and
+ * produce NaN on screen rather than an honest "Unspecified". Making it honest means giving the
+ * totals an Unspecified bucket and showing it, which is a UI change rather than this refactor.
+ *
+ * What is fixed now: the spellings come from lib/crop-config, so "Dry P" is understood here instead
+ * of reaching parchment by accident, and this file can no longer recognise a different set from the
+ * SQL that produced the rows.
+ */
 export const normalizeBagType = (value: string | null | undefined) =>
-  String(value || "").toLowerCase().includes("cherry") ? "cherry" : "parchment"
+  parseCoffeeForm(value) === "Dry Cherry" ? "cherry" : "parchment"
 
 export const formatBagTypeLabel = (value: string | null | undefined) =>
   normalizeBagType(value) === "cherry" ? "Dry Cherry" : "Dry Parchment"
 
 export const normalizeCoffeeType = (value: string | null | undefined) => {
-  const normalized = String(value || "").toLowerCase()
-  if (normalized.includes("arabica")) return "arabica"
-  if (normalized.includes("robusta")) return "robusta"
+  const variety = parseCoffeeVariety(value)
+  if (variety === "Arabica") return "arabica"
+  if (variety === "Robusta") return "robusta"
   return "other"
 }
 
-export const ARABICA_LABEL =
-  COFFEE_TYPES.find((type) => String(type || "").toLowerCase().includes("arabica")) || "Arabica"
-export const ROBUSTA_LABEL =
-  COFFEE_TYPES.find((type) => String(type || "").toLowerCase().includes("robusta")) || "Robusta"
+export const ARABICA_LABEL = ARABICA
+export const ROBUSTA_LABEL = ROBUSTA
 
 export const toCanonicalCoffeeLabel = (value: string | null | undefined) => {
   const normalized = normalizeCoffeeType(value)

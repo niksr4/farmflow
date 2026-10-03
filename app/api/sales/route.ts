@@ -16,15 +16,21 @@ import { getPostHogClient } from "@/lib/posthog-server"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import {
-  bagPatternFor,
   canonicalizeBagType,
   canonicalizeCoffeeType,
   coerceBagsSentValue,
-  coffeePatternFor,
   getZodErrorMessage,
   resolveKgsSold,
   resolvePricePerKg,
 } from "@/lib/server/sales-route-utils"
+import {
+  coffeeFormMatchesSql,
+  coffeeFormSql,
+  coffeeVarietyMatchesSql,
+  coffeeVarietySql,
+  parseCoffeeForm,
+  parseCoffeeVariety,
+} from "@/lib/crop-config"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -69,6 +75,29 @@ async function resolveBagsSentValue(
   return coerceBagsSentValue(bagsSold, dataType)
 }
 
+/**
+ * The SQL that identifies one stock slot, however its rows happen to be spelled.
+ *
+ * ⚠ THIS REPLACES `lower(bag_type) LIKE '%parchment%'`, WHICH UNDERSTATED STOCK. The old pattern
+ * pair assumed every row was either "%cherry%" or "%parchment%", so HoneyFarm's dispatch row
+ * reading "Dry P" matched NEITHER -- its kilos were absent from the parchment slot and from the
+ * cherry slot. This is the slot that gates a sale, so the effect was a real parchment bag the
+ * estate owned and the app would not let them sell.
+ *
+ * Both halves are canonicalised through lib/crop-config, so a slot is defined by what a value MEANS
+ * rather than by which substring it happens to contain.
+ */
+function slotMatchSql(db: typeof sql, coffeeType: string, bagType: string) {
+  const variety = parseCoffeeVariety(coffeeType)
+  const form = parseCoffeeForm(bagType)
+  if (!variety || !form) {
+    throw new Error(`sales: unrecognised stock slot ${JSON.stringify({ coffeeType, bagType })}`)
+  }
+  return db.unsafe(
+    `${coffeeVarietyMatchesSql("coffee_type", variety)} AND ${coffeeFormMatchesSql("bag_type", form)}`,
+  )
+}
+
 async function resolveSlotStock(
   db: typeof sql,
   tenantContext: { tenantId: string; role: string },
@@ -79,8 +108,7 @@ async function resolveSlotStock(
     excludeSaleId?: number
   },
 ) {
-  const coffeePattern = coffeePatternFor(input.coffeeType)
-  const bagPattern = bagPatternFor(input.bagType)
+  const slotMatch = slotMatchSql(db, input.coffeeType, input.bagType)
   const excludeClause = input.excludeSaleId ? db` AND id <> ${input.excludeSaleId}` : db``
 
   const [dispatchRows, salesRows] = await runTenantQueries(db, tenantContext, [
@@ -89,8 +117,7 @@ async function resolveSlotStock(
         COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS received_kgs
       FROM dispatch_records
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND lower(coffee_type) LIKE ${coffeePattern}
-        AND lower(bag_type) LIKE ${bagPattern}
+        AND ${slotMatch}
     `,
     db`
       SELECT
@@ -108,8 +135,7 @@ async function resolveSlotStock(
         ) AS sold_kgs
       FROM sales_records
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND lower(coffee_type) LIKE ${coffeePattern}
-        AND lower(bag_type) LIKE ${bagPattern}
+        AND ${slotMatch}
         ${excludeClause}
     `,
   ])
@@ -129,21 +155,21 @@ function buildSlotStockGuard(
   db: typeof sql,
   tenantId: string,
   input: {
-    coffeePattern: string
-    bagPattern: string
+    coffeeType: string
+    bagType: string
     bagWeightKg: number
     kgsSold: number
     excludeSaleId?: number
   },
 ) {
   const excludeClause = input.excludeSaleId ? db` AND id <> ${input.excludeSaleId}` : db``
+  const slotMatch = slotMatchSql(db, input.coffeeType, input.bagType)
   return db`(
     (
       SELECT COALESCE(SUM(NULLIF(kgs_received, 0)), 0)
       FROM dispatch_records
       WHERE tenant_id = ${tenantId}
-        AND lower(coffee_type) LIKE ${input.coffeePattern}
-        AND lower(bag_type) LIKE ${input.bagPattern}
+        AND ${slotMatch}
     )
     -
     (
@@ -161,8 +187,7 @@ function buildSlotStockGuard(
       )
       FROM sales_records
       WHERE tenant_id = ${tenantId}
-        AND lower(coffee_type) LIKE ${input.coffeePattern}
-        AND lower(bag_type) LIKE ${input.bagPattern}${excludeClause}
+        AND ${slotMatch}${excludeClause}
     )
     + ${STOCK_EPSILON_KGS}
   ) >= ${input.kgsSold}`
@@ -293,16 +318,10 @@ export async function GET(request: Request) {
       `,
       sql`
         SELECT 
-          CASE
-            WHEN lower(coffee_type) LIKE '%arabica%' THEN 'Arabica'
-            WHEN lower(coffee_type) LIKE '%robusta%' THEN 'Robusta'
-            ELSE COALESCE(NULLIF(trim(coffee_type), ''), 'Unknown')
-          END as coffee_type,
-          CASE
-            WHEN lower(bag_type) LIKE '%cherry%' THEN 'Dry Cherry'
-            WHEN lower(bag_type) LIKE '%parchment%' THEN 'Dry Parchment'
-            ELSE COALESCE(NULLIF(trim(bag_type), ''), 'Unknown')
-          END as bag_type,
+          -- See the note in app/api/dispatch/route.ts: generated from the shared patterns so the
+          -- database groups rows the same way the app labels them.
+          ${sql.unsafe(coffeeVarietySql("coffee_type"))} as coffee_type,
+          ${sql.unsafe(coffeeFormSql("bag_type"))} as bag_type,
           COALESCE(SUM(bags_sold), 0) as bags_sold,
           COALESCE(
             SUM(
@@ -455,8 +474,8 @@ export async function POST(request: Request) {
     // slot still has enough unsold stock. The WHERE guard is re-evaluated inside the same
     // locked transaction, so two racing sales can never both pass and oversell.
     const stockGuard = buildSlotStockGuard(sql, tenantContext.tenantId, {
-      coffeePattern: coffeePatternFor(coffeeType),
-      bagPattern: bagPatternFor(bagType),
+      coffeeType,
+      bagType,
       bagWeightKg,
       kgsSold,
     })
@@ -661,8 +680,8 @@ export async function PUT(request: Request) {
     // remains for the new quantity. The guard excludes this sale's own current kilos so an
     // edit that keeps or reduces the quantity always succeeds.
     const stockGuard = buildSlotStockGuard(sql, tenantContext.tenantId, {
-      coffeePattern: coffeePatternFor(coffeeType),
-      bagPattern: bagPatternFor(bagType),
+      coffeeType,
+      bagType,
       bagWeightKg,
       kgsSold,
       excludeSaleId: payload.id,

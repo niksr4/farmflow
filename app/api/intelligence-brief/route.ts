@@ -12,6 +12,7 @@ import { fetchWithTimeout } from "@/lib/server/http"
 import { buildWeatherFarmAdvice } from "@/lib/coffee-agronomy"
 import { readResponseCache, writeResponseCache } from "@/lib/server/response-cache"
 import { istTodayParts } from "@/lib/date-utils"
+import { displayCoffeeForm, displayCoffeeVariety } from "@/lib/crop-config"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -69,19 +70,14 @@ const asNumber = (value: unknown) => {
   return Number.isFinite(numeric) ? numeric : 0
 }
 
-const canonicalCoffeeType = (value: string | null | undefined) => {
-  const normalized = String(value || "").toLowerCase().trim()
-  if (normalized.includes("arab")) return "Arabica"
-  if (normalized.includes("rob")) return "Robusta"
-  return "Other"
-}
+/**
+ * Was the loosest pair in the codebase: `includes("rob")` claims any word containing "rob", and
+ * "Other" was a fourth label for the same idea five other files called "Unknown", "Unspecified" or
+ * the raw value. Both now read from lib/crop-config.
+ */
+const canonicalCoffeeType = displayCoffeeVariety
 
-const canonicalBagType = (value: string | null | undefined) => {
-  const normalized = String(value || "").toLowerCase().trim()
-  if (normalized.includes("cherry")) return "Dry Cherry"
-  if (normalized.includes("parchment")) return "Dry Parchment"
-  return "Other"
-}
+const canonicalBagType = displayCoffeeForm
 
 const pctDelta = (current: number, previous: number) => {
   if (previous <= 0) return null

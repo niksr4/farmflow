@@ -41,6 +41,7 @@ import {
   TENANT_KPI_BASELINE_TARGETS,
   type KpiMetricId,
 } from "@/components/season-dashboard/kpi-explanations"
+import { ARABICA, ROBUSTA, parseCoffeeVariety } from "@/lib/crop-config"
 
 const DASHBOARD_SEASON_ALERT_ID_PARAM = "seasonAlertId"
 const DASHBOARD_SEASON_METRIC_PARAM = "seasonMetric"
@@ -107,8 +108,8 @@ export default function SeasonDashboard() {
   const arabicaLossKgs = Math.max(0, arabicaTotals.dispatchedKgs - arabicaTotals.receivedKgs)
   const robustaLossKgs = Math.max(0, robustaTotals.dispatchedKgs - robustaTotals.receivedKgs)
   const yieldByType = summary?.yieldByCoffeeType || []
-  const arabicaYield = yieldByType.find((item) => item.coffeeType.toLowerCase().includes("arabica"))
-  const robustaYield = yieldByType.find((item) => item.coffeeType.toLowerCase().includes("robusta"))
+  const arabicaYield = yieldByType.find((item) => parseCoffeeVariety(item.coffeeType) === ARABICA)
+  const robustaYield = yieldByType.find((item) => parseCoffeeVariety(item.coffeeType) === ROBUSTA)
   const processingKpis = summary?.processingKpis
   const moduleKpis = summary?.moduleKpis
   const acreageAcres = settings.estateProfile?.acreageAcres || null

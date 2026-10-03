@@ -13,14 +13,15 @@
  *
  * Note components/sales/coffee-bags.ts has its own normalizeBagType / formatBagTypeLabel pair
  * with a WIDER signature (string | null | undefined). Merging the two is a real behaviour change
- * on null input, not a tidy-up.
+ * on null input, not a tidy-up -- but both now take the cherry-or-parchment decision from
+ * lib/crop-config, so the spellings they accept cannot drift apart.
  */
 
-import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
+import { COFFEE_FORMS, DEFAULT_COFFEE_VARIETIES, parseCoffeeForm } from "@/lib/crop-config"
 import type { BagTotals, DispatchRecord } from "./types"
 
 export const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
-export const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
+export const BAG_TYPES = COFFEE_FORMS
 export const STOCK_EPSILON = 0.0001
 
 export const emptyBagTotals: BagTotals = {
@@ -30,11 +31,13 @@ export const emptyBagTotals: BagTotals = {
   robusta_dry_cherry_bags: 0,
 }
 
-export const normalizeBagTypeKey = (value: string) => {
-  const normalized = value.toLowerCase().trim()
-  if (normalized.includes("cherry")) return "dry_cherry"
-  return "dry_parchment"
-}
+/**
+ * The parchment fallback is load-bearing, same as in the sales helper: `emptyBagTotals` above has
+ * four fixed keys, so there is nowhere to put a third answer. Spellings are shared now, so "Dry P"
+ * resolves here rather than landing on the fallback by chance.
+ */
+export const normalizeBagTypeKey = (value: string) =>
+  parseCoffeeForm(value) === "Dry Cherry" ? "dry_cherry" : "dry_parchment"
 
 export const formatBagTypeLabel = (value: string) =>
   normalizeBagTypeKey(value) === "dry_cherry" ? "Dry Cherry" : "Dry Parchment"
