@@ -11,11 +11,12 @@ import { computeProcessingKpis, safeDivide } from "@/lib/kpi"
 import {
   COST_SPIKE_MULTIPLIER,
   DEFAULT_BAG_WEIGHT_KG,
-  isMissingRelation,
   LOSS_ALERT_THRESHOLD,
+  isMissingRelation,
   normalizeBagType,
   resolveDispatchReceivedKgs,
   resolveSalesKgs,
+  summariseProcessingByVariety,
   toLocationBucket,
 } from "@/lib/server/season-summary-utils"
 import { displayCoffeeVariety, parseCoffeeVariety } from "@/lib/crop-config"
@@ -590,26 +591,10 @@ export async function GET(request: NextRequest) {
       cherry.processedBags += dryCherryKg / bagWeightKg
     })
 
-    const yieldByCoffeeType = (processingRows || []).map((row: any) => {
-      const coffeeType = displayCoffeeVariety(row.coffee_type)
-      const cropKgs = Number(row.crop_todate) || 0
-      const dryKgs = (Number(row.dry_parchment) || 0) + (Number(row.dry_cherry) || 0)
-      return {
-        coffeeType,
-        cropKgs,
-        dryKgs,
-        ratio: cropKgs > 0 ? dryKgs / cropKgs : 0,
-      }
-    })
-
-    const processingByType = new Map<string, { crop: number; ripe: number; dry: number }>()
-    ;(processingRows || []).forEach((row: any) => {
-      const coffeeType = displayCoffeeVariety(row.coffee_type)
-      const crop = Number(row.crop_todate) || 0
-      const ripe = Number(row.ripe_todate) || 0
-      const dry = (Number(row.dry_parchment) || 0) + (Number(row.dry_cherry) || 0)
-      processingByType.set(coffeeType, { crop, ripe, dry })
-    })
+    // Folds two spellings of one variety into one entry by SUMMING, not overwriting. Extracted to
+    // lib/server/season-summary-utils.ts so that property has a test -- inlined here it had none,
+    // and a tamper showed the whole suite passing with the summing removed.
+    const { processingByType, yieldByCoffeeType } = summariseProcessingByVariety(processingRows)
 
     // Coffee runs processing -> dispatch -> sale, and the breakdown below is that flow. Pepper,
     // arecanut and whatever else the planter sells never enters it, so folding those sales in

@@ -41,7 +41,17 @@ const HOME = "lib/crop-config.ts"
  * subject is one of the four words. `=== ARABICA` is fine -- comparing against the shared constant
  * is the point. What is banned is asking "does this text contain 'arabica'" to decide a category.
  */
-const CROP_WORD = "cherry|parch|arabica|robusta"
+/**
+ * ⚠ THE ABBREVIATIONS BELONG HERE TOO. This was only the four full words, which left the guard blind
+ * to exactly the spellings this refactor taught the system to accept: a new file writing
+ * `value.includes("dry p")` to classify a form would have passed the scan, and "Dry P" is the real
+ * value that caused all of this.
+ *
+ * `dry\s*p(?![a-z])` is anchored on the right so it claims "dry p" but not "dry pepper" -- a
+ * different crop -- and not "dry parchment", which `parch` already covers. `dp`/`dc` need word
+ * boundaries or they would fire inside unrelated identifiers.
+ */
+const CROP_WORD = "cherry|parch|arabica|robusta|dry\\s*p(?![a-z])|\\bdp\\b|\\bdc\\b"
 const AD_HOC_DECISION = new RegExp(
   [
     // includes("cherry"), startsWith("arab"), match(/robusta/) …
@@ -61,6 +71,15 @@ const AD_HOC_DECISION = new RegExp(
     // content for parchment", and the shade tree "Grevillea robusta". Those are in the must-NOT-match
     // fixture below now, so the clause cannot drift back to over-matching.
     `['"\`](?=[^'"\`]*%)[a-z%]*(?:${CROP_WORD})[a-z%]*['"\`]`,
+    // Equality against a RAW ABBREVIATION, e.g. `normalized === "dp"` or `case "dry p":`.
+    //
+    // Only the abbreviations, never the full words, and the line is deliberate. A comparison like
+    // `normalizeBagType(value) === "cherry"` is legitimate: "cherry" is the shared helper's own
+    // return key, and the sales tab and the CSV export both read it that way. But "dp", "dc" and
+    // "dry p" are not anybody's vocabulary -- they are raw spellings out of the data, so testing a
+    // value against one is always a classifier. The literal must be the whole spelling, which keeps
+    // `=== "Dry Parchment"` (the canonical value) out of it.
+    `[=!]==?\\s*(['"\`])(?:dp|dc|dry\\s*p)\\1`,
   ].join("|"),
   "i",
 )
@@ -117,6 +136,12 @@ describe("one place decides which coffee and which form", () => {
       `if (lower.includes("arabica")) return "Arabica"`,
       `yieldByType.find((item) => item.coffeeType.toLowerCase().includes("robusta"))`,
       `bagType === "Dry Cherry" ? "%cherry%" : "%parchment%"`,
+      // The abbreviations. A classifier keyed on these would have slipped past the first version of
+      // this scan, and "Dry P" is the value the whole refactor is named after.
+      `if (raw.includes("dry p")) return "Dry Parchment"`,
+      `if (normalized === "dp") return "Dry Parchment"`,
+      `if (normalized === "dc") return "Dry Cherry"`,
+      `WHEN lower(bag_type) LIKE 'dry p%' THEN 'Dry Parchment'`,
     ]
     for (const example of realExamples) {
       expect(AD_HOC_DECISION.test(example), `should be caught: ${example}`).toBe(true)
@@ -136,6 +161,12 @@ describe("one place decides which coffee and which form", () => {
       `targetAfterDrying: "10–11% moisture content for parchment before dispatch to curing works"`,
       `"Silver Oak (Grevillea robusta) — fastest growing, widely planted"`,
       "description: `${location} ${coffeeType} dry parchment yield is ${pct}% vs baseline`,",
+      // Comparing against a shared helper's own return key, or against a canonical value. Both are
+      // the pattern this refactor wants, so neither may be flagged.
+      `normalizeBagType(value) === "cherry" ? "Dry Cherry" : "Dry Parchment"`,
+      `normalizeBagTypeKey(value) === "dry_cherry"`,
+      `if (form === "Dry Parchment") return total`,
+      `bag_type: "Dry Cherry"`,
     ]
     for (const example of allowed) {
       expect(AD_HOC_DECISION.test(example), `should be allowed: ${example}`).toBe(false)
@@ -174,6 +205,34 @@ describe("one place decides which coffee and which form", () => {
     expect(parseCoffeeVariety("arabica washed")).toBe(ARABICA)
     expect(parseCoffeeVariety("ROBUSTA")).toBe(ROBUSTA)
     expect(parseCoffeeVariety("excelsa")).toBeNull()
+  })
+
+  it("refuses a value that names both forms, rather than picking the first", () => {
+    /**
+     * A cell reading "Dry Cherry / Dry Parchment" does not establish which it is.
+     *
+     * The first version returned on the first pattern hit, so the parser said "Dry Cherry" (cherry is
+     * tested first) while migration 153 said "Dry Parchment" (its parchment UPDATE ran first) -- the
+     * app and the database settling the same cell differently, which is the precise failure this
+     * module exists to end. Both refuse now: null here, and the migration aborts before its UPDATEs
+     * can erase the original value.
+     */
+    expect(parseCoffeeForm("Dry Cherry / Dry Parchment")).toBeNull()
+    expect(parseCoffeeForm("cherry and parchment")).toBeNull()
+    expect(parseCoffeeVariety("arabica and robusta")).toBeNull()
+    expect(displayCoffeeForm("Dry Cherry / Dry Parchment")).toBe(UNSPECIFIED_LABEL)
+
+    // An unambiguous value is still read, including the abbreviations.
+    expect(parseCoffeeForm("Dry P")).toBe("Dry Parchment")
+    expect(parseCoffeeForm("Dry Cherry")).toBe("Dry Cherry")
+
+    // The migration refuses the same thing, keyed on the same two pattern sets.
+    const migration = readFileSync(resolve(process.cwd(), "scripts/153-one-crop-taxonomy.sql"), "utf8")
+    const abort = migration.slice(0, migration.indexOf("── 1. Repair"))
+    expect(abort, "the ambiguity check must run BEFORE the UPDATEs").toMatch(/RAISE EXCEPTION/)
+    expect(abort).toMatch(/cherry/)
+    expect(abort).toMatch(/parch/)
+    expect(abort).toMatch(/\^dry\\s\*p\$/)
   })
 
   it("names what it cannot place instead of guessing or echoing it", () => {

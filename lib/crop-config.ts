@@ -35,8 +35,8 @@
  *                  with other_sales_records.asset_type, so one column holds "Arabica" and "Pepper"
  *                  as peers. That union is the clearest statement of the conflation above.
  *
- * ⚠ WHY ONE RECOGNISER AND NOT EIGHT. Twelve places used to decide Cherry-vs-Parchment and they did
- * not agree. HoneyFarm has one sales row and one dispatch row reading "Dry P", and that single value
+ * ⚠ WHY ONE RECOGNISER AND NOT EIGHT. Thirteen places used to decide Cherry-vs-Parchment and they did
+ * not agree (four of them found by the guard, not by reading the code). HoneyFarm has one sales row and one dispatch row reading "Dry P", and that single value
  * was simultaneously:
  *
  *   "Dry P"           a third product category, in the sales and dispatch tabs (SQL CASE kept the
@@ -102,16 +102,39 @@ const COFFEE_VARIETY_PATTERNS: ReadonlyArray<readonly [CoffeeVariety, string]> =
   ["Robusta", "robusta"],
 ] as const
 
+/**
+ * Compiled once at module load rather than per call. The pattern strings are constants in this file,
+ * never input, so there is nothing dynamic to exploit -- but building a RegExp from a variable on
+ * every call is both wasteful and the shape a scanner flags, and neither is worth defending.
+ */
+const compile = <T extends string>(patterns: ReadonlyArray<readonly [T, string]>) =>
+  patterns.map(([canonical, pattern]) => [canonical, new RegExp(pattern)] as const)
+
+const COMPILED_FORMS = compile(COFFEE_FORM_PATTERNS)
+const COMPILED_VARIETIES = compile(COFFEE_VARIETY_PATTERNS)
+
+/**
+ * ⚠ AMBIGUITY IS NOT A MATCH. If a value matches more than one canonical answer -- "Dry Cherry /
+ * Dry Parchment", or a cell holding both because somebody merged two columns -- then the input does
+ * not establish which it is, and picking one is inventing the answer.
+ *
+ * This mattered concretely: the first version returned on the first hit, so the parser answered
+ * "Dry Cherry" (cherry is tested first) while migration 153 answered "Dry Parchment" (its parchment
+ * UPDATE ran first) -- the app and the database disagreeing about the same cell, which is the exact
+ * failure this whole file exists to end. Returning null makes the import report it and the migration
+ * refuse to touch it.
+ */
 const matchPatterns = <T extends string>(
-  patterns: ReadonlyArray<readonly [T, string]>,
+  compiled: ReadonlyArray<readonly [T, RegExp]>,
   value: string | null | undefined,
 ): T | null => {
   const normalized = String(value ?? "").trim().toLowerCase()
   if (!normalized) return null
-  for (const [canonical, pattern] of patterns) {
-    if (new RegExp(pattern).test(normalized)) return canonical
+  const hits = new Set<T>()
+  for (const [canonical, pattern] of compiled) {
+    if (pattern.test(normalized)) hits.add(canonical)
   }
-  return null
+  return hits.size === 1 ? [...hits][0] : null
 }
 
 /**
@@ -121,11 +144,11 @@ const matchPatterns = <T extends string>(
  * the first place, and one row of it cost two wrong screens.
  */
 export const parseCoffeeForm = (value: string | null | undefined): CoffeeForm | null =>
-  matchPatterns(COFFEE_FORM_PATTERNS, value)
+  matchPatterns(COMPILED_FORMS, value)
 
 /** Strict, as above, for the variety. */
 export const parseCoffeeVariety = (value: string | null | undefined): CoffeeVariety | null =>
-  matchPatterns(COFFEE_VARIETY_PATTERNS, value)
+  matchPatterns(COMPILED_VARIETIES, value)
 
 /**
  * For READING: always a label a person can group by, never a silent guess and never the raw value.

@@ -35,6 +35,32 @@
 -- booked_revenue VIEW (`NULL::text AS bag_type`), not stored in either of these tables. Pepper never
 -- reaches sales_records at all.
 
+-- ── 0. Refuse to touch a value that names BOTH forms ───────────────────────────────────────────
+-- A cell reading 'Dry Cherry / Dry Parchment' does not establish which it is. The UPDATEs below run
+-- parchment first, so they would silently settle it as parchment -- while parseCoffeeForm in
+-- lib/crop-config.ts tested cherry first and would have said cherry. The app and the database
+-- disagreeing about the same cell is precisely what this file exists to end, so neither guesses now:
+-- the parser returns null and this aborts. Checked BEFORE the UPDATEs, because afterwards the
+-- original value is gone and the disagreement is unrecoverable.
+DO $$
+DECLARE
+  ambiguous TEXT;
+BEGIN
+  SELECT string_agg(DISTINCT v, ', ') INTO ambiguous FROM (
+    SELECT bag_type AS v FROM sales_records WHERE bag_type IS NOT NULL
+    UNION
+    SELECT bag_type FROM dispatch_records WHERE bag_type IS NOT NULL
+  ) forms
+  WHERE (lower(trim(v)) ~ 'cherry' OR lower(trim(v)) = 'dc')
+    AND (lower(trim(v)) ~ 'parch' OR lower(trim(v)) ~ '^dry\s*p$' OR lower(trim(v)) = 'dp');
+
+  IF ambiguous IS NOT NULL THEN
+    RAISE EXCEPTION
+      'Migration 153 stopped: bag_type value(s) (%) name both forms, so no rule can say which they are. Split the rows by hand -- a migration must not decide what a sale was.',
+      ambiguous;
+  END IF;
+END $$;
+
 -- ── 1. Repair the drifted rows ──────────────────────────────────────────────────────────────────
 -- Matched on the same rule lib/crop-config.ts uses, so this cannot disagree with the app: anything
 -- that means parchment but is not spelled it. 'Dry P' and 'DP' today; written as the pattern rather
@@ -132,29 +158,46 @@ END $$;
 
 -- ── 3. Lock it ─────────────────────────────────────────────────────────────────────────────────
 -- Dropped first so re-running is safe, and named so a failure says which rule was broken.
+--
+-- ADDED **NOT VALID**, THEN VALIDATED SEPARATELY. A plain ADD CONSTRAINT scans the whole table under
+-- ACCESS EXCLUSIVE, blocking reads and writes for the duration; NOT VALID takes the lock only long
+-- enough to record the rule, and VALIDATE CONSTRAINT then scans under a weaker lock that readers and
+-- writers can share.
+--
+-- On today's data the difference is unmeasurable -- sales_records has 19 rows, dispatch_records 20,
+-- processing_records 78 and curing_records 0, so either form completes in microseconds. It is written
+-- this way because the file has to stay correct for the table these become in five seasons, and
+-- because NOT VALID still enforces the rule on every NEW write from the moment it lands. The VALIDATE
+-- cannot fail: section 2 above has already aborted if any existing row is outside the set.
 ALTER TABLE sales_records DROP CONSTRAINT IF EXISTS sales_records_bag_type_canonical;
 ALTER TABLE sales_records ADD CONSTRAINT sales_records_bag_type_canonical
-  CHECK (bag_type IS NULL OR bag_type IN ('Dry Parchment', 'Dry Cherry'));
+  CHECK (bag_type IS NULL OR bag_type IN ('Dry Parchment', 'Dry Cherry')) NOT VALID;
+ALTER TABLE sales_records VALIDATE CONSTRAINT sales_records_bag_type_canonical;
 
 ALTER TABLE dispatch_records DROP CONSTRAINT IF EXISTS dispatch_records_bag_type_canonical;
 ALTER TABLE dispatch_records ADD CONSTRAINT dispatch_records_bag_type_canonical
-  CHECK (bag_type IS NULL OR bag_type IN ('Dry Parchment', 'Dry Cherry'));
+  CHECK (bag_type IS NULL OR bag_type IN ('Dry Parchment', 'Dry Cherry')) NOT VALID;
+ALTER TABLE dispatch_records VALIDATE CONSTRAINT dispatch_records_bag_type_canonical;
 
 ALTER TABLE processing_records DROP CONSTRAINT IF EXISTS processing_records_coffee_type_canonical;
 ALTER TABLE processing_records ADD CONSTRAINT processing_records_coffee_type_canonical
-  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta'));
+  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta')) NOT VALID;
+ALTER TABLE processing_records VALIDATE CONSTRAINT processing_records_coffee_type_canonical;
 
 ALTER TABLE dispatch_records DROP CONSTRAINT IF EXISTS dispatch_records_coffee_type_canonical;
 ALTER TABLE dispatch_records ADD CONSTRAINT dispatch_records_coffee_type_canonical
-  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta'));
+  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta')) NOT VALID;
+ALTER TABLE dispatch_records VALIDATE CONSTRAINT dispatch_records_coffee_type_canonical;
 
 ALTER TABLE sales_records DROP CONSTRAINT IF EXISTS sales_records_coffee_type_canonical;
 ALTER TABLE sales_records ADD CONSTRAINT sales_records_coffee_type_canonical
-  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta'));
+  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta')) NOT VALID;
+ALTER TABLE sales_records VALIDATE CONSTRAINT sales_records_coffee_type_canonical;
 
 ALTER TABLE curing_records DROP CONSTRAINT IF EXISTS curing_records_coffee_type_canonical;
 ALTER TABLE curing_records ADD CONSTRAINT curing_records_coffee_type_canonical
-  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta'));
+  CHECK (coffee_type IS NULL OR coffee_type IN ('Arabica', 'Robusta')) NOT VALID;
+ALTER TABLE curing_records VALIDATE CONSTRAINT curing_records_coffee_type_canonical;
 
 COMMENT ON CONSTRAINT sales_records_bag_type_canonical ON sales_records IS
   'Two forms or NULL. A third spelling becomes a third product line in every report that groups by this column; see lib/crop-config.ts.';
