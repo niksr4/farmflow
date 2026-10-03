@@ -13,25 +13,10 @@ import { requirePositiveNumber, toNonNegativeNumber } from "@/lib/number-input"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { canonicalizeBagType, canonicalizeCoffeeType } from "@/lib/server/sales-route-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
-
-const canonicalizeCoffeeType = (value: string | null | undefined) => {
-  const normalized = String(value || "").trim().toLowerCase()
-  if (!normalized) return null
-  if (normalized.includes("arabica")) return "Arabica"
-  if (normalized.includes("robusta")) return "Robusta"
-  return null
-}
-
-const canonicalizeBagType = (value: string | null | undefined) => {
-  const normalized = String(value || "").trim().toLowerCase()
-  if (!normalized) return null
-  if (normalized.includes("cherry")) return "Dry Cherry"
-  if (normalized.includes("parchment")) return "Dry Parchment"
-  return null
-}
 
 export async function GET(request: Request) {
   try {

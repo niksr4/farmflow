@@ -35,6 +35,43 @@ const baseParams = (overrides: Partial<BuildHeroContentParams> = {}): BuildHeroC
   ...overrides,
 })
 
+describe("balance-sheet hero: a failed total is unavailable, not zero", () => {
+  const balanceSheet = (overrides: Partial<BuildHeroContentParams>) =>
+    buildHeroContent(baseParams({ activeTab: "balance-sheet", accountsTotals: { grandTotal: 500, laborTotal: 300, otherTotal: 200 }, ...overrides }))
+
+  it("does not show a made-up loss when the sales totals failed", () => {
+    const content = balanceSheet({
+      salesHeroTotals: { ...moduleTotals(), error: "boom", arabicaKgs: 0, arabicaBags: 0, robustaKgs: 0, robustaBags: 0, totalRevenue: 0, totalSales: 0 },
+    })
+    const chip = content.chips.find((c) => c.label.startsWith("Booked net"))
+    expect(chip?.label).toBe("Booked net unavailable")
+    expect(chip?.metricValue).toBeNull()
+    expect(content.stats.find((s) => s.label === "Live position")?.value).toBe("Unavailable")
+  })
+
+  it("marks live receivables and live position unavailable when receivables failed", () => {
+    const content = balanceSheet({
+      receivablesHeroTotals: { ...moduleTotals(), error: true, totalCount: 0, totalInvoiced: 0, totalOutstanding: 0, totalOverdue: 0 },
+    })
+    const chip = content.chips.find((c) => c.label.startsWith("Live receivables"))
+    expect(chip?.label).toBe("Live receivables unavailable")
+    expect(chip?.metricValue).toBeNull()
+    expect(content.stats.find((s) => s.label === "Live position")?.value).toBe("Unavailable")
+  })
+
+  it("waits for other-sales too before showing booked net", () => {
+    const content = balanceSheet({ otherSalesHeroTotals: { loading: true, error: false, totalRevenue: 0 } })
+    expect(content.chips.find((c) => c.label.startsWith("Booked net"))?.label).toBe("Booked net loading...")
+  })
+
+  it("shows the real figures when nothing failed", () => {
+    const content = balanceSheet({
+      salesHeroTotals: { ...moduleTotals(), arabicaKgs: 0, arabicaBags: 0, robustaKgs: 0, robustaBags: 0, totalRevenue: 1000, totalSales: 1 },
+    })
+    expect(content.chips.find((c) => c.label.startsWith("Booked net"))?.metricValue).toBe(500)
+  })
+})
+
 describe("buildHeroContent", () => {
   it("returns the home screen content by default", () => {
     const content = buildHeroContent(baseParams())
