@@ -4,6 +4,7 @@ import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { displayCoffeeVariety } from "@/lib/crop-config"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -71,12 +72,10 @@ const linearSlope = (values: number[]) => {
   return numerator / denominator
 }
 
-const canonicalCoffeeType = (value: string | null | undefined) => {
-  const lower = String(value || "").toLowerCase()
-  if (lower.includes("arabica")) return "Arabica"
-  if (lower.includes("robusta")) return "Robusta"
-  return "Other"
-}
+// A thirteenth copy of the variety rule, found by the guard in tests/one-crop-taxonomy.test.ts
+// rather than by reading the code. "Other" was its own label for what five other files called
+// "Unknown", "Unspecified", or the raw value.
+const canonicalCoffeeType = displayCoffeeVariety
 
 const parseCoffeeScope = (value: string | null): CoffeeScope | null => {
   const normalized = String(value || "all").trim().toLowerCase()

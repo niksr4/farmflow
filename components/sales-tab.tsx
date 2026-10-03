@@ -44,6 +44,7 @@ import {
   STOCK_EPSILON,
   formatBagTypeLabel,
   normalizeBagType,
+  summariseAvailability,
   normalizeCoffeeType,
   resolveDispatchReceivedKgs,
   resolveSalesRecordKgs,
@@ -505,6 +506,9 @@ export default function SalesTab({
       const createBreakdown = (): InventoryBreakdown => ({
         cherry: { bags: 0, kgs: 0 },
         parchment: { bags: 0, kgs: 0 },
+        // Kilos whose form nobody could read. Shown only when non-zero, so a clean estate sees no
+        // change -- but they are never folded into parchment to make the screen look tidy.
+        unspecified: { bags: 0, kgs: 0 },
         total: { bags: 0, kgs: 0 },
       })
 
@@ -569,13 +573,18 @@ export default function SalesTab({
         const cherryNetKgs = receivedTotals[type].cherry.kgs - (soldTotals[type]?.cherry.kgs || 0)
         const parchmentNetBags = receivedTotals[type].parchment.bags - (soldTotals[type]?.parchment.bags || 0)
         const parchmentNetKgs = receivedTotals[type].parchment.kgs - (soldTotals[type]?.parchment.kgs || 0)
+        const unspecifiedNetBags = receivedTotals[type].unspecified.bags - (soldTotals[type]?.unspecified.bags || 0)
+        const unspecifiedNetKgs = receivedTotals[type].unspecified.kgs - (soldTotals[type]?.unspecified.kgs || 0)
         acc[type].cherry.bags = Math.max(0, cherryNetBags)
         acc[type].cherry.kgs = Math.max(0, cherryNetKgs)
         acc[type].parchment.bags = Math.max(0, parchmentNetBags)
         acc[type].parchment.kgs = Math.max(0, parchmentNetKgs)
+        acc[type].unspecified.bags = Math.max(0, unspecifiedNetBags)
+        acc[type].unspecified.kgs = Math.max(0, unspecifiedNetKgs)
         // Keep slot math strict: type total is the sum of positive bag-type availability, not cross-offset net.
-        acc[type].total.bags = acc[type].cherry.bags + acc[type].parchment.bags
-        acc[type].total.kgs = acc[type].cherry.kgs + acc[type].parchment.kgs
+        // Unspecified counts toward the total: the kilos are real even when the label is not.
+        acc[type].total.bags = acc[type].cherry.bags + acc[type].parchment.bags + acc[type].unspecified.bags
+        acc[type].total.kgs = acc[type].cherry.kgs + acc[type].parchment.kgs + acc[type].unspecified.kgs
         return acc
       }, {} as Record<string, InventoryBreakdown>)
 
@@ -583,18 +592,19 @@ export default function SalesTab({
       const totalReceivedBags = allCoffeeTypes.reduce((sum, type) => sum + (receivedTotals[type]?.total.bags || 0), 0)
       const totalSold = allCoffeeTypes.reduce((sum, type) => sum + (soldTotals[type]?.total.kgs || 0), 0)
       const totalSoldBags = allCoffeeTypes.reduce((sum, type) => sum + (soldTotals[type]?.total.bags || 0), 0)
-      const totalAvailable = allCoffeeTypes.reduce((sum, type) => sum + (availableTotals[type]?.total.kgs || 0), 0)
-      const totalAvailableBags = allCoffeeTypes.reduce((sum, type) => sum + (availableTotals[type]?.total.bags || 0), 0)
-      const totalOverdrawn = allCoffeeTypes.reduce((sum, type) => {
-        const cherryNet = (receivedTotals[type]?.cherry.kgs || 0) - (soldTotals[type]?.cherry.kgs || 0)
-        const parchmentNet = (receivedTotals[type]?.parchment.kgs || 0) - (soldTotals[type]?.parchment.kgs || 0)
-        return sum + Math.max(0, -cherryNet) + Math.max(0, -parchmentNet)
-      }, 0)
-      const totalOverdrawnBags = allCoffeeTypes.reduce((sum, type) => {
-        const cherryNet = (receivedTotals[type]?.cherry.bags || 0) - (soldTotals[type]?.cherry.bags || 0)
-        const parchmentNet = (receivedTotals[type]?.parchment.bags || 0) - (soldTotals[type]?.parchment.bags || 0)
-        return sum + Math.max(0, -cherryNet) + Math.max(0, -parchmentNet)
-      }, 0)
+      // One helper, so these cannot drift apart again. See components/sales/coffee-bags.ts: the
+      // sellable headline and the inventory total are NOT the same number, and overdrawn counts all
+      // three forms. All three were wrong when the unspecified bucket was first added.
+      const {
+        totalAvailable,
+        totalAvailableBags,
+        totalSellable,
+        totalSellableBags,
+        totalUnclassified,
+        totalOverdrawn,
+        totalOverdrawnBags,
+      } = summariseAvailability(allCoffeeTypes, receivedTotals, soldTotals, availableTotals)
+
 
       return {
         receivedTotals,
@@ -606,6 +616,9 @@ export default function SalesTab({
         totalSoldBags,
         totalAvailable,
         totalAvailableBags,
+        totalSellable,
+        totalSellableBags,
+        totalUnclassified,
         totalOverdrawn,
         totalOverdrawnBags,
       }
@@ -1072,14 +1085,25 @@ export default function SalesTab({
       tooltip: "Revenue from non-coffee estate products — pepper, timber, services, etc.",
     }] : []),
     {
+      // Reads the SELLABLE figure, not the inventory one. The sale form can only dispose of parchment
+      // or cherry, so counting unreadable kilos here would advertise stock the writer cannot sell.
       label: "Available To Sell",
-      value: `${formatNumber(selectionScopeAvailabilityTotals.totalAvailable, 0)} KGs`,
-      detail: "Confirmed dispatch-received stock",
+      value: `${formatNumber(selectionScopeAvailabilityTotals.totalSellable, 0)} KGs`,
+      detail:
+        selectionScopeAvailabilityTotals.totalUnclassified > 0
+          ? `Plus ${formatNumber(selectionScopeAvailabilityTotals.totalUnclassified, 0)} KGs waiting on parchment or cherry`
+          : "Confirmed dispatch-received stock",
       tone:
-        selectionScopeAvailabilityTotals.totalAvailable > 0 ? ("default" as const) : ("warning" as const),
-      tooltip: selectionScopeAvailabilityTotals.totalAvailable <= 0
-        ? "No unsold stock available for the selected type and scope. All confirmed receipts have been recorded as sold."
-        : "Confirmed dispatch-received KGs that haven't been recorded as sold yet. Sell against this to keep records accurate.",
+        selectionScopeAvailabilityTotals.totalUnclassified > 0
+          ? ("warning" as const)
+          : selectionScopeAvailabilityTotals.totalSellable > 0
+            ? ("default" as const)
+            : ("warning" as const),
+      tooltip: selectionScopeAvailabilityTotals.totalUnclassified > 0
+        ? `Confirmed dispatch-received KGs not yet recorded as sold. A further ${formatNumber(selectionScopeAvailabilityTotals.totalUnclassified, 0)} KGs are on hand but cannot be sold until their rows say parchment or cherry.`
+        : selectionScopeAvailabilityTotals.totalSellable <= 0
+          ? "No unsold stock available for the selected type and scope. All confirmed receipts have been recorded as sold."
+          : "Confirmed dispatch-received KGs that haven't been recorded as sold yet. Sell against this to keep records accurate.",
     },
     {
       label: "Sales Records",
@@ -1313,6 +1337,16 @@ export default function SalesTab({
                   <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.parchment.kgs)} KGs</p>
                   <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(totals.parchment.bags)} bags</p>
                 </div>
+                {totals.unspecified.kgs > 0 && (
+                  /* Only when there is something to show. Amber rather than emerald, because this is
+                     stock the app cannot file -- a label to fix, not a figure to read past. */
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/[0.06]">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-500">Unspecified</p>
+                    <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.unspecified.kgs)} KGs</p>
+                    <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(totals.unspecified.bags)} bags</p>
+                    <p className="mt-1 text-[11px] leading-snug text-amber-700 dark:text-amber-500">Open these rows and set parchment or cherry, so the figures above are complete.</p>
+                  </div>
+                )}
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Total {type}</p>
                   <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.total.kgs)} KGs</p>
@@ -1599,7 +1633,7 @@ export default function SalesTab({
             <div className="space-y-2">
               <FieldLabel
                 htmlFor="sale-bag-type"
-                label="Bag Type"
+                label="Parchment or cherry"
                 tooltip="Select dry parchment or dry cherry to match dispatch."
               />
               {isMobile ? (
@@ -1949,7 +1983,7 @@ export default function SalesTab({
                           <p className="text-xl font-black text-emerald-700 mt-0.5">{formatCurrency(Number(record.revenue) || 0, 0)}</p>
                         </div>
                         <div className="rounded-xl bg-stone-50 px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Bag Type</p>
+                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Parchment or cherry</p>
                           <p className="text-sm font-semibold text-stone-800 mt-0.5">{formatBagTypeLabel(record.bag_type)}</p>
                         </div>
                         <div className="rounded-xl bg-stone-50 px-3 py-2">
@@ -2001,7 +2035,7 @@ export default function SalesTab({
                       <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Batch Reference</TableHead>
                       <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Location</TableHead>
                       <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Coffee Type</TableHead>
-                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bag Type</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Parchment or cherry</TableHead>
                       <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Buyer</TableHead>
                       <TableHead className="text-right sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bags Sold</TableHead>
                       <TableHead className="text-right sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">KGs Sold</TableHead>

@@ -13,31 +13,44 @@
  *
  * Note components/sales/coffee-bags.ts has its own normalizeBagType / formatBagTypeLabel pair
  * with a WIDER signature (string | null | undefined). Merging the two is a real behaviour change
- * on null input, not a tidy-up.
+ * on null input, not a tidy-up -- but both now take the cherry-or-parchment decision from
+ * lib/crop-config, so the spellings they accept cannot drift apart.
  */
 
-import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
+import { COFFEE_FORMS, DEFAULT_COFFEE_VARIETIES, displayCoffeeForm, parseCoffeeForm } from "@/lib/crop-config"
 import type { BagTotals, DispatchRecord } from "./types"
 
 export const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
-export const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
+export const BAG_TYPES = COFFEE_FORMS
 export const STOCK_EPSILON = 0.0001
 
 export const emptyBagTotals: BagTotals = {
   arabica_dry_parchment_bags: 0,
   arabica_dry_cherry_bags: 0,
+  arabica_unspecified_bags: 0,
   robusta_dry_parchment_bags: 0,
   robusta_dry_cherry_bags: 0,
+  robusta_unspecified_bags: 0,
 }
 
-export const normalizeBagTypeKey = (value: string) => {
-  const normalized = value.toLowerCase().trim()
-  if (normalized.includes("cherry")) return "dry_cherry"
-  return "dry_parchment"
+/**
+ * The breakdown key for a row's form, with a third bucket for one nobody can read.
+ *
+ * This used to fall back to "dry_parchment" for anything unrecognised. The failure here was worse
+ * than misfiling, though: dispatch-tab.tsx looks the composed `${variety}_${form}` key up with
+ * `if (totals[key] !== undefined)`, so a row the key did not match was DROPPED -- its bags left the
+ * totals entirely rather than landing in the wrong column. A named third bucket gives both halves
+ * somewhere to go.
+ */
+export const normalizeBagTypeKey = (value: string): "dry_cherry" | "dry_parchment" | "unspecified" => {
+  const form = parseCoffeeForm(value)
+  if (form === "Dry Cherry") return "dry_cherry"
+  if (form === "Dry Parchment") return "dry_parchment"
+  return "unspecified"
 }
 
-export const formatBagTypeLabel = (value: string) =>
-  normalizeBagTypeKey(value) === "dry_cherry" ? "Dry Cherry" : "Dry Parchment"
+/** The label a reader sees; never names a form it cannot read. */
+export const formatBagTypeLabel = (value: string) => displayCoffeeForm(value)
 
 export const resolveDispatchRecordNominalKgs = (
   record: Pick<DispatchRecord, "bags_dispatched">,

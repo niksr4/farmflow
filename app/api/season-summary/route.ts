@@ -11,13 +11,15 @@ import { computeProcessingKpis, safeDivide } from "@/lib/kpi"
 import {
   COST_SPIKE_MULTIPLIER,
   DEFAULT_BAG_WEIGHT_KG,
-  isMissingRelation,
   LOSS_ALERT_THRESHOLD,
+  isMissingRelation,
   normalizeBagType,
   resolveDispatchReceivedKgs,
   resolveSalesKgs,
+  summariseProcessingByVariety,
   toLocationBucket,
 } from "@/lib/server/season-summary-utils"
+import { displayCoffeeVariety, parseCoffeeVariety } from "@/lib/crop-config"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -559,26 +561,20 @@ export async function GET(request: NextRequest) {
       return breakdownMap.get(key)
     }
 
-    let totalCropKgs = 0
-    let totalRipeKgs = 0
     let totalGreenKgs = 0
     let totalFloatKgs = 0
     let totalWetKgs = 0
     let totalDryParchKgs = 0
     let totalDryCherryKgs = 0
-    let totalDryKgs = 0
     processingRows?.forEach((row: any) => {
-      const coffeeType = String(row.coffee_type || "Unknown")
+      const coffeeType = displayCoffeeVariety(row.coffee_type)
       const dryParchmentKg = Number(row.dry_parchment) || 0
       const dryCherryKg = Number(row.dry_cherry) || 0
-      totalCropKgs += Number(row.crop_todate) || 0
-      totalRipeKgs += Number(row.ripe_todate) || 0
       totalGreenKgs += Number(row.green_todate) || 0
       totalFloatKgs += Number(row.float_todate) || 0
       totalWetKgs += Number(row.wet_parchment) || 0
       totalDryParchKgs += dryParchmentKg
       totalDryCherryKgs += dryCherryKg
-      totalDryKgs += dryParchmentKg + dryCherryKg
 
       const parch = ensureBreakdown(coffeeType, "Dry Parchment")
       parch.processedKgs += dryParchmentKg
@@ -589,26 +585,30 @@ export async function GET(request: NextRequest) {
       cherry.processedBags += dryCherryKg / bagWeightKg
     })
 
-    const yieldByCoffeeType = (processingRows || []).map((row: any) => {
-      const coffeeType = String(row.coffee_type || "Unknown")
-      const cropKgs = Number(row.crop_todate) || 0
-      const dryKgs = (Number(row.dry_parchment) || 0) + (Number(row.dry_cherry) || 0)
-      return {
-        coffeeType,
-        cropKgs,
-        dryKgs,
-        ratio: cropKgs > 0 ? dryKgs / cropKgs : 0,
-      }
-    })
+    // Folds two spellings of one variety into one entry by SUMMING, not overwriting. Extracted to
+    // lib/server/season-summary-utils.ts so that property has a test -- inlined here it had none,
+    // and a tamper showed the whole suite passing with the summing removed.
+    const { processingByType, yieldByCoffeeType } = summariseProcessingByVariety(processingRows)
 
-    const processingByType = new Map<string, { crop: number; ripe: number; dry: number }>()
-    ;(processingRows || []).forEach((row: any) => {
-      const coffeeType = String(row.coffee_type || "Unknown")
-      const crop = Number(row.crop_todate) || 0
-      const ripe = Number(row.ripe_todate) || 0
-      const dry = (Number(row.dry_parchment) || 0) + (Number(row.dry_cherry) || 0)
-      processingByType.set(coffeeType, { crop, ripe, dry })
-    })
+    /**
+     * The whole-season crop, ripe and dry kilos come OUT of the per-variety totals rather than being
+     * summed a second time from the same rows.
+     *
+     * They were two independent passes over one result set computing the same three numbers, which is
+     * the duplication this whole branch is about -- just at a smaller scale. Whichever one somebody
+     * edited next, the other would have kept the old answer, and these three are denominators:
+     * revenuePerKgCrop, revenuePerKgRipe, revenuePerKgDry and the processing-loss percentage all
+     * divide by them. green/float/wet/parchment/cherry stay in the loop above because the per-variety
+     * helper does not carry them.
+     */
+    let totalCropKgs = 0
+    let totalRipeKgs = 0
+    let totalDryKgs = 0
+    for (const totals of processingByType.values()) {
+      totalCropKgs += totals.crop
+      totalRipeKgs += totals.ripe
+      totalDryKgs += totals.dry
+    }
 
     // Coffee runs processing -> dispatch -> sale, and the breakdown below is that flow. Pepper,
     // arecanut and whatever else the planter sells never enters it, so folding those sales in
@@ -631,7 +631,7 @@ export async function GET(request: NextRequest) {
 
     const salesByType = new Map<string, { soldKgs: number; revenue: number }>()
     coffeeSalesRows.forEach((row: any) => {
-      const coffeeType = String(row.produce_type || "Unknown")
+      const coffeeType = displayCoffeeVariety(row.produce_type)
       const soldKgs = resolveSalesKgs(row, bagWeightKg)
       const revenue = Number(row.revenue) || 0
       const current = salesByType.get(coffeeType) || { soldKgs: 0, revenue: 0 }
@@ -652,7 +652,7 @@ export async function GET(request: NextRequest) {
     })
 
     dispatchRows?.forEach((row: any) => {
-      const coffeeType = String(row.coffee_type || "Unknown")
+      const coffeeType = displayCoffeeVariety(row.coffee_type)
       const bagType = normalizeBagType(row.bag_type)
       const dispatchedBags = Number(row.bags_dispatched) || 0
       const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
@@ -663,7 +663,7 @@ export async function GET(request: NextRequest) {
     })
 
     coffeeSalesRows.forEach((row: any) => {
-      const coffeeType = String(row.produce_type || "Unknown")
+      const coffeeType = displayCoffeeVariety(row.produce_type)
       const bagType = normalizeBagType(row.bag_type)
       const soldBags = Number(row.bags_sold) || 0
       const revenue = Number(row.revenue) || 0
@@ -747,7 +747,7 @@ export async function GET(request: NextRequest) {
     processingLotRows?.forEach((row: any) => {
       const lotId = String(row.lot_id || "").trim()
       if (!lotId) return
-      const coffeeType = String(row.coffee_type || "Unknown")
+      const coffeeType = displayCoffeeVariety(row.coffee_type)
       const dryParchmentKg = Number(row.dry_parchment) || 0
       const dryCherryKg = Number(row.dry_cherry) || 0
 
@@ -764,7 +764,7 @@ export async function GET(request: NextRequest) {
     dispatchLotRows?.forEach((row: any) => {
       const lotId = String(row.lot_id || "").trim()
       if (!lotId) return
-      const coffeeType = String(row.coffee_type || "Unknown")
+      const coffeeType = displayCoffeeVariety(row.coffee_type)
       const bagType = normalizeBagType(row.bag_type)
       const dispatchedBags = Number(row.bags_dispatched) || 0
       const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
@@ -776,7 +776,7 @@ export async function GET(request: NextRequest) {
     salesLotRows?.forEach((row: any) => {
       const lotId = String(row.lot_id || "").trim()
       if (!lotId) return
-      const coffeeType = String(row.produce_type || "Unknown")
+      const coffeeType = displayCoffeeVariety(row.produce_type)
       const bagType = normalizeBagType(row.bag_type)
       const revenue = Number(row.revenue) || 0
       const soldKgs = resolveSalesKgs(row, bagWeightKg)
@@ -803,12 +803,9 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.lotId.localeCompare(b.lotId))
 
     const totalsByCoffeeType = breakdown.reduce((acc, row) => {
-      const rawType = String(row.coffeeType || "Other")
-      const normalizedType = rawType.toLowerCase().includes("arabica")
-        ? "arabica"
-        : rawType.toLowerCase().includes("robusta")
-          ? "robusta"
-          : "other"
+      // Lower-cased keys for this totals object, but the DECISION comes from crop-config.
+      const variety = parseCoffeeVariety(row.coffeeType)
+      const normalizedType = variety ? variety.toLowerCase() : "other"
       if (!acc[normalizedType]) {
         acc[normalizedType] = {
           coffeeType: normalizedType,

@@ -72,20 +72,41 @@ describe("import bulk utils", () => {
 })
 
 describe("import bulk utils — field normalization", () => {
-  it("normalizes coffee type from free-text variety values", () => {
+  it("refuses a variety it cannot place, rather than inventing one", () => {
     expect(normalizeCoffeeType("arabica")).toBe("Arabica")
     expect(normalizeCoffeeType("ROBUSTA")).toBe("Robusta")
-    expect(normalizeCoffeeType("mixed")).toBe("Mixed")
     expect(normalizeCoffeeType("")).toBe("")
     expect(normalizeCoffeeType(null)).toBe("")
+
+    /**
+     * ⚠ THIS USED TO ASSERT normalizeCoffeeType("mixed") === "Mixed".
+     *
+     * The old implementation title-cased anything it did not recognise and passed it through, so a
+     * spreadsheet saying "mixed" or "Arabika" imported as a brand new variety and then appeared as
+     * its own line in every report that groups by coffee_type -- the same mechanism that made one
+     * "Dry P" row a third bag type on the sales and dispatch tabs.
+     *
+     * "Mixed" is not a variety a bag can have. It exists in lib/agronomy-playbook.ts as "Mixed
+     * estate", which describes a whole estate's planting, not the contents of a sack, and no tenant
+     * has ever had a coffee_type outside Arabica and Robusta. Blank is now returned so the caller
+     * reports the row as missing its variety during the dry run.
+     */
+    expect(normalizeCoffeeType("mixed")).toBe("")
+    expect(normalizeCoffeeType("Arabika")).toBe("")
   })
 
-  it("normalizes bag type, defaulting to Dry Parchment for anything not cherry", () => {
+  it("refuses a bag type it cannot place, and knows the abbreviations", () => {
     expect(normalizeBagType("Dry Cherry")).toBe("Dry Cherry")
     expect(normalizeBagType("cherry")).toBe("Dry Cherry")
     expect(normalizeBagType("parchment")).toBe("Dry Parchment")
     expect(normalizeBagType("")).toBe("")
     expect(normalizeBagType(undefined)).toBe("")
+
+    // The spellings estates actually type, now shared with every reader.
+    expect(normalizeBagType("Dry P")).toBe("Dry Parchment")
+    expect(normalizeBagType("DP")).toBe("Dry Parchment")
+    // ...and no longer "anything not cherry is parchment", which filed cherry money as parchment.
+    expect(normalizeBagType("green bean")).toBe("")
   })
 
   it("normalizes transaction type, defaulting to deplete", () => {
