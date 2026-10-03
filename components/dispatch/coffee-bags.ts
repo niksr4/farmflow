@@ -17,7 +17,7 @@
  * lib/crop-config, so the spellings they accept cannot drift apart.
  */
 
-import { COFFEE_FORMS, DEFAULT_COFFEE_VARIETIES, parseCoffeeForm } from "@/lib/crop-config"
+import { COFFEE_FORMS, DEFAULT_COFFEE_VARIETIES, displayCoffeeForm, parseCoffeeForm } from "@/lib/crop-config"
 import type { BagTotals, DispatchRecord } from "./types"
 
 export const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
@@ -27,20 +27,30 @@ export const STOCK_EPSILON = 0.0001
 export const emptyBagTotals: BagTotals = {
   arabica_dry_parchment_bags: 0,
   arabica_dry_cherry_bags: 0,
+  arabica_unspecified_bags: 0,
   robusta_dry_parchment_bags: 0,
   robusta_dry_cherry_bags: 0,
+  robusta_unspecified_bags: 0,
 }
 
 /**
- * The parchment fallback is load-bearing, same as in the sales helper: `emptyBagTotals` above has
- * four fixed keys, so there is nowhere to put a third answer. Spellings are shared now, so "Dry P"
- * resolves here rather than landing on the fallback by chance.
+ * The breakdown key for a row's form, with a third bucket for one nobody can read.
+ *
+ * This used to fall back to "dry_parchment" for anything unrecognised. The failure here was worse
+ * than misfiling, though: dispatch-tab.tsx looks the composed `${variety}_${form}` key up with
+ * `if (totals[key] !== undefined)`, so a row the key did not match was DROPPED -- its bags left the
+ * totals entirely rather than landing in the wrong column. A named third bucket gives both halves
+ * somewhere to go.
  */
-export const normalizeBagTypeKey = (value: string) =>
-  parseCoffeeForm(value) === "Dry Cherry" ? "dry_cherry" : "dry_parchment"
+export const normalizeBagTypeKey = (value: string): "dry_cherry" | "dry_parchment" | "unspecified" => {
+  const form = parseCoffeeForm(value)
+  if (form === "Dry Cherry") return "dry_cherry"
+  if (form === "Dry Parchment") return "dry_parchment"
+  return "unspecified"
+}
 
-export const formatBagTypeLabel = (value: string) =>
-  normalizeBagTypeKey(value) === "dry_cherry" ? "Dry Cherry" : "Dry Parchment"
+/** The label a reader sees; never names a form it cannot read. */
+export const formatBagTypeLabel = (value: string) => displayCoffeeForm(value)
 
 export const resolveDispatchRecordNominalKgs = (
   record: Pick<DispatchRecord, "bags_dispatched">,

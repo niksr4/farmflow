@@ -55,6 +55,7 @@ import type {
   LocationOption,
   LocationScope,
 } from "@/components/dispatch/types"
+import { ARABICA, ROBUSTA, parseCoffeeVariety } from "@/lib/crop-config"
 
 export default function DispatchTab({ showDataToolsControls = false }: DispatchTabProps) {
   const { user } = useAuth()
@@ -197,17 +198,32 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     [locations],
   )
 
+  /**
+   * THE THREE TOTALS BELOW ARE KEYED `${variety}_${form}`, AND WHAT EACH AXIS DOES ON A VALUE IT
+   * CANNOT READ IS DIFFERENT. Worth knowing before trusting the figures:
+   *
+   *   form     -> `unspecified`, a real bucket, shown on screen when non-zero. bag_type was free text
+   *               until migration 153, so an unreadable form is the case that actually happened.
+   *   variety  -> parseCoffeeVariety returns null, the key misses, and `totals[key] !== undefined`
+   *               DROPS the row. Still a silent drop, and deliberately not papered over with a 3x3
+   *               grid: after migration 153 `coffee_type` is NOT NULL and CHECK-constrained to
+   *               Arabica or Robusta on every one of these tables, so it cannot occur. If that
+   *               constraint is ever removed, this guard starts losing bags again -- the constraint is
+   *               what makes the drop unreachable, not anything here.
+   */
   const dispatchedTotals = useMemo(() => {
     const totals = {
       arabica_dry_parchment: 0,
       arabica_dry_cherry: 0,
+      arabica_unspecified: 0,
       robusta_dry_parchment: 0,
       robusta_dry_cherry: 0,
+      robusta_unspecified: 0,
     }
 
     if (dispatchSummary.length > 0) {
       dispatchSummary.forEach((row) => {
-        const coffeeKey = String(row.coffee_type || "").toLowerCase()
+        const coffeeKey = (parseCoffeeVariety(row.coffee_type) || "").toLowerCase()
         const bagKey = normalizeBagTypeKey(String(row.bag_type || ""))
         const key = `${coffeeKey}_${bagKey}` as keyof typeof totals
         if (totals[key] !== undefined) {
@@ -219,7 +235,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
     dispatchRecords.forEach((record) => {
       const bagKey = normalizeBagTypeKey(record.bag_type)
-      const key = `${record.coffee_type.toLowerCase()}_${bagKey}` as keyof typeof totals
+      const key = `${(parseCoffeeVariety(record.coffee_type) || "").toLowerCase()}_${bagKey}` as keyof typeof totals
       if (totals[key] !== undefined) {
         totals[key] += Number(record.bags_dispatched)
       }
@@ -232,13 +248,15 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     const totals = {
       arabica_dry_parchment: 0,
       arabica_dry_cherry: 0,
+      arabica_unspecified: 0,
       robusta_dry_parchment: 0,
       robusta_dry_cherry: 0,
+      robusta_unspecified: 0,
     }
 
     if (dispatchSummary.length > 0) {
       dispatchSummary.forEach((row) => {
-        const coffeeKey = String(row.coffee_type || "").toLowerCase()
+        const coffeeKey = (parseCoffeeVariety(row.coffee_type) || "").toLowerCase()
         const bagKey = normalizeBagTypeKey(String(row.bag_type || ""))
         const key = `${coffeeKey}_${bagKey}` as keyof typeof totals
         if (totals[key] !== undefined) {
@@ -250,7 +268,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
     dispatchRecords.forEach((record) => {
       const bagKey = normalizeBagTypeKey(record.bag_type)
-      const key = `${record.coffee_type.toLowerCase()}_${bagKey}` as keyof typeof totals
+      const key = `${(parseCoffeeVariety(record.coffee_type) || "").toLowerCase()}_${bagKey}` as keyof typeof totals
       if (totals[key] !== undefined) {
         totals[key] += resolveDispatchRecordReceivedKgs(record, bagWeightKg)
       }
@@ -263,13 +281,15 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     const totals = {
       arabica_dry_parchment: 0,
       arabica_dry_cherry: 0,
+      arabica_unspecified: 0,
       robusta_dry_parchment: 0,
       robusta_dry_cherry: 0,
+      robusta_unspecified: 0,
     }
 
     if (formDispatchSummary.length > 0) {
       formDispatchSummary.forEach((row) => {
-        const coffeeKey = String(row.coffee_type || "").toLowerCase()
+        const coffeeKey = (parseCoffeeVariety(row.coffee_type) || "").toLowerCase()
         const bagKey = normalizeBagTypeKey(String(row.bag_type || ""))
         const key = `${coffeeKey}_${bagKey}` as keyof typeof totals
         if (totals[key] !== undefined) {
@@ -289,7 +309,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         resolveLocationIdFromLabel(record.location_name || record.location_code || record.estate)
       if (recordLocationId !== selectedLocationId) return
       const bagKey = normalizeBagTypeKey(record.bag_type)
-      const key = `${record.coffee_type.toLowerCase()}_${bagKey}` as keyof typeof totals
+      const key = `${(parseCoffeeVariety(record.coffee_type) || "").toLowerCase()}_${bagKey}` as keyof typeof totals
       if (totals[key] !== undefined) {
         totals[key] += Number(record.bags_dispatched)
       }
@@ -336,11 +356,13 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         let robustaDryCherry = 0
 
         for (const record of data.totals) {
-          const type = String(record.coffee_type || "").toLowerCase()
-          if (type === "arabica") {
+          // Was `=== "arabica"`, which dropped the row for any other spelling -- its bags left the
+          // totals rather than landing in the wrong column. parseCoffeeVariety reads the variants.
+          const variety = parseCoffeeVariety(record.coffee_type)
+          if (variety === ARABICA) {
             arabicaDryParchment += Number(record.dry_p_bags) || 0
             arabicaDryCherry += Number(record.dry_cherry_bags) || 0
-          } else if (type === "robusta") {
+          } else if (variety === ROBUSTA) {
             robustaDryParchment += Number(record.dry_p_bags) || 0
             robustaDryCherry += Number(record.dry_cherry_bags) || 0
           }
@@ -351,6 +373,11 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           arabica_dry_cherry_bags: Number(arabicaDryCherry.toFixed(2)),
           robusta_dry_parchment_bags: Number(robustaDryParchment.toFixed(2)),
           robusta_dry_cherry_bags: Number(robustaDryCherry.toFixed(2)),
+          // Unreachable at THIS source: these totals come from processing's wide columns
+          // (dry_p_bags / dry_cherry_bags), so the form is a column here and cannot be unknown.
+          // The keys exist for the dispatch-row path below, which reads a free-text bag_type.
+          arabica_unspecified_bags: 0,
+          robusta_unspecified_bags: 0,
         })
         scopeSetter?.(data.locationScope === "legacy_pool" ? "legacy_pool" : fallbackScope)
       } catch (error) {
@@ -1196,7 +1223,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             <div className="space-y-2">
               <FieldLabel
                 htmlFor="dispatch-bag-type"
-                label="Bag Type"
+                label="Parchment or cherry"
                 tooltip="Select dry parchment or dry cherry to match processing output."
               />
               {isMobile ? (

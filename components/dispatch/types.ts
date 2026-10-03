@@ -41,6 +41,13 @@ export interface BagTotals {
   arabica_dry_cherry_bags: number
   robusta_dry_parchment_bags: number
   robusta_dry_cherry_bags: number
+  /**
+   * Bags whose form nobody could read. Rendered only when non-zero, so a clean estate sees no change.
+   * Before this existed those bags were dropped from the totals entirely, because the tab looks up a
+   * composed `${variety}_${form}` key and skipped any key it did not recognise.
+   */
+  arabica_unspecified_bags: number
+  robusta_unspecified_bags: number
 }
 
 export type LocationScope = "all" | "location" | "legacy_pool"

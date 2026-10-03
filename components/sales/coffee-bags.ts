@@ -15,6 +15,7 @@ import {
   COFFEE_FORMS,
   DEFAULT_COFFEE_VARIETIES,
   ROBUSTA,
+  displayCoffeeForm,
   parseCoffeeForm,
   parseCoffeeVariety,
 } from "@/lib/crop-config"
@@ -27,22 +28,22 @@ export const LOCATION_ALL = "all"
 export const STOCK_EPSILON = 0.0001
 
 /**
- * ⚠ THE PARCHMENT FALLBACK IS LOAD-BEARING HERE, unlike on the write paths.
+ * The breakdown key for a row's form, including a third bucket for one nobody can read.
  *
- * This tab's totals are objects with four fixed keys (arabica/robusta x parchment/cherry), so a
- * third answer has nowhere to go -- returning null would index those objects with `undefined` and
- * produce NaN on screen rather than an honest "Unspecified". Making it honest means giving the
- * totals an Unspecified bucket and showing it, which is a UI change rather than this refactor.
- *
- * What is fixed now: the spellings come from lib/crop-config, so "Dry P" is understood here instead
- * of reaching parchment by accident, and this file can no longer recognise a different set from the
- * SQL that produced the rows.
+ * This used to fall back to "parchment" for anything it did not recognise, because the totals had
+ * only two form keys and a third answer would have indexed them with `undefined` and rendered NaN.
+ * InventoryBreakdown now carries `unspecified`, so the honest answer has somewhere to go: kilos whose
+ * form is unknown are shown as unknown instead of inflating parchment.
  */
-export const normalizeBagType = (value: string | null | undefined) =>
-  parseCoffeeForm(value) === "Dry Cherry" ? "cherry" : "parchment"
+export const normalizeBagType = (value: string | null | undefined): "cherry" | "parchment" | "unspecified" => {
+  const form = parseCoffeeForm(value)
+  if (form === "Dry Cherry") return "cherry"
+  if (form === "Dry Parchment") return "parchment"
+  return "unspecified"
+}
 
-export const formatBagTypeLabel = (value: string | null | undefined) =>
-  normalizeBagType(value) === "cherry" ? "Dry Cherry" : "Dry Parchment"
+/** The label a reader sees. Falls through to UNSPECIFIED_LABEL rather than naming a form it cannot read. */
+export const formatBagTypeLabel = (value: string | null | undefined) => displayCoffeeForm(value)
 
 export const normalizeCoffeeType = (value: string | null | undefined) => {
   const variety = parseCoffeeVariety(value)

@@ -1548,7 +1548,7 @@ export default function SeasonDashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Coffee</TableHead>
-                    <TableHead>Bag Type</TableHead>
+                    <TableHead>Parchment or cherry</TableHead>
                     <TableHead className="text-right">Processed (KGs)</TableHead>
                     <TableHead className="text-right">Dispatched (KGs)</TableHead>
                     <TableHead className="text-right">Received (KGs)</TableHead>
