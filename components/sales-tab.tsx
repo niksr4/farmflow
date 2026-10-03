@@ -44,6 +44,7 @@ import {
   STOCK_EPSILON,
   formatBagTypeLabel,
   normalizeBagType,
+  summariseAvailability,
   normalizeCoffeeType,
   resolveDispatchReceivedKgs,
   resolveSalesRecordKgs,
@@ -591,18 +592,19 @@ export default function SalesTab({
       const totalReceivedBags = allCoffeeTypes.reduce((sum, type) => sum + (receivedTotals[type]?.total.bags || 0), 0)
       const totalSold = allCoffeeTypes.reduce((sum, type) => sum + (soldTotals[type]?.total.kgs || 0), 0)
       const totalSoldBags = allCoffeeTypes.reduce((sum, type) => sum + (soldTotals[type]?.total.bags || 0), 0)
-      const totalAvailable = allCoffeeTypes.reduce((sum, type) => sum + (availableTotals[type]?.total.kgs || 0), 0)
-      const totalAvailableBags = allCoffeeTypes.reduce((sum, type) => sum + (availableTotals[type]?.total.bags || 0), 0)
-      const totalOverdrawn = allCoffeeTypes.reduce((sum, type) => {
-        const cherryNet = (receivedTotals[type]?.cherry.kgs || 0) - (soldTotals[type]?.cherry.kgs || 0)
-        const parchmentNet = (receivedTotals[type]?.parchment.kgs || 0) - (soldTotals[type]?.parchment.kgs || 0)
-        return sum + Math.max(0, -cherryNet) + Math.max(0, -parchmentNet)
-      }, 0)
-      const totalOverdrawnBags = allCoffeeTypes.reduce((sum, type) => {
-        const cherryNet = (receivedTotals[type]?.cherry.bags || 0) - (soldTotals[type]?.cherry.bags || 0)
-        const parchmentNet = (receivedTotals[type]?.parchment.bags || 0) - (soldTotals[type]?.parchment.bags || 0)
-        return sum + Math.max(0, -cherryNet) + Math.max(0, -parchmentNet)
-      }, 0)
+      // One helper, so these cannot drift apart again. See components/sales/coffee-bags.ts: the
+      // sellable headline and the inventory total are NOT the same number, and overdrawn counts all
+      // three forms. All three were wrong when the unspecified bucket was first added.
+      const {
+        totalAvailable,
+        totalAvailableBags,
+        totalSellable,
+        totalSellableBags,
+        totalUnclassified,
+        totalOverdrawn,
+        totalOverdrawnBags,
+      } = summariseAvailability(allCoffeeTypes, receivedTotals, soldTotals, availableTotals)
+
 
       return {
         receivedTotals,
@@ -614,6 +616,9 @@ export default function SalesTab({
         totalSoldBags,
         totalAvailable,
         totalAvailableBags,
+        totalSellable,
+        totalSellableBags,
+        totalUnclassified,
         totalOverdrawn,
         totalOverdrawnBags,
       }
@@ -1080,14 +1085,25 @@ export default function SalesTab({
       tooltip: "Revenue from non-coffee estate products — pepper, timber, services, etc.",
     }] : []),
     {
+      // Reads the SELLABLE figure, not the inventory one. The sale form can only dispose of parchment
+      // or cherry, so counting unreadable kilos here would advertise stock the writer cannot sell.
       label: "Available To Sell",
-      value: `${formatNumber(selectionScopeAvailabilityTotals.totalAvailable, 0)} KGs`,
-      detail: "Confirmed dispatch-received stock",
+      value: `${formatNumber(selectionScopeAvailabilityTotals.totalSellable, 0)} KGs`,
+      detail:
+        selectionScopeAvailabilityTotals.totalUnclassified > 0
+          ? `Plus ${formatNumber(selectionScopeAvailabilityTotals.totalUnclassified, 0)} KGs waiting on parchment or cherry`
+          : "Confirmed dispatch-received stock",
       tone:
-        selectionScopeAvailabilityTotals.totalAvailable > 0 ? ("default" as const) : ("warning" as const),
-      tooltip: selectionScopeAvailabilityTotals.totalAvailable <= 0
-        ? "No unsold stock available for the selected type and scope. All confirmed receipts have been recorded as sold."
-        : "Confirmed dispatch-received KGs that haven't been recorded as sold yet. Sell against this to keep records accurate.",
+        selectionScopeAvailabilityTotals.totalUnclassified > 0
+          ? ("warning" as const)
+          : selectionScopeAvailabilityTotals.totalSellable > 0
+            ? ("default" as const)
+            : ("warning" as const),
+      tooltip: selectionScopeAvailabilityTotals.totalUnclassified > 0
+        ? `Confirmed dispatch-received KGs not yet recorded as sold. A further ${formatNumber(selectionScopeAvailabilityTotals.totalUnclassified, 0)} KGs are on hand but cannot be sold until their rows say parchment or cherry.`
+        : selectionScopeAvailabilityTotals.totalSellable <= 0
+          ? "No unsold stock available for the selected type and scope. All confirmed receipts have been recorded as sold."
+          : "Confirmed dispatch-received KGs that haven't been recorded as sold yet. Sell against this to keep records accurate.",
     },
     {
       label: "Sales Records",

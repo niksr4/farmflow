@@ -829,21 +829,38 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     ? resolveDispatchRecordNominalKgs(selectedDispatchRecord, bagWeightKg)
     : 0
   const selectedDispatchVarianceKgs = selectedDispatchResolvedKgs - selectedDispatchNominalKgs
+  /**
+   * ⚠ THE HEADLINES MUST INCLUDE THE UNSPECIFIED BUCKETS, or adding the bucket made things worse.
+   *
+   * The bucket stops an unreadable form being counted as parchment. But if these three sums then skip
+   * it, a 10-bag dispatch with an unreadable form leaves "Dispatched" 10 bags light, "Pending
+   * Dispatch" 10 bags heavy, and "Confirmed Received" short by its KGs -- the bags would have left
+   * the totals again, which is the exact bug the bucket exists to end, one layer up.
+   *
+   * These are counts of real bags, so an unknown LABEL does not make them less real. Only the
+   * per-form columns keep them apart.
+   */
   const processedNominalBagsTotal =
     bagTotals.arabica_dry_parchment_bags +
     bagTotals.arabica_dry_cherry_bags +
+    bagTotals.arabica_unspecified_bags +
     bagTotals.robusta_dry_parchment_bags +
-    bagTotals.robusta_dry_cherry_bags
+    bagTotals.robusta_dry_cherry_bags +
+    bagTotals.robusta_unspecified_bags
   const dispatchedNominalBagsTotal =
     dispatchedTotals.arabica_dry_parchment +
     dispatchedTotals.arabica_dry_cherry +
+    dispatchedTotals.arabica_unspecified +
     dispatchedTotals.robusta_dry_parchment +
-    dispatchedTotals.robusta_dry_cherry
+    dispatchedTotals.robusta_dry_cherry +
+    dispatchedTotals.robusta_unspecified
   const dispatchedReceivedKgsTotal =
     dispatchReceivedKgsTotals.arabica_dry_parchment +
     dispatchReceivedKgsTotals.arabica_dry_cherry +
+    dispatchReceivedKgsTotals.arabica_unspecified +
     dispatchReceivedKgsTotals.robusta_dry_parchment +
-    dispatchReceivedKgsTotals.robusta_dry_cherry
+    dispatchReceivedKgsTotals.robusta_dry_cherry +
+    dispatchReceivedKgsTotals.robusta_unspecified
   const pendingNominalBags = processedNominalBagsTotal - dispatchedNominalBagsTotal
   const dispatchVarianceKgsTotal = dispatchedReceivedKgsTotal - dispatchedNominalBagsTotal * bagWeightKg
   const dispatchShellStats = [
