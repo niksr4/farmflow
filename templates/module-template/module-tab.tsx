@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
+import { istDateIso } from "@/lib/date-utils"
 
 export default function ModuleTabTemplate() {
   const { user } = useAuth()
@@ -18,19 +19,28 @@ export default function ModuleTabTemplate() {
   const [metricA, setMetricA] = useState("")
   const [metricB, setMetricB] = useState("")
 
+  const loadRecords = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const res = await fetch("/api/__MODULE_ID__")
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to load records")
+      }
+      setRecords(data.records || [])
+    } catch (error) {
+      console.error("Failed to load records", error)
+      toast({ title: "Error", description: "Failed to load records", variant: "destructive" })
+      setRecords([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [toast])
+
   useEffect(() => {
     if (!user?.tenantId) return
-    setIsLoading(true)
-    fetch("/api/__MODULE_ID__")
-      .then((res) => res.json())
-      .then((data) => setRecords(data.records || []))
-      .catch((error) => {
-        console.error("Failed to load records", error)
-        toast({ title: "Error", description: "Failed to load records", variant: "destructive" })
-        setRecords([])
-      })
-      .finally(() => setIsLoading(false))
-  }, [user?.tenantId, toast])
+    void loadRecords()
+  }, [user?.tenantId, loadRecords])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -39,7 +49,8 @@ export default function ModuleTabTemplate() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          record_date: new Date().toISOString().slice(0, 10),
+          // The estate day (IST), not the UTC date: before 05:30 IST the UTC date is still yesterday.
+          record_date: istDateIso(new Date()),
           metric_a: metricA,
           metric_b: metricB,
         }),
@@ -50,6 +61,8 @@ export default function ModuleTabTemplate() {
       }
       setMetricA("")
       setMetricB("")
+      toast({ title: "Saved", description: "Record saved." })
+      await loadRecords()
     } catch (error: any) {
       console.error("Failed to save record", error)
       toast({ title: "Error", description: error.message || "Failed to save record", variant: "destructive" })
