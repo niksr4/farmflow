@@ -1467,7 +1467,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
                     <FieldLabel htmlFor="processing-dry-parch" label="Dry Parchment (kg)" tooltip="Weight after drying to storage moisture." />
-                    <Input id="processing-dry-parch" type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_parch ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_parch")} placeholder="Enter dry parch" />
+                    <Input id="processing-dry-parch" type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_parch ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_parch")} placeholder="Enter dry parchment" />
                   </div>
                   {showAutoCalc && <div>
                     <Label htmlFor="processing-dry-p-todate">Dry Parchment To Date (kg)</Label>
@@ -1619,7 +1619,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             sortOptions={[
               { value: "date", label: "Date" },
               { value: "crop", label: "Crop kg" },
-              { value: "bags", label: "DP bags" },
+              { value: "bags", label: "Dry parchment bags" },
             ]}
             sortValue={recentControls.sortValue}
             onSortChange={recentControls.setSortValue}

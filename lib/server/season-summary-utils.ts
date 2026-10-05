@@ -1,9 +1,60 @@
+import { displayCoffeeForm, displayCoffeeVariety } from "@/lib/crop-config"
+
 export const DEFAULT_BAG_WEIGHT_KG = 50
 export const LOSS_ALERT_THRESHOLD = 0.03
 export const COST_SPIKE_MULTIPLIER = 1.5
 
-export const normalizeBagType = (value: string | null | undefined) =>
-  String(value || "").toLowerCase().includes("cherry") ? "Dry Cherry" : "Dry Parchment"
+/**
+ * Reading, so unrecognised becomes "Unspecified" rather than a guess.
+ *
+ * This used to be `includes("cherry") ? cherry : parchment`, which called anything it did not
+ * recognise parchment -- including a blank. The spellings now live in lib/crop-config.ts, which is
+ * also what the SQL grouping is generated from, so a label here cannot disagree with the bucket the
+ * database put the row in.
+ */
+export const normalizeBagType = displayCoffeeForm
+
+export type ProcessingVarietyTotals = { crop: number; ripe: number; dry: number }
+
+/**
+ * Processing rows folded onto one entry per canonical variety.
+ *
+ * ⚠ IT MUST SUM, AND THIS LIVES HERE SO THAT IS TESTABLE. The route's query does
+ * `GROUP BY coffee_type` on the RAW column, so two spellings of one variety come back as two rows.
+ * Canonicalising them to one label is correct, but it means two rows can share a key -- and the first
+ * version of this used `.set()`, which kept only the last and dropped the other row's kilos out of
+ * the revenue-per-kg denominator. The figure stayed plausible, which is the only kind of wrong number
+ * this codebase actually produces.
+ *
+ * Keeping the raw string, as the route did before, made that visible as two separate lines. So
+ * canonicalising without summing would have traded a visible oddity for a silent wrong total -- a
+ * strictly worse bug than the one being fixed. It was inlined in the route and therefore untested;
+ * a tamper proved the whole suite passed with the summing removed.
+ *
+ * yieldByCoffeeType is derived from the same totals rather than mapped per row, which is what stops
+ * two rows emitting two lines both labelled "Arabica". Map iteration is insertion-ordered and the
+ * query is ORDER BY coffee_type, so output order is unchanged.
+ */
+export const summariseProcessingByVariety = (rows: ReadonlyArray<Record<string, unknown>> | null | undefined) => {
+  const processingByType = new Map<string, ProcessingVarietyTotals>()
+  for (const row of rows || []) {
+    const coffeeType = displayCoffeeVariety(row.coffee_type as string | null | undefined)
+    const totals = processingByType.get(coffeeType) || { crop: 0, ripe: 0, dry: 0 }
+    totals.crop += Number(row.crop_todate) || 0
+    totals.ripe += Number(row.ripe_todate) || 0
+    totals.dry += (Number(row.dry_parchment) || 0) + (Number(row.dry_cherry) || 0)
+    processingByType.set(coffeeType, totals)
+  }
+
+  const yieldByCoffeeType = Array.from(processingByType, ([coffeeType, totals]) => ({
+    coffeeType,
+    cropKgs: totals.crop,
+    dryKgs: totals.dry,
+    ratio: totals.crop > 0 ? totals.dry / totals.crop : 0,
+  }))
+
+  return { processingByType, yieldByCoffeeType }
+}
 
 export const toLocationBucket = (locationName?: string | null, locationCode?: string | null) => {
   const rawCode = String(locationCode || "").trim()
