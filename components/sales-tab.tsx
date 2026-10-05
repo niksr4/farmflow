@@ -1020,8 +1020,17 @@ export default function SalesTab({
     availableBags: (baseSelectionAvailability.availableKgs + editAllowance.allowanceKgs) / bagWeightKg,
   }
   const selectionScopeLabel = "estate-wide scope"
+  /**
+   * ⚠ ALL FOUR OF THESE ASK "WHAT COULD BE SOLD INSTEAD", SO ALL FOUR READ SELLABLE, NOT INVENTORY.
+   *
+   * The form offers parchment or cherry and checks stock for the form chosen, so unclassified kilos
+   * can never be sold through it. Keyed on totalAvailable, the hint would tell a writer that other
+   * types have stock when the only thing on hand is a row whose form nobody can read -- advice that
+   * sends them hunting for a slot that does not exist. The headline above already made this split;
+   * these were the places that still had the old reading.
+   */
   const hasOtherTypeAvailability =
-    selectionAvailability.availableKgs <= 0 && selectionScopeAvailabilityTotals.totalAvailable > 0
+    selectionAvailability.availableKgs <= 0 && selectionScopeAvailabilityTotals.totalSellable > 0
   const exceedsAvailability = kgsSoldValue > selectionAvailability.availableKgs + STOCK_EPSILON
   const excessKgs = Math.max(0, kgsSoldValue - selectionAvailability.availableKgs)
   const projectedRemainingKgs = Math.max(0, selectionAvailability.availableKgs - kgsSoldValue)
@@ -1031,10 +1040,10 @@ export default function SalesTab({
       ? Math.min(100, (kgsSoldValue / selectionAvailability.availableKgs) * 100)
       : 0
   const selectionShareOfScopePct =
-    selectionScopeAvailabilityTotals.totalAvailable > 0
-      ? (selectionAvailability.availableKgs / selectionScopeAvailabilityTotals.totalAvailable) * 100
+    selectionScopeAvailabilityTotals.totalSellable > 0
+      ? (selectionAvailability.availableKgs / selectionScopeAvailabilityTotals.totalSellable) * 100
       : 0
-  const contextGapKgs = Math.max(0, selectionScopeAvailabilityTotals.totalAvailable - selectionAvailability.availableKgs)
+  const contextGapKgs = Math.max(0, selectionScopeAvailabilityTotals.totalSellable - selectionAvailability.availableKgs)
   const contextGapBags = contextGapKgs / bagWeightKg
   const saveBlockers: string[] = []
   if (!selectedLocationId) saveBlockers.push("Select a location.")
@@ -1247,7 +1256,7 @@ export default function SalesTab({
           {hasOtherTypeAvailability && (
             <p className="mt-1 text-xs font-medium text-amber-700">
               No stock is available for this exact selection. Other coffee or bag types in this scope still have
-              {" "}{formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs available.
+              {" "}{formatNumber(selectionScopeAvailabilityTotals.totalSellable)} KGs available.
             </p>
           )}
         </div>
@@ -1303,10 +1312,10 @@ export default function SalesTab({
           <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Other stock</p>
             <p className="mt-1 text-sm font-black tabular-nums text-stone-900 dark:text-white">
-              {formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs
+              {formatNumber(selectionScopeAvailabilityTotals.totalSellable)} KGs
             </p>
             <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
-              {formatNumber(selectionScopeAvailabilityTotals.totalAvailableBags)} bags
+              {formatNumber(selectionScopeAvailabilityTotals.totalSellableBags)} bags
             </p>
             <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               Outside this selection: {formatNumber(contextGapKgs)} KGs ({formatNumber(contextGapBags)} bags)
