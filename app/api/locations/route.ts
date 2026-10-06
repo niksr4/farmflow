@@ -268,7 +268,7 @@ export async function PATCH(request: Request) {
       sql,
       tenantContext,
       sql`
-        SELECT id, name, code, estate
+        SELECT id, name, code, estate, kind
         FROM locations
         WHERE id = ${id}
           AND tenant_id = ${tenantId}
@@ -313,15 +313,22 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Enter both latitude and longitude, or neither" }, { status: 400 })
     }
 
+    // POST only lets a block carry a planted area, and a general location has no point on the
+    // ground. PATCH must hold the same line or an edit quietly puts a store's area into the
+    // acreage denominator (and a coordinate on an estate-in-general).
+    const existingKind = String(existing?.[0]?.kind || "block")
+    const writeArea = areaProvided && existingKind === "block"
+    const writeCoords = coordsProvided && existingKind !== "general"
+
     const result = await runTenantQuery(
       sql,
       tenantContext,
       sql`
         UPDATE locations
         SET name = ${name}, code = ${code}, estate = ${nextEstate},
-            area_acres = CASE WHEN ${areaProvided} THEN ${areaAcres} ELSE area_acres END,
-            latitude  = CASE WHEN ${coordsProvided} THEN ${nextLat}::numeric ELSE latitude END,
-            longitude = CASE WHEN ${coordsProvided} THEN ${nextLng}::numeric ELSE longitude END
+            area_acres = CASE WHEN ${writeArea} THEN ${areaAcres} ELSE area_acres END,
+            latitude  = CASE WHEN ${writeCoords} THEN ${nextLat}::numeric ELSE latitude END,
+            longitude = CASE WHEN ${writeCoords} THEN ${nextLng}::numeric ELSE longitude END
         WHERE id = ${id}
           AND tenant_id = ${tenantId}
         RETURNING id, name, code, estate, area_acres, kind, latitude, longitude

@@ -171,6 +171,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           ? Number(body.dailyRate)
           : null
         : undefined
+    // An unreadable or negative rate used to collapse to null and then silently WIPE the stored
+    // wage (the UPDATE writes dailyRate ?? null), turning the worker into "no rate".
+    if (body?.dailyRate != null && (Number.isNaN(Number(body.dailyRate)) || Number(body.dailyRate) < 0)) {
+      return NextResponse.json({ success: false, error: "A daily rate must be zero or more" }, { status: 400 })
+    }
     const bankName = body?.bankName != null ? String(body.bankName || "").trim().slice(0, 120) || null : undefined
     const bankAccount = body?.bankAccount != null ? String(body.bankAccount || "").trim().slice(0, 60) || null : undefined
     const bankIfsc = body?.bankIfsc != null ? String(body.bankIfsc || "").trim().slice(0, 20) || null : undefined
