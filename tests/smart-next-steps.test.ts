@@ -54,18 +54,26 @@ describe("buildSmartNextSteps", () => {
       requiresGuidedSetup: true,
       onboardingStatus: { ...INITIAL_ONBOARDING_STATUS, inventory: false },
     })
-    // Mapping the estate comes before stock: acreage is the denominator under every per-acre
-    // number, and stock entered against no block cannot be attributed to one later.
-    expect(steps[0]?.id).toBe("onboarding-blocks_acreage")
+    // Naming the blocks comes before stock: stock entered against no block cannot be attributed to
+    // one later. Measuring them is a separate, later step, because nothing is blocked on the area.
+    // (Workers would come first, but baseInput has the labour module off.)
+    expect(steps[0]?.id).toBe("onboarding-blocks")
   })
 
-  it("moves on to stock once the estate is mapped and the store exists", () => {
+  it("moves on to stock once the blocks are named and the store exists", () => {
     const steps = buildSmartNextSteps({
       ...baseInput,
       canShowInventory: true,
       requiresGuidedSetup: true,
-      onboardingStatus: { ...INITIAL_ONBOARDING_STATUS, blocks_acreage: true, storehouse: true, inventory: false },
+      onboardingStatus: {
+        ...INITIAL_ONBOARDING_STATUS,
+        blocks: true,
+        storehouse: true,
+        inventory: false,
+      },
     })
+    // Reached without any acreage, which is the point of the split: an estate can get all the way
+    // to valuing its stock before it has measured a single block.
     expect(steps[0]?.id).toBe("onboarding-inventory")
   })
 
@@ -136,7 +144,10 @@ describe("buildSmartNextSteps", () => {
     // arranged deliberately or this stops testing the thing it was written for: with every
     // onboarding step done there is no pending step to borrow a tab from, and first-live-record
     // falls back to "home" — the same tab stuck-help uses.
-    const allDone = { ...INITIAL_ONBOARDING_STATUS, blocks_acreage: true, weather: true }
+    // Every step this access shape renders must be done, or a pending step lends its tab and the
+    // collision this test needs stops happening. baseInput has every module off, so that is blocks,
+    // blocks_acreage and weather.
+    const allDone = { ...INITIAL_ONBOARDING_STATUS, blocks: true, blocks_acreage: true, weather: true }
     const steps = buildSmartNextSteps({ ...baseInput, onboardingStatus: allDone, recentActivity: [] })
     const firstLiveRecord = steps.find((s) => s.id === "first-live-record")
     expect(firstLiveRecord?.actionTab).toBe("home")
