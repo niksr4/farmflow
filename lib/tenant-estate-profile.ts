@@ -1,8 +1,24 @@
+import {
+  DEFAULT_PROCESSING_ROUTE,
+  parseProcessingRoute,
+  resolveProcessingRoute,
+  type ProcessingRoute,
+} from "@/lib/crop-config"
+
 export type TenantEstateProfile = {
   acreageAcres: number | null
   weatherLocationLabel: string
   weatherLatitude: number | null
   weatherLongitude: number | null
+  /**
+   * Whether this estate pulps its cherry, dries it whole, or both. See crop-config for what the
+   * three values mean and why `both` is the default.
+   *
+   * Not nullable, unlike every other field here. A null route would mean "unknown", and the screen
+   * would then have to decide what to show anyway -- which is how the hardcoded convention got in.
+   * Defaulting to `both` makes the fallback explicit and makes it a no-op.
+   */
+  processingRoute: ProcessingRoute
 }
 
 export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
@@ -10,6 +26,7 @@ export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
   weatherLocationLabel: "",
   weatherLatitude: null,
   weatherLongitude: null,
+  processingRoute: DEFAULT_PROCESSING_ROUTE,
 }
 
 const MAX_ACREAGE = 100_000
@@ -32,6 +49,9 @@ export const mergeTenantEstateProfile = (input?: Partial<TenantEstateProfile> | 
   weatherLocationLabel: String(input?.weatherLocationLabel || "").trim(),
   weatherLatitude: input?.weatherLatitude ?? DEFAULT_TENANT_ESTATE_PROFILE.weatherLatitude,
   weatherLongitude: input?.weatherLongitude ?? DEFAULT_TENANT_ESTATE_PROFILE.weatherLongitude,
+  // Lenient on read: a stored value this build does not recognise falls back to the route that
+  // hides nothing, rather than making the pulping screen unusable.
+  processingRoute: resolveProcessingRoute(input?.processingRoute),
 })
 
 /**
@@ -73,6 +93,15 @@ export const sanitizeTenantEstateProfile = (input: unknown): Partial<TenantEstat
     } else {
       return null
     }
+  }
+
+  // Strict on write, lenient on read -- the same split as parseCoffeeForm vs displayCoffeeForm.
+  // Saving an unrecognised route is how a column acquires an eighth spelling, so this refuses the
+  // whole payload rather than quietly storing it or quietly substituting the default.
+  if ("processingRoute" in value) {
+    const route = parseProcessingRoute(value.processingRoute)
+    if (!route) return null
+    cleaned.processingRoute = route
   }
 
   if ("weatherLongitude" in value) {
