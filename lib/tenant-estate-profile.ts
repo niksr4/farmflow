@@ -1,9 +1,4 @@
-import {
-  DEFAULT_PROCESSING_ROUTE,
-  parseProcessingRoute,
-  resolveProcessingRoute,
-  type ProcessingRoute,
-} from "@/lib/crop-config"
+import { parseProcessingRoute, type ProcessingRoute } from "@/lib/crop-config"
 
 export type TenantEstateProfile = {
   acreageAcres: number | null
@@ -11,14 +6,18 @@ export type TenantEstateProfile = {
   weatherLatitude: number | null
   weatherLongitude: number | null
   /**
-   * Whether this estate pulps its cherry, dries it whole, or both. See crop-config for what the
-   * three values mean and why `both` is the default.
+   * Whether this estate pulps its cherry, dries it whole, or both. See crop-config for the values.
    *
-   * Not nullable, unlike every other field here. A null route would mean "unknown", and the screen
-   * would then have to decide what to show anyway -- which is how the hardcoded convention got in.
-   * Defaulting to `both` makes the fallback explicit and makes it a no-op.
+   * ⚠ NULL IS A DISTINCT STATE AND IS LOAD-BEARING: it means nobody has been asked yet, which is
+   * not the same as somebody choosing `both`. Every *reader* resolves null to `both` through
+   * `resolveProcessingRoute`, so behaviour is unchanged and nothing is hidden from an estate that
+   * never answered. But the onboarding checklist has to be able to tell the two apart, or the step
+   * is born green and the question never gets asked.
+   *
+   * This is the same mistake bag weight would make if it were a step: a default that is already
+   * correct cannot be distinguished from a confirmation, so a checkmark would mean nothing.
    */
-  processingRoute: ProcessingRoute
+  processingRoute: ProcessingRoute | null
 }
 
 export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
@@ -26,7 +25,7 @@ export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
   weatherLocationLabel: "",
   weatherLatitude: null,
   weatherLongitude: null,
-  processingRoute: DEFAULT_PROCESSING_ROUTE,
+  processingRoute: null,
 }
 
 const MAX_ACREAGE = 100_000
@@ -49,9 +48,10 @@ export const mergeTenantEstateProfile = (input?: Partial<TenantEstateProfile> | 
   weatherLocationLabel: String(input?.weatherLocationLabel || "").trim(),
   weatherLatitude: input?.weatherLatitude ?? DEFAULT_TENANT_ESTATE_PROFILE.weatherLatitude,
   weatherLongitude: input?.weatherLongitude ?? DEFAULT_TENANT_ESTATE_PROFILE.weatherLongitude,
-  // Lenient on read: a stored value this build does not recognise falls back to the route that
-  // hides nothing, rather than making the pulping screen unusable.
-  processingRoute: resolveProcessingRoute(input?.processingRoute),
+  // parse, NOT resolve. Resolving here would turn "never asked" into "chose both" on the first
+  // read, and the onboarding step would be permanently complete without anybody answering it.
+  // Readers that need a behaviour call resolveProcessingRoute themselves.
+  processingRoute: parseProcessingRoute(input?.processingRoute),
 })
 
 /**
