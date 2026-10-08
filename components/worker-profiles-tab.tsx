@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
 import { todayIso } from "@/lib/date-utils"
 import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -78,17 +78,34 @@ const formatGender = (g: string | null) => (g ? GENDER_LABELS[g] ?? g : null)
  * Falls back rather than being exhaustive: a type added to lib/worker-types.ts should show up
  * as a plain badge, not crash the roster.
  */
+/*
+ * ⚠ THESE WERE WRITTEN DARK-FIRST AND THE APP DEFAULTS TO LIGHT.
+ *
+ * Every one of them was a bare `text-<hue>-300` on a 10% tint of the same hue, which over a 99%
+ * -lightness card measured 1.44:1 (amber) to 1.85:1 (violet). AA wants 4.5:1 for text this size.
+ * The type coding was therefore invisible in the theme nearly everyone sees -- and invisible is
+ * worse than absent here, because the badge still occupied the row and still looked deliberate.
+ *
+ * Nothing caught it: no lint rule reads colour, and tests/render/* asserts text content, which is
+ * present either way. app/globals.css has `.dark` overrides for hardcoded LIGHT classes (the
+ * opposite direction), so there was no safety net pointing this way.
+ *
+ * The shape is the one attendance-scanner-tab.tsx already uses: an explicit `-50` ground with
+ * `-800` text, inverted to the old tint-and-300 for dark. Measured light / dark: violet 8.19/9.28,
+ * emerald 7.29/11.25, sky 7.09/10.28, amber 6.84/11.89, stone 9.84/11.51.
+ */
 const WORKER_TYPE_COLORS: Partial<Record<WorkerType, string>> = {
-  staff: "border-violet-400/30 bg-violet-400/10 text-violet-300",
-  proprietor: "border-violet-400/30 bg-violet-400/10 text-violet-300",
-  chkroll_pf: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-  casuals: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-  seasonal_assam: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-  permanent: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-  seasonal: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-  contractor: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+  staff: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-400/10 dark:text-violet-300",
+  proprietor: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-400/10 dark:text-violet-300",
+  chkroll_pf: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300",
+  casuals: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300",
+  seasonal_assam: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
+  permanent: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300",
+  seasonal: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
+  contractor: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300",
 }
-const WORKER_TYPE_FALLBACK = "border-stone-400/30 bg-stone-400/10 text-stone-300"
+const WORKER_TYPE_FALLBACK =
+  "border-stone-200 bg-stone-50 text-stone-700 dark:border-stone-400/30 dark:bg-stone-400/10 dark:text-stone-300"
 
 const EMPTY_FORM = {
   name: "",
@@ -296,7 +313,16 @@ export default function WorkerProfilesTab() {
     }
   }
 
-  const handleAdd = useSingleFlight(handleAddUnguarded)
+  /**
+   * The add-worker form submits on Enter, with the name field autofocused — so adding a roster of
+   * thirty is type, Enter, type, Enter, rather than reaching for Save each time. Medappa's writer
+   * entering 33 people is the case that matters.
+   *
+   * useSingleFlightSubmit rather than guarding the handler: the guard drops the second call, and if
+   * that call has not yet reached preventDefault the browser performs a native submit and reloads
+   * the page mid-POST. See the long note in hooks/use-single-flight.ts.
+   */
+  const handleAddSubmit = useSingleFlightSubmit(handleAddUnguarded)
 
   const startEdit = (worker: Worker) => {
     setEditingId(worker.id)
@@ -534,7 +560,12 @@ export default function WorkerProfilesTab() {
         )}
 
         {isAdding && (
+          /* The <form> sits inside CardContent (which renders a div and cannot change tag) and
+             deliberately does not re-indent its 230 lines of children: the behaviour change is two
+             button types and this wrapper, and burying that in a whitespace diff would make it
+             unreviewable. Every other button inside is already type="button". */
           <CardContent className="border-t border-border/50 pt-4">
+          <form onSubmit={handleAddSubmit}>
             {/* Person or crew, and it sits above the name because it changes what the name means.
                 The muster tab has offered this since scripts/115; this roster -- which calls itself
                 the shared roster feeding Attendance, Picking, Ledger and Payroll -- could display a
@@ -760,20 +791,22 @@ export default function WorkerProfilesTab() {
               )}
             </div>
             <div className="mt-3 flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
                 <X className="mr-1 h-4 w-4" /> Cancel
               </Button>
               {/* A crew with no headcount is refused by the route anyway; disabling here says so
-                  before the round trip instead of after it. */}
+                  before the round trip instead of after it. Also what stops an Enter on an empty
+                  name doing nothing in silence -- a disabled submit cannot fire. */}
               <Button
+                type="submit"
                 size="sm"
                 disabled={!form.name.trim() || saving || (form.kind === "gang" && !(Number(form.headcount) >= 1))}
-                onClick={handleAdd}
               >
                 {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
                 Save
               </Button>
             </div>
+          </form>
           </CardContent>
         )}
 

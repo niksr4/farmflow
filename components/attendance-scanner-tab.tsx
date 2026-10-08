@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -461,37 +462,70 @@ export default function AttendanceScannerTab() {
           </div>
         )}
 
+        {/*
+          ⚠ THESE THREE FIELDS WERE LABELLED BY PLACEHOLDER ALONE.
+          "Where it stands (e.g. Muster shed)" and "Serial number" were the only thing naming them,
+          and a placeholder is gone the moment you type: having filled both in, you could no longer
+          tell which was which, and nothing was announced to a screen reader either (WCAG 3.3.2).
+          The estate picker had no name at all -- only a "Serves every estate" first option.
+
+          That matters more here than almost anywhere else in the product. This tab exists so a
+          terminal can be commissioned WITHOUT help (see the note in attendance-workspace.tsx), and
+          every other step on it is carefully instructed, down to the device's own menu path and a
+          warning about which port not to use. Step 1 was the exception.
+
+          The rest of the file already had the concept: CopyField takes a `label`.
+        */}
         <form onSubmit={handleAddDevice} className="space-y-2">
-          <Input
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Where it stands (e.g. Muster shed)"
-            className="h-10 text-sm"
-            disabled={isAddingDevice}
-          />
-          <Input
-            value={newSerial}
-            onChange={(e) => setNewSerial(e.target.value)}
-            placeholder="Serial number"
-            className="h-10 font-mono text-sm"
-            disabled={isAddingDevice}
-          />
+          <div className="space-y-1">
+            <Label htmlFor="scanner-device-label" className="text-xs">Where the terminal stands</Label>
+            <Input
+              id="scanner-device-label"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="e.g. Muster shed"
+              className="h-10 text-sm"
+              disabled={isAddingDevice}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="scanner-device-serial" className="text-xs">Serial number</Label>
+            {/* No placeholder: this step's own opening paragraph already says where to find the
+                serial ("the sticker underneath the device, and ... Menu → System Info"), and an
+                invented example would only suggest a format these terminals may not use. */}
+            <Input
+              id="scanner-device-serial"
+              value={newSerial}
+              onChange={(e) => setNewSerial(e.target.value)}
+              className="h-10 font-mono text-sm"
+              disabled={isAddingDevice}
+            />
+          </div>
           {/* Only asked of tenants who actually run more than one estate -- the same test the
               muster's own estate picker uses. One estate means the answer is never interesting. */}
           {isMultiEstate && estates.length > 0 && (
-            <select
-              value={newEstate}
-              onChange={(e) => setNewEstate(e.target.value)}
-              className="h-10 w-full rounded-md border border-stone-200 bg-white px-2 text-sm dark:border-stone-700 dark:bg-stone-900"
-              disabled={isAddingDevice}
-            >
-              <option value="">Serves every estate</option>
-              {estates.map((estate) => (
-                <option key={estate} value={estate}>
-                  {estate}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-1">
+              <Label htmlFor="scanner-device-estate" className="text-xs">Which estate it serves</Label>
+              {/* `text-base sm:text-sm`, matching ui/input.tsx: iOS zooms the page when a control
+                  under 16px takes focus, which shifts the form while somebody is part-way through
+                  typing a serial number off the back of a terminal. The two other selects in this
+                  file (the per-device estate picker and the code-match picker) have the same 14px
+                  problem and are outside this change. */}
+              <select
+                id="scanner-device-estate"
+                value={newEstate}
+                onChange={(e) => setNewEstate(e.target.value)}
+                className="h-10 w-full rounded-md border border-stone-200 bg-white px-2 text-base dark:border-stone-700 dark:bg-stone-900 sm:text-sm"
+                disabled={isAddingDevice}
+              >
+                <option value="">Serves every estate</option>
+                {estates.map((estate) => (
+                  <option key={estate} value={estate}>
+                    {estate}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
           <Button
             type="submit"
