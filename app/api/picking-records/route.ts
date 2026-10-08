@@ -27,6 +27,16 @@ const pickingBodySchema = z.object({
   ratePerKg: z.number().min(0, "rate must be non-negative").max(99999),
   locationId: z.string().uuid().nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
+  /**
+   * How much of the worker's day this pick used. Defaults to a WHOLE day, which is the answer to
+   * assume until Manoj settles whether a picking day can be partial -- and which the DB column
+   * defaults to independently, so an older client that omits it behaves identically.
+   *
+   * It matters because picking and day-work now share one budget (scripts/152): a picker booked for
+   * a full day cannot also be given a day-rate job, which is Manoj's own rule -- a field is piece
+   * rate OR day wages, never both -- and was previously enforced nowhere.
+   */
+  dayFraction: z.number().positive().max(1).optional(),
 })
 
 export async function GET(request: Request) {
@@ -88,6 +98,10 @@ export async function GET(request: Request) {
             pr.crop,
             pr.kg_picked,
             pr.rate_per_kg,
+            -- Returned because POST and PUT both accept it. Without it a client cannot read back a
+            -- stored 0.5 to show or re-submit, and would silently push the day back to a full 1.0
+            -- on the next edit.
+            pr.day_fraction,
             (pr.kg_picked * pr.rate_per_kg) AS amount,
             pr.location_id,
             pr.notes,
@@ -126,6 +140,7 @@ export async function GET(request: Request) {
         pickDate: String(r.pick_date),
         kgPicked: Number(r.kg_picked),
         ratePerKg: Number(r.rate_per_kg),
+        dayFraction: Number(r.day_fraction),
         amount: Number(r.amount),
         crop: r.crop ? String(r.crop) : "coffee",
         locationId: r.location_id ? String(r.location_id) : null,
@@ -159,7 +174,7 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
-    const { workerId, pickDate, crop, kgPicked, ratePerKg, locationId, notes } = parsed.data
+    const { workerId, pickDate, crop, kgPicked, ratePerKg, locationId, notes, dayFraction } = parsed.data
 
     // Verify worker belongs to this tenant
     const workerRows = await runTenantQuery(
@@ -175,7 +190,7 @@ export async function POST(request: Request) {
       accountsSql,
       tenantContext,
       accountsSql`
-        INSERT INTO picking_records (tenant_id, worker_id, pick_date, crop, kg_picked, rate_per_kg, location_id, notes)
+        INSERT INTO picking_records (tenant_id, worker_id, pick_date, crop, kg_picked, rate_per_kg, location_id, notes, day_fraction)
         VALUES (
           ${tenantContext.tenantId},
           ${workerId}::uuid,
@@ -184,7 +199,8 @@ export async function POST(request: Request) {
           ${kgPicked},
           ${ratePerKg},
           ${locationId ?? null}::uuid,
-          ${notes ?? null}
+          ${notes ?? null},
+          ${dayFraction ?? 1}
         )
         RETURNING id
       `,
