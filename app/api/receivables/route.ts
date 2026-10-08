@@ -11,6 +11,7 @@ import { canDeleteModule, canWriteModule, resolveRequestedTenantId } from "@/lib
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { istDateIso } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -65,8 +66,8 @@ export async function GET(request: Request) {
     const tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
-    const todayIso = new Date().toISOString().slice(0, 10)
-    const dueSoonCutoffIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const todayIso = istDateIso(new Date())
+    const dueSoonCutoffIso = istDateIso(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
 
     // An explicit ?locationId= is already inside whichever estate it belongs to, so it wins
     // outright; only fall back to the active estate filter when no explicit location was asked

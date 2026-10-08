@@ -213,9 +213,7 @@ const scan = () => {
  */
 const ACCEPTED: Record<string, { count: number; why: string }> = {
   "app/api/coffee-news/route.ts": { count: 1, why: "cache key for a news feed — a day-early key costs one refetch" },
-  "app/api/receivables/route.ts": { count: 1, why: "overdue cutoffs, but receivables is enterprise-tier with 0 rows in prod" },
   "app/api/weather/rainfall-context/route.ts": { count: 1, why: "forecast context window, not a recorded figure" },
-  "app/api/yield-forecast/route.ts": { count: 1, why: "named todayUtc and compared only against other UTC-parsed dates; enterprise-tier, 0 rows" },
   "components/tenant-settings-page.tsx": { count: 1, why: "date in a download filename" },
   "components/inventory-system.tsx": { count: 2, why: "dates in two CSV download filenames" },
   "components/admin/utils.ts": { count: 1, why: "DEFAULT_WEEKLY_START, an admin date-picker seed the operator immediately overrides" },

@@ -5,6 +5,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { displayCoffeeVariety } from "@/lib/crop-config"
+import { istDateIso } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -139,7 +140,7 @@ export async function GET(request: NextRequest) {
     )
 
     const bagWeightKg = Number(tenantRows?.[0]?.bag_weight_kg) || DEFAULT_BAG_WEIGHT_KG
-    const todayUtc = parseIsoDate(new Date().toISOString().slice(0, 10)) as Date
+    const todayUtc = parseIsoDate(istDateIso(new Date())) as Date
     const asOfDate =
       seasonEndDate.getTime() < todayUtc.getTime()
         ? seasonEndDate
