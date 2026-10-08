@@ -506,11 +506,16 @@ export default function AttendanceScannerTab() {
           {isMultiEstate && estates.length > 0 && (
             <div className="space-y-1">
               <Label htmlFor="scanner-device-estate" className="text-xs">Which estate it serves</Label>
+              {/* `text-base sm:text-sm`, matching ui/input.tsx: iOS zooms the page when a control
+                  under 16px takes focus, which shifts the form while somebody is part-way through
+                  typing a serial number off the back of a terminal. The two other selects in this
+                  file (the per-device estate picker and the code-match picker) have the same 14px
+                  problem and are outside this change. */}
               <select
                 id="scanner-device-estate"
                 value={newEstate}
                 onChange={(e) => setNewEstate(e.target.value)}
-                className="h-10 w-full rounded-md border border-stone-200 bg-white px-2 text-sm dark:border-stone-700 dark:bg-stone-900"
+                className="h-10 w-full rounded-md border border-stone-200 bg-white px-2 text-base dark:border-stone-700 dark:bg-stone-900 sm:text-sm"
                 disabled={isAddingDevice}
               >
                 <option value="">Serves every estate</option>

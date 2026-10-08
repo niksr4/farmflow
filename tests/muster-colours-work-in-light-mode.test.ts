@@ -85,11 +85,45 @@ const musterSubtabFiles = (): string[] => {
 
 type Offence = { file: string; line: number; className: string; snippet: string }
 
-const findBareDarkTunedText = (file: string): Offence[] => {
+/**
+ * The quoted (or backticked) string containing `index`, or the whole line if none does.
+ *
+ * ⚠ WHY THIS EXISTS: the saturated-ground exemption below used to test the ENTIRE LINE, which
+ * made it an escape hatch for the exact bug this file guards. Raised by CodeRabbit on PR #68 and
+ * confirmed by running the old regex over both shapes:
+ *
+ *   <div className="bg-emerald-700" /><p className="text-emerald-400">x</p>   -> EXCUSED
+ *   <p className="dark:bg-emerald-700 text-emerald-300">…</p>                 -> EXCUSED
+ *
+ * The first is two unrelated elements sharing a line; the second is a ground that only exists in
+ * DARK mode excusing text that is unreadable in LIGHT. Four tamper tests missed both, because none
+ * of them happened to put a saturated background on the offending line.
+ */
+const quotedSegmentAt = (line: string, index: number): string => {
+  const spans: Array<{ start: number; end: number; text: string }> = []
+  const quoted = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/g
+  let match: RegExpExecArray | null
+  while ((match = quoted.exec(line)) !== null) {
+    spans.push({ start: match.index, end: match.index + match[0].length, text: match[2] })
+  }
+  return spans.find((s) => index >= s.start && index <= s.end)?.text ?? line
+}
+
+/**
+ * The scan itself, over SOURCE TEXT rather than a path.
+ *
+ * ⚠ Split out from the file-reading wrapper so the exemption rules can be driven directly. The
+ * test for CodeRabbit's two holes first re-implemented this loop inline over `quotedSegmentAt`,
+ * which made it a second copy of the logic: mutating the real scanner left that test green. This
+ * repo already has a suite about precisely that mistake
+ * (tests/render/worker-money-panel.test.tsx, on a validator that was reimplemented inline and
+ * sat orphaned for a month). One implementation, exercised by everything.
+ */
+export const findBareDarkTunedTextIn = (source: string, file = "<source>"): Offence[] => {
   const offences: Offence[] = []
   const hues = SEMANTIC_HUES.join("|")
 
-  repoFile(file)
+  source
     .split("\n")
     .forEach((rawLine, index) => {
       // Blank comment-only lines so prose ABOUT a colour never counts as a use of one.
@@ -116,8 +150,14 @@ const findBareDarkTunedText = (file: string): Offence[] => {
         const [, hue, shade] = match
         const className = `text-${hue}-${shade}`
 
-        // Light text on a saturated ground of its own hue is the correct way to build a pill.
-        if (new RegExp(`bg-${hue}-(?:500|600|700|800|900)(?![\\w/-])`).test(line)) continue
+        /*
+         * Light text on a saturated ground of its own hue is the correct way to build a pill —
+         * but the ground has to be on THE SAME ELEMENT and has to exist in light mode:
+         *   - same `className` string, not merely the same line (two elements can share a line);
+         *   - no `dark:` prefix, or a dark-only ground would excuse text on a white card.
+         */
+        const ownClassName = quotedSegmentAt(line, match.index ?? 0)
+        if (new RegExp(`(?<!dark:)\\bbg-${hue}-(?:500|600|700|800|900)(?![\\w/-])`).test(ownClassName)) continue
 
         offences.push({ file, line: index + 1, className, snippet: rawLine.trim().slice(0, 100) })
       }
@@ -125,6 +165,8 @@ const findBareDarkTunedText = (file: string): Offence[] => {
 
   return offences
 }
+
+const findBareDarkTunedText = (file: string): Offence[] => findBareDarkTunedTextIn(repoFile(file), file)
 
 describe("the muster subtabs are legible in the theme the app actually opens in", () => {
   it("derives the subtab files from the workspace, so a new tab is covered without editing this test", () => {
@@ -156,6 +198,31 @@ describe("the muster subtabs are legible in the theme the app actually opens in"
           `attendance-report-tab.tsx, e.g. "text-emerald-700 dark:text-emerald-400":\n\n${report}`
         : "",
     ).toEqual([])
+  })
+
+  it("does not let a neighbouring element, or a dark-only ground, excuse an unreadable figure", () => {
+    /**
+     * THE TWO HOLES CODERABBIT FOUND IN THIS GUARD (PR #68), pinned against a synthetic line each
+     * rather than against a component, so they stay covered whatever the muster looks like later.
+     *
+     * The old exemption tested the whole line for `bg-<hue>-(500..900)`, which meant the guard
+     * could be silenced by a `bg-emerald-700` element that merely shared a line, or by a
+     * `dark:bg-emerald-700` ground that does not exist in the theme the app opens in. Both were
+     * verified against the old regex before this was changed; four tamper tests had missed them.
+     */
+    // Drives the REAL scanner, not a copy of its rules — see the note on findBareDarkTunedTextIn.
+    const flagged = (line: string) => findBareDarkTunedTextIn(line).map((o) => o.className)
+
+    // Two elements sharing a line: the button's ground must not cover the figure's text.
+    expect(flagged('<div className="bg-emerald-700" /><p className="text-emerald-400">x</p>')).toEqual([
+      "text-emerald-400",
+    ])
+    // A ground that only exists in dark mode cannot excuse light-mode text.
+    expect(flagged('<p className="dark:bg-emerald-700 text-emerald-300">x</p>')).toEqual(["text-emerald-300"])
+    // And the legitimate shape is still exempt, or the guard would fail correct pills.
+    expect(flagged('<span className="bg-emerald-700 text-emerald-200">x</span>')).toEqual([])
+    // A tint is still a tint.
+    expect(flagged('<p className="text-amber-400/70">x</p>')).toEqual([])
   })
 
   it("does not count a tint, or light text on a saturated ground of the same hue", () => {

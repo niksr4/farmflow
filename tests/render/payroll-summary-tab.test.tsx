@@ -318,13 +318,47 @@ describe("the exported sheet reconciles with the screen", () => {
     expect(rows.every((row) => row.length === width)).toBe(true)
   })
 
-  it("exports all three shortfalls, so a held-back wage can be explained from the file", async () => {
-    // Retention was the one of the three that was computed and never exported, so a wage sheet
-    // could show a net of zero with no column accounting for the difference.
-    const rows = await csvFrom(true)
-    expect(rows[0]).toContain("Retention Not Held (₹)")
-    expect(rows[0]).toContain("Advance Not Recovered (₹)")
-    expect(rows[0]).toContain("Deduction Not Taken (₹)")
+  it("exports all three shortfalls WITH THEIR AMOUNTS, not just the column names", async () => {
+    /**
+     * Retention was the one of the three computed and never exported, so a wage sheet could show a
+     * net of zero with no column accounting for the difference.
+     *
+     * ⚠ This asserted only the three HEADERS until CodeRabbit pointed out (PR #68) that it would
+     * pass with every value at "0.00" — a column that exists and is always empty is the same
+     * invisible as no column, and naming it would have looked like coverage. So the fixture now
+     * carries a nonzero figure for each and the cells are read by header position.
+     */
+    mockPayroll({
+      usesRules: true,
+      workers: [{ ...MANOJ, retentionShortfall: 260, advanceShortfall: 140, deductionShortfall: 75 }],
+      totals: { ...TOTALS, retentionShortfall: 260, advanceShortfall: 140, deductionShortfall: 75 },
+    })
+    const { user } = await generate()
+
+    let captured = ""
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob | MediaSource) => {
+      void (blob as Blob).text().then((text) => { captured = text })
+      return "blob:payroll"
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {})
+    await user.click(screen.getByRole("button", { name: /^csv$/i }))
+    await waitFor(() => expect(captured).not.toBe(""))
+
+    const rows = captured.split("\n").map((line) => line.split(","))
+    const header = rows[0]
+    const at = (row: string[], name: string) => row[header.indexOf(name)]
+
+    // The worker's own line.
+    expect(at(rows[1], "Retention Not Held (₹)")).toBe("260.00")
+    expect(at(rows[1], "Advance Not Recovered (₹)")).toBe("140.00")
+    expect(at(rows[1], "Deduction Not Taken (₹)")).toBe("75.00")
+
+    // And the TOTAL line, which is a separate branch of the same builder.
+    const total = rows.at(-1) as string[]
+    expect(total[0]).toBe("TOTAL")
+    expect(at(total, "Retention Not Held (₹)")).toBe("260.00")
+    expect(at(total, "Advance Not Recovered (₹)")).toBe("140.00")
+    expect(at(total, "Deduction Not Taken (₹)")).toBe("75.00")
   })
 
   it("carries the rule columns, so the net can be arrived at from the figures beside it", async () => {
@@ -406,6 +440,17 @@ describe("what the screen says when the numbers cannot be trusted", () => {
 
     // Desktop: in the Retention column, beside what was actually held.
     expect(readTable(table).cell(0, "Retention")).toBe("-₹100(₹260 short)")
+
+    /**
+     * AND IN THE DESKTOP TOTAL. Raised by CodeRabbit on PR #68: the worker rows showed each
+     * shortfall and the phone's totals card showed the aggregate, but the desktop total showed
+     * only retention held — the two layouts disagreeing about one period, which is the one thing
+     * they must never do. Nothing covered the footer, so dropping it again went unnoticed by all
+     * fifteen tests in this file.
+     */
+    // Spaced, unlike the worker cell above: that one's "(… short)" is a tooltip trigger sitting
+    // flush against the figure, this one is plain text in the footer.
+    expect(readTable(table).footerCell("Retention")).toBe("-₹840 (₹260 short)")
 
     /**
      * Phone: scoped to SUNITHA'S OWN CARD, not to the phone region.

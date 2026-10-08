@@ -725,7 +725,16 @@ export default function PayrollSummaryTab() {
                           {showRuleColumns && (
                             <>
                               <TableCell className="text-right text-sm text-emerald-700 dark:text-emerald-400">+{formatCurrency(Number(totals.overtime) || 0)}</TableCell>
-                              <TableCell className="text-right text-sm text-rose-700 dark:text-rose-400">-{formatCurrency(Number(totals.retention) || 0)}</TableCell>
+                              {/* The aggregate shortfall belongs here too. The phone's totals card
+                                  itemises it and the worker rows above each show their own, so a
+                                  desktop total without it was the two layouts disagreeing about
+                                  the same period — the one thing they must never do. */}
+                              <TableCell className="text-right text-sm">
+                                <span className={Number(totals.retentionShortfall) > 0 ? "text-amber-700 dark:text-amber-500" : "text-rose-700 dark:text-rose-400"}>
+                                  -{formatCurrency(Number(totals.retention) || 0)}
+                                  {Number(totals.retentionShortfall) > 0 ? ` (${formatCurrency(Number(totals.retentionShortfall))} short)` : ""}
+                                </span>
+                              </TableCell>
                               <TableCell className="text-right text-sm text-rose-700 dark:text-rose-400">-{formatCurrency(Number(totals.advanceRecovered) || 0)}</TableCell>
                             </>
                           )}

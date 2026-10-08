@@ -330,9 +330,17 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
             <>
               {rule.retentionMode ? (
                 <>
+                  {/* `?? "—"` on the multiplier and percentage branches, which had no fallback
+                      while the currency ones did, so a null value would have read "null% of the
+                      day" on a worker's own card.
+                      NOT because such a row can exist: scripts/149 constrains
+                      (mode IS NULL) = (value IS NULL) and both CHECKs are confirmed present on
+                      prod, so the database forbids it and nothing seeds this table. It is here
+                      because the TypeScript type is `number | null` independently of that, and a
+                      fallback costs one operator. */}
                   <div className="mt-1 text-sm font-semibold">
                     {rule.retentionMode === "percent_of_day"
-                      ? `${rule.retentionValue}% of the day`
+                      ? `${rule.retentionValue ?? "—"}% of the day`
                       : `${formatCurrency(rule.retentionValue ?? 0)} per day`}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -349,8 +357,8 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
                   {rule.overtimeMode === "explicit_hourly"
                     ? `${formatCurrency(rule.overtimeValue ?? 0)} an hour`
                     : rule.overtimeMode === "multiplier_of_day"
-                      ? `${rule.overtimeValue}× the whole day`
-                      : `${rule.overtimeValue}× the hourly rate`}
+                      ? `${rule.overtimeValue ?? "—"}× the whole day`
+                      : `${rule.overtimeValue ?? "—"}× the hourly rate`}
                 </p>
               ) : null}
               {/* Which rule this is, said plainly. "20% since 1 June" on somebody's card reads as
