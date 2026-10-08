@@ -1,0 +1,118 @@
+name: Request CodeRabbit review
+
+# WHY THIS WORKFLOW EXISTS.
+#
+# CodeRabbit does not review this repository automatically. Its own notice on every PR says so:
+# "This repository does not receive automatic reviews because it has fewer than 10 stars." The repo
+# is public with 0 stars, which puts it under the free OSS tier where that gate applies. There is no
+# `auto_review` key in .coderabbit.yaml, so this is policy on their side rather than configuration
+# on ours.
+#
+# The consequence, found on 2026-10-08: of five open pull requests, THREE had zero reviews and zero
+# inline comments -- #61, #64 and #65. The standing rule on this project is that every change gets a
+# CodeRabbit review before merge, and that rule had quietly become "every change someone remembered
+# to type `@coderabbitai review` on". #63 and #55 were reviewed; the rest were not, and nothing
+# anywhere said so. A process that depends on remembering is the same silent-failure shape as the
+# product bugs this repo keeps finding.
+#
+# So the trigger is automated here instead.
+
+on:
+  pull_request:
+    # ⚠ `synchronize` IS DELIBERATELY ABSENT, and that was not the first instinct.
+    #
+    # CodeRabbit is incremental, so commits pushed after the first trigger are never reviewed
+    # unless something asks again, and triggering on every push looks like the obvious fix. It is
+    # the wrong fix here, because reviews are RATIONED.
+    #
+    # Measured on 2026-10-08: triggering four PRs in sequence got one review and three refusals.
+    # #66 was accepted; #61, #64 and #65 each came back "Review rate limited -- your included
+    # review limit is currently reached under our Fair Usage Limits Policy. Your next included
+    # review will be available in 53 minutes." So the included quota is roughly one review an hour
+    # on this plan.
+    #
+    # Against a quota that small, firing on every push is not thoroughness, it is a denial of
+    # service against the author's own other PRs: a branch pushed six times would eat the next six
+    # hours of quota and the PR opened in between would silently get nothing. Opening a PR is the
+    # one moment worth spending a guaranteed slot on.
+    #
+    # Re-reviewing after a push stays a manual `@coderabbitai review`, which is the honest trade
+    # while the quota is this tight. Raising it is a billing decision, not a workflow one -- the
+    # refusal says "this review may still proceed through usage-based billing if eligible", and
+    # .coderabbit.yaml already reports Plan: Advanced, so enabling usage-based billing is likely
+    # all that stands between this and reviewing every push.
+    types: [opened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# One review request at a time per PR. Without this, three quick pushes queue three jobs that each
+# abort the previous review, and the ordering of who wins is a race.
+concurrency:
+  group: coderabbit-trigger-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  request-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Drafts are work in progress. Reviewing one burns budget on code the author has not finished,
+    # and `ready_for_review` above catches it the moment it is actually ready.
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Ask CodeRabbit for a full review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            -f body='@coderabbitai full review' \
+            --jq '"requested at \(.created_at) (comment \(.id))"'
+
+      # ⚠ TWO DIFFERENT FAILURES LIVE HERE AND THEY NEED OPPOSITE TREATMENT.
+      #
+      # 1. CodeRabbit IGNORED US. Plenty of bots ignore other bots to avoid loops, so it may well
+      #    ignore github-actions[bot]. Then the step above still succeeds, the comment still
+      #    appears, and no review ever happens -- a green job that achieves nothing, which is worse
+      #    than no job because it looks like coverage. That must fail loudly.
+      #
+      # 2. CodeRabbit WAS RATE LIMITED. Expected, frequent, self-healing within the hour, and
+      #    nothing a workflow can do about it. Failing the job would paint a red X on a PR for a
+      #    reason the author cannot act on, and a check that cries wolf hourly gets ignored, taking
+      #    case 1 down with it.
+      #
+      # So: a refusal that NAMES the rate limit is reported as a notice and passes. Silence fails.
+      - name: Confirm CodeRabbit actually picked it up
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            latest=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+              --jq '[.[] | select(.user.login=="coderabbitai[bot]")] | last | .body // ""')
+
+            if printf '%s' "${latest}" | grep -qi "rate limited\|Review limit reached"; then
+              when=$(printf '%s' "${latest}" | grep -o "available in [0-9]* minutes" | head -1 || true)
+              echo "::notice::CodeRabbit is rate limited on PR #${PR} (${when:-resets shortly})."
+              echo "The request was seen and refused for quota, not ignored. Re-run this workflow,"
+              echo "or comment '@coderabbitai review' once the included quota resets."
+              exit 0
+            fi
+
+            if printf '%s' "${latest}" | grep -q "Action performed\|Actionable comments posted\|Full review triggered"; then
+              echo "CodeRabbit accepted the review request."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "::error::CodeRabbit never responded to the review request on PR #${PR}."
+          echo "The comment was posted and drew no reply of any kind -- not even a rate-limit"
+          echo "refusal -- which most likely means CodeRabbit is ignoring github-actions[bot]."
+          echo "Replace secrets.GITHUB_TOKEN above with a PAT from a human account, or trigger"
+          echo "reviews by hand until that is sorted."
+          exit 1
