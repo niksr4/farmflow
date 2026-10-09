@@ -272,6 +272,78 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
+/**
+ * Put a worker back on the roster. The undo for DELETE, which had none.
+ *
+ * GATED ON `canDeleteModule`, THE SAME CHECK AS REMOVAL — deliberately, and it is the reason this
+ * is not on PUT. If restoring were merely a write permission, a role that can take somebody off
+ * the roster could create a state only a higher role can repair. Whoever can break it can fix it.
+ *
+ * Only ever sets `active = TRUE`. Deactivation stays with DELETE, so there is exactly one way to
+ * remove a worker and it is the one that writes an audit row.
+ */
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    const sessionUser = await requireModuleAccess("accounts")
+    if (!canDeleteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+
+    const existing = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT id, full_name, active FROM attendance_workers
+        WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
+    if (!existing.length) {
+      return NextResponse.json({ success: false, error: "Worker not found" }, { status: 404 })
+    }
+    if ((existing[0] as any).active === true) {
+      // Not an error: two taps on a slow connection should not read as a failure.
+      return NextResponse.json({ success: true, alreadyActive: true })
+    }
+
+    await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        UPDATE attendance_workers
+        SET active = TRUE
+        WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
+      `,
+    )
+
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "update",
+      entityType: "attendance_workers",
+      entityId: id,
+      before: existing[0] as any,
+      after: { id, full_name: (existing[0] as any).full_name, active: true, restored: true } as any,
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    logServerError("Failed to restore worker", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: isMissingAttendanceSchemaError(error)
+          ? ATTENDANCE_SCHEMA_HELP
+          : sanitizeRouteError(error, "Failed to restore worker"),
+      },
+      { status: 500 },
+    )
+  }
+}
+
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params

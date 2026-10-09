@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
-import { todayIso } from "@/lib/date-utils"
-import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
+import { todayIso, formatDateOnly } from "@/lib/date-utils"
+import { Plus, Pencil, UserX, UserCheck, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
+import { formatCurrency } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -41,6 +42,24 @@ function MobileField({ label, value, mono = false }: { label: string; value: str
       </span>
     </div>
   )
+}
+
+/**
+ * A worker taken off the roster. Carries the history counts on purpose: the number is the argument
+ * for restoring rather than re-typing the name, because the records belong to the row, not the name.
+ */
+type InactiveWorker = {
+  id: string
+  name: string
+  workerType: string | null
+  dailyRate: number | null
+  monthlyWage: number | null
+  estate: string | null
+  deviceUserCode: string | null
+  kind: "individual" | "gang"
+  headcount: number | null
+  attendanceCount: number
+  lastSeen: string | null
 }
 
 type Worker = {
@@ -211,6 +230,34 @@ export default function WorkerProfilesTab() {
     }
   }, [])
 
+  /**
+   * The workers taken off the roster, and the way back.
+   *
+   * ⚠ Deactivating was a ONE-WAY DOOR until 2026-10-09. The soft delete keeps every attendance and
+   * pay record, but nothing in the product ever selected an inactive row again — so a worker
+   * removed by a mis-tap was invisible to every role, including the estate's own admin, and the
+   * only recovery was an UPDATE against production. HoneyFarm hit it: a tap at 10:38, between
+   * marking attendance at 08:11 and marking more at 10:39, and Chitra was gone from the next
+   * morning's muster with 33 records still attached to her.
+   *
+   * Loaded separately from the roster because the roster comes from /api/attendance, which serves
+   * the daily roll and must never be able to return an inactive worker.
+   */
+  const [inactiveWorkers, setInactiveWorkers] = useState<InactiveWorker[]>([])
+  const [showInactive, setShowInactive] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+
+  const fetchInactive = useCallback(async () => {
+    try {
+      const res = await fetch("/api/attendance/workers?state=inactive", { cache: "no-store" })
+      const data = await res.json()
+      if (data?.success) setInactiveWorkers(data.workers || [])
+    } catch {
+      // Silent: this is a recovery affordance, not the roster. A failure here must not make the
+      // Workers tab look broken.
+    }
+  }, [])
+
   const fetchWorkers = useCallback(async () => {
     try {
       // no-store because this reloads immediately after a save; a cached response would show the
@@ -247,6 +294,25 @@ export default function WorkerProfilesTab() {
     }
   }, [])
 
+  /** Defined after fetchWorkers because it refreshes both lists. */
+  const handleRestore = useCallback(
+    async (id: string, name: string) => {
+      setRestoringId(id)
+      try {
+        const res = await fetch(`/api/attendance/workers/${id}`, { method: "PATCH" })
+        const data = await res.json()
+        if (!res.ok || !data.success) throw new Error(data.error || "Could not restore")
+        toast.success(`${name} is back on the roster`)
+        await Promise.all([fetchWorkers(), fetchInactive()])
+      } catch (err: any) {
+        toast.error(err?.message || "Could not restore this worker")
+      } finally {
+        setRestoringId(null)
+      }
+    },
+    [fetchWorkers, fetchInactive],
+  )
+
   /**
    * The estate-wide rule in force today. `worker_id IS NULL` rows only — a per-worker override is
    * that worker's business and is loaded by their own panel.
@@ -275,7 +341,10 @@ export default function WorkerProfilesTab() {
     fetchWorkers()
     fetchLocations()
     loadEstateRule()
-  }, [fetchWorkers, fetchLocations, loadEstateRule])
+    // Loaded on mount rather than on opening the section, so the heading can carry the count and
+    // somebody who does not know a worker is missing still sees that one is.
+    fetchInactive()
+  }, [fetchWorkers, fetchLocations, loadEstateRule, fetchInactive])
 
   const handleAddUnguarded = async () => {
     if (!form.name.trim()) return
@@ -1427,6 +1496,94 @@ export default function WorkerProfilesTab() {
           )}
         </CardContent>
       </Card>
+
+      {/*
+        NO LONGER ON THE ROSTER — the undo that did not exist.
+        Only rendered when there is something in it, so an estate that has never removed anybody
+        never sees it. The count sits in the heading because the person who needs this usually does
+        not know a worker is missing until the muster looks wrong.
+      */}
+      {inactiveWorkers.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            {/* An explicit aria-label because the title AND the description sit inside the
+                button, so its computed name would otherwise be the whole paragraph —
+                unusable to a screen reader, and ambiguous to any query looking for
+                "Restore", which the description contains. */}
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 text-left"
+              onClick={() => setShowInactive((v) => !v)}
+              aria-expanded={showInactive}
+              aria-label={`${showInactive ? "Hide" : "Show"} the ${inactiveWorkers.length} worker${inactiveWorkers.length === 1 ? "" : "s"} no longer on the roster`}
+            >
+              <div>
+                <CardTitle className="text-base">
+                  No longer on the roster ({inactiveWorkers.length})
+                </CardTitle>
+                <CardDescription>
+                  Taken off the muster, with every attendance and pay record kept. Restore anyone to
+                  put them back.
+                </CardDescription>
+              </div>
+              {showInactive ? (
+                <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+          </CardHeader>
+          {showInactive && (
+            <CardContent className="border-t border-border/50 pt-4">
+              <div className="divide-y divide-border/50">
+                {inactiveWorkers.map((w) => (
+                  <div key={w.id} className="flex flex-wrap items-center gap-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{w.name}</span>
+                        {w.workerType && (
+                          <Badge variant="outline" className={cn("text-xs", WORKER_TYPE_COLORS[w.workerType as WorkerType] ?? WORKER_TYPE_FALLBACK)}>
+                            {workerTypeLabel(w.workerType)}
+                          </Badge>
+                        )}
+                        {w.kind === "gang" && (
+                          <span className="text-xs text-muted-foreground">crew of {w.headcount ?? "?"}</span>
+                        )}
+                      </div>
+                      {/* The reason to restore rather than retype: this history belongs to this
+                          row. Adding the name again starts an empty one. */}
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {w.attendanceCount > 0
+                          ? `${w.attendanceCount} day${w.attendanceCount === 1 ? "" : "s"} recorded`
+                          : "no attendance recorded"}
+                        {w.lastSeen ? `, last on ${formatDateOnly(w.lastSeen)}` : ""}
+                        {w.estate ? ` · ${w.estate}` : ""}
+                        {w.dailyRate != null ? ` · ${formatCurrency(w.dailyRate)}/day` : ""}
+                      </p>
+                    </div>
+                    {canWrite && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={restoringId === w.id}
+                        onClick={() => handleRestore(w.id, w.name)}
+                      >
+                        {restoringId === w.id ? (
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        ) : (
+                          <UserCheck className="mr-1.5 h-4 w-4" />
+                        )}
+                        Restore
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   )
 }
