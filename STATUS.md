@@ -3,32 +3,76 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-09-21.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-10-09.** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
 
 ---
 
-## Right now (2026-09-21)
+## Right now (2026-10-09)
 
-**Production is `main@7b5ea920` and converged — zero open PRs, nothing stranded.** The seven-PR
-pileup described here on 09-18 was merged in conflict order on 09-19; tests went 2,349 → 2,519.
+**Production is `main@10dd9bb`** — #68, the muster UI pass. Verified live: the domain serves that
+sha and `/`, `/login`, `/signup` all return 200. Rollback target is `farmflowv1-nohxvzjva`
+(`0cdc78d`, #62).
 
 ⚠ **On this project, merging IS deploying.** Verified rather than assumed: every production
 deployment in the Vercel API corresponds to a `main` commit. There is no staging gate and no manual
 promotion — a merge is live in about three minutes. So "merge now, deploy later" is not a thing
 here, and the code word applies to the *merge*.
 
+⚠ **PROD IS AT MIGRATION 152 AND `main` HAS NO 152 FILE.** Applied 2026-10-09 from PR #55's branch,
+because `picking_records` was still 0 rows everywhere and that is the only state in which the
+day-cap is a schema change rather than a wage reconciliation. So the ledger reads
+…151, **152**… while `ls scripts/` on `main` jumps 151 → 153. Both are correct. Consequences:
+
+- The runner has **no single-file option** — it applies everything pending in `scripts/`. Running
+  `pnpm migrate:prod` from `main` right now would apply **153**, not 152. Check which branch you
+  are on before running it against prod.
+- 152 does `CREATE OR REPLACE` on `labour_assignments_day_cap()`, so it rewrote the **live muster
+  write path**. Safe because picking is empty (the shared budget sums to the same figure) and
+  because 0 worker-days were over the 2-job limit. The downward-correction exemption was verified
+  present afterwards, which is what keeps the 16 over-a-day worker-days fixable.
+
+Open PRs: **#69** (muted-label contrast, awaiting review), **#66** (processing route — must not
+merge until the three-copy `dry_cherry_percent` bug is fixed), **#55** (picking day budget, now
+unblocked since 152 is on prod), **#65**, **#64**, **#63**, **#61** (conflicting), and
+`ci/coderabbit-trigger` which has no PR yet.
+
 What is actually pressing, in order:
 
 | | What | Why now |
 |---|---|---|
-| 1 | **Laxmi has stopped recording** | Logging in daily, last write 15 Sep. See the tenants section — this is a phone call, not a bug |
-| 2 | **Picking day-cap trigger** | `picking_records` is still 0 rows, so this is a schema change. After the first pick it becomes a data reconciliation. Harvest is ~6 weeks out |
-| 3 | **Vercel Hobby forbids commercial use** | Hobby is "non-commercial, personal use only" and we are a live multi-tenant SaaS. Enforcement is an account pause. Must be resolved before Razorpay goes live |
-| 4 | **Repo is public** | Not required by Vercel — private costs $0 there. It costs $4/mo at GitHub, because the `main is production` ruleset is only free on public repos. See the note under "Known and deliberately not fixed" |
+| 1 | **Manoj's picking answers** | Gates picking phases 3–5. Phase 2 (crop on locations) does not need him |
+| 2 | **`worker_pay_rules` and `worker_ledger` are 0 rows on prod** | Every retention/overtime/advance screen is built, shipped and **never used by anyone**. Whoever tries first is the first real exercise of that code |
+| 3 | **Laxmi stopped recording** | Still a phone call, not a bug. Also owes us the 15 May opening-stock cost (Urea 1,650 kg, DAP 150 kg at ₹0) |
+| 4 | **Vercel Hobby forbids commercial use** | Hobby is "non-commercial, personal use only" and we are a live multi-tenant SaaS. Enforcement is an account pause. Must be resolved before Razorpay goes live |
+| 5 | **Migration 74 still absent from prod** | Blocks all billing; without it the access gate resolves every tenant as legacy/always-active |
+| 6 | **Repo is public** | Not required by Vercel — private costs $0 there. It costs $4/mo at GitHub, because the `main is production` ruleset is only free on public repos. See the note under "Known and deliberately not fixed" |
 
 Rollback for anything: `vercel alias set <previous-deployment-id> www.thefarmflow.in`.
+
+### Competitors, as of 2026-10-09
+
+From the study in `~/Downloads/Farmflow competitors.pdf`. Full detail is in the
+`project_competitors` memory; the parts that change decisions:
+
+- **Oak is the real threat, not NilamFlow.** Already charging **₹36k/year + GST**, with a hardware
+  moat (BioMark biometric device + Ant Scale tying worker identity to harvest weight), offline
+  operation, coffee traceability, market intelligence, and payroll that **includes PF**, loans,
+  commissions and hybrid fixed/time/quantity activities.
+- **NilamFlow** is free → ₹9,990 → ₹24,990 → ₹59,990 annual, with Android/iOS **offline** field
+  entry and a **buyer marketplace** (a network effect FarmFlow has no answer to, and deliberately
+  should not copy yet).
+- **Our Operations tier (₹3,499/mo ≈ ₹41,988/yr) already sits in Oak's zone**, which is validation.
+  The explicit advice is **not** to cut price to meet NilamFlow.
+- **Biggest product gap: offline/field.** Both competitors advertise it; we have none.
+- **PF stops being a loose end and becomes a competitive gap** — Oak markets it, and ours is
+  settable-but-dead (column on prod, API accepts it, payroll maps `pfPercent` and never uses it, no
+  form field).
+- The moat is meant to be **block-level costing + owner decision intelligence**, which makes the
+  muster/payroll/costing work strategic rather than housekeeping. Caveat worth holding onto:
+  `worker_pay_rules` and `worker_ledger` are **0 rows on prod**, so the depth we would be selling
+  has never been exercised by a real estate.
 
 ⚠ **Every scanner PR after the first needs `git merge origin/main`.** `check-branch-base.mjs` sets
 `SCANNER_ALLOWANCE = 0`, so the moment `main` moves, the remaining `scanner/**` branches fail their
