@@ -255,11 +255,28 @@ describe("the muster subtabs are legible in the theme the app actually opens in"
     expect(SEMANTIC_HUES as readonly string[]).not.toContain(EXCLUDED_HUE)
 
     const css = repoFile("app/globals.css")
-    expect(css, "the light-mode repair is gone; 383 labels fall back to 2.46:1").toMatch(
-      /^\.text-stone-400\s+\{\s*color:\s*hsl\(var\(--muted-foreground\)\s*\/\s*0\.8\)/m,
-    )
-    expect(css, "the dark override must survive, or dark mode inherits the light value").toMatch(
-      /^\.dark \.text-stone-400\s+\{/m,
+
+    /**
+     * EVERY RULE, PINNED TO ITS VALUE. Raised by CodeRabbit on PR #69: this previously matched
+     * `^\.dark \.text-stone-400\s+\{` and nothing after it, so the dark value could be edited
+     * freely while a test claiming to protect "dark mode as it was" stayed green — and it checked
+     * only the unprefixed selector, so deleting `/80` or `/90` silently returned those labels to
+     * the 2.46:1 default. Tailwind emits each opacity variant as its own class, so each needs its
+     * own assertion; three rules sharing a value is three ways to lose it.
+     */
+    const rule = (selector: string, alpha: string) =>
+      new RegExp(
+        `^${selector.replace(/[.\\/]/g, (c) => `\\${c}`)}\\s+\\{\\s*color:\\s*hsl\\(var\\(--muted-foreground\\)\\s*/\\s*${alpha.replace(".", "\\.")}\\)`,
+        "m",
+      )
+
+    for (const selector of [".text-stone-400", ".text-stone-400\\/80", ".text-stone-400\\/90"]) {
+      expect(css, `${selector} lost its light-mode repair — those labels fall back to 2.46:1`).toMatch(
+        rule(selector, "0.8"),
+      )
+    }
+    expect(css, "the dark override must survive AT 0.60, or dark mode shifts too").toMatch(
+      rule(".dark .text-stone-400", "0.60"),
     )
     // stone-300 must NOT be swept in: its uses are light text on dark marketing pages.
     expect(css).not.toMatch(/^\.text-stone-300\s+\{/m)
