@@ -134,7 +134,7 @@ export default function CuringTab() {
   const calculatedLoss = useMemo(() => {
     const intake = Number(intakeKg)
     const output = Number(outputKg)
-    if (Number.isFinite(intake) && Number.isFinite(output) && intake > 0) {
+    if (outputKg.trim() !== "" && Number.isFinite(intake) && Number.isFinite(output) && intake > 0) {
       return (intake - output).toFixed(2)
     }
     return ""

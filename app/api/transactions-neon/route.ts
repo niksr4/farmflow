@@ -36,7 +36,9 @@ const extractUsageLocationId = (notes: string | null | undefined) => {
   const raw = String(notes || "")
   const match = raw.match(USAGE_LOCATION_TAG_REGEX)
   const value = match?.[1]?.trim()
-  return value || null
+  // The tag lives in a user-editable note and is later bound to a uuid column; a non-uuid value
+  // would 500 every list request for the tenant.
+  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null
 }
 
 const stripUsageLocationTag = (notes: string | null | undefined) => {

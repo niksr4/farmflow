@@ -199,7 +199,10 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ success: false, error: "Invalid request body" }, { status: 400 })
+    }
     const bagWeightKg = Number(body.bagWeightKg)
     const estateNameInput = typeof body.estateName === "string" ? body.estateName.trim() : null
     const estateProfileInput =
@@ -360,6 +363,9 @@ export async function PUT(request: Request) {
       settings: { bagWeightKg: updated, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags, laborWages },
     })
   } catch (error: any) {
+    if (error?.message === "Unauthorized") {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
     await logRouteMutationFailure({ source: "tenant-settings", endpoint: "/api/tenant-settings", action: "update", error })
     return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update tenant settings") }, { status: 500 })
   }

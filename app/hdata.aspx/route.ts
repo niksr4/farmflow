@@ -155,6 +155,8 @@ export async function POST(request: Request) {
     // no wish to store it.
     if (requestCode === HDATA_REQUEST_CODES.realtimeEnroll) {
       const body = Buffer.from(await request.arrayBuffer())
+      // The Content-Length precheck is bypassable (chunked / missing header), so cap what was actually read.
+      if (body.length > MAX_HDATA_BODY_BYTES) return new Response("", { status: 413 })
       const enrollment = parseHdataEnrollment(parseHdataEnvelope(body).json)
       if (enrollment) {
         await recordEnrollment(
