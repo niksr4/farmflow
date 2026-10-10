@@ -72,6 +72,25 @@ export const isActiveWorkerNameConflict = (error: unknown) => {
   return e.code === "23505" && String(e.message || "").includes(ACTIVE_WORKER_NAME_INDEX)
 }
 
+/**
+ * WHICH of attendance_workers' two unique indexes was hit. Extracted as a pure function because
+ * the ORDER of the checks is the bug, and order inside a route's catch block cannot be asserted
+ * without mocking a database.
+ *
+ * The PUT handler used to test the device-code case first by testing nothing at all -- it read any
+ * 23505 as a device clash. So renaming a worker onto a name already on the roster answered "That
+ * device code is already assigned to another employee", naming a field the user had not touched.
+ * Both indexes raise the same SQLSTATE, so the only thing separating them is which is asked about
+ * first, and the narrower question has to come first.
+ */
+export type WorkerUniqueViolation = "active-name" | "device-code" | null
+
+export const classifyWorkerUniqueViolation = (error: unknown): WorkerUniqueViolation => {
+  if (isActiveWorkerNameConflict(error)) return "active-name"
+  const code = String((error as { code?: string } | null)?.code || "")
+  return code === "23505" ? "device-code" : null
+}
+
 export const isMissingAttendanceSchemaError = (error: unknown) => {
   const message = String((error as Error)?.message || error || "")
   return message.includes('relation "attendance_workers"') || message.includes('relation "attendance_records"')

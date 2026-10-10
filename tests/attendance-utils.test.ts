@@ -7,6 +7,7 @@ import {
   normalizeAttendanceSchemaError,
   normalizeAttendanceWorkerName,
   isActiveWorkerNameConflict,
+  classifyWorkerUniqueViolation,
   ACTIVE_WORKER_NAME_INDEX,
 } from "../lib/attendance"
 
@@ -73,5 +74,45 @@ describe("losing the race for an active worker name", () => {
     expect(isActiveWorkerNameConflict(null)).toBe(false)
     expect(isActiveWorkerNameConflict(undefined)).toBe(false)
     expect(isActiveWorkerNameConflict("23505")).toBe(false)
+  })
+})
+
+/**
+ * Ordering matters in the PUT handler, which catches both of this table's unique indexes.
+ * Before this, every 23505 was reported as a device-code clash -- so renaming a worker onto a name
+ * already on the roster blamed a field the user never touched. It sits on the recovery path now:
+ * a refused restore tells the estate to rename somebody, so renaming has to say what went wrong.
+ */
+describe("telling the two unique indexes apart", () => {
+  const nameClash = {
+    code: "23505",
+    constraint: ACTIVE_WORKER_NAME_INDEX,
+    message: `duplicate key value violates unique constraint "${ACTIVE_WORKER_NAME_INDEX}"`,
+  }
+  const deviceClash = {
+    code: "23505",
+    constraint: "idx_attendance_workers_tenant_device_code",
+    message: 'duplicate key value violates unique constraint "idx_attendance_workers_tenant_device_code"',
+  }
+
+  it("calls a name clash a name clash — the case that used to blame the device code", () => {
+    // Both indexes raise 23505, so the ONLY thing separating them is that the narrower question
+    // is asked first. Asserting the classifier is how that ordering gets pinned at all: order
+    // inside a route's catch block cannot be tested without mocking a database.
+    expect(classifyWorkerUniqueViolation(nameClash)).toBe("active-name")
+  })
+
+  it("still reaches the device-code answer", () => {
+    expect(classifyWorkerUniqueViolation(deviceClash)).toBe("device-code")
+  })
+
+  it("recognises a name clash even when the driver omits `constraint`", () => {
+    expect(classifyWorkerUniqueViolation({ code: "23505", message: nameClash.message })).toBe("active-name")
+  })
+
+  it("leaves anything that is not a unique violation alone, so real faults still throw", () => {
+    expect(classifyWorkerUniqueViolation({ code: "23503" })).toBeNull()
+    expect(classifyWorkerUniqueViolation(new Error("connection terminated"))).toBeNull()
+    expect(classifyWorkerUniqueViolation(null)).toBeNull()
   })
 })

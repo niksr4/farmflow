@@ -10,14 +10,13 @@ import {
   normalizeAttendanceWorkerName,
   isMissingAttendanceSchemaError,
   isActiveWorkerNameConflict,
+  classifyWorkerUniqueViolation,
   ATTENDANCE_SCHEMA_HELP,
 } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
 import { isWorkerType } from "@/lib/worker-types"
-
-const isUniqueViolation = (error: unknown) => String((error as any)?.code || "") === "23505"
 
 // The list lives in lib/worker-types.ts. It used to be declared here AND retyped in
 // worker-profiles-tab.tsx, which is the contract-in-two-places shape that has already cost this
@@ -232,7 +231,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         `,
       )
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      /**
+       * ⚠ THE NAME CASE MUST BE TESTED FIRST, and it was not being tested at all.
+       *
+       * attendance_workers has TWO unique indexes -- device code, and (tenant, lower(name)) where
+       * active. This catch read any 23505 as the device one, so renaming a worker to a name that
+       * is already on the roster answered "That device code is already assigned to another
+       * employee": a confident wrong answer pointing at a field the user did not touch.
+       *
+       * That is now on the recovery path. When a restore is refused because the name is taken, the
+       * message tells the estate to rename one of them -- so renaming is exactly what they do
+       * next, and it has to say what actually went wrong.
+       */
+      const conflict = classifyWorkerUniqueViolation(error)
+      if (conflict === "active-name") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Somebody called ${name ?? "that"} is already on the roster. Two active workers cannot share a name.`,
+          },
+          { status: 409 },
+        )
+      }
+      if (conflict === "device-code") {
         return NextResponse.json(
           { success: false, error: "That device code is already assigned to another employee" },
           { status: 409 },
