@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { isLocationAccessError } from "@/lib/server/location-access"
+import { resolveActiveEstate } from "@/lib/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server/location-utils"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -9,6 +12,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
 import {
   ATTENDANCE_MAX_WORKER_NAME_LENGTH,
+  isActiveWorkerNameConflict,
   ATTENDANCE_SCHEMA_HELP,
   isMissingAttendanceSchemaError,
   normalizeAttendanceWorkerName,
@@ -24,6 +28,128 @@ const readGender = (value: unknown): string | null | undefined => {
   if (value === null || value === "") return null
   const g = String(value).toLowerCase()
   return (VALID_GENDERS as readonly string[]).includes(g) ? g : undefined
+}
+
+/**
+ * The workers who have been taken off the roster — the only way to see them, and the only way back.
+ *
+ * ⚠ WHY THIS EXISTS. Deactivating a worker was a ONE-WAY DOOR. `DELETE` on this collection is a
+ * soft delete (`active = FALSE`, so 33 attendance records and a wage history survive), but nothing
+ * in the product ever selected an inactive row again: the muster roster filters `active = TRUE`,
+ * the Workers tab reads that same payload, and there was no toggle anywhere. So a deactivated
+ * worker became invisible to every role including the estate's own admin, and the only route back
+ * was a hand-written UPDATE against production.
+ *
+ * Found on 2026-10-09 in the worst possible way: HoneyFarm's writer tapped the 28px remove icon on
+ * Chitra mid-session — attendance at 08:11, removal at 10:38, more attendance at 10:39 — and the
+ * estate noticed she had vanished from the next morning's muster with no way to put her back.
+ *
+ * DELIBERATELY A SEPARATE ENDPOINT rather than an `includeInactive` flag on `/api/attendance`.
+ * That route serves the daily roll, and an inactive worker must never be able to appear on it; a
+ * flag on a shared hot path is one wrong caller away from exactly that. Here the muster's query is
+ * untouched by construction.
+ */
+export async function GET(request: Request) {
+  try {
+    const sessionUser = await requireModuleAccess("accounts")
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const url = new URL(request.url)
+    // Opt-in, because the default for a workers collection should stay the live roster even though
+    // nothing calls it that way yet.
+    if (url.searchParams.get("state") !== "inactive") {
+      return NextResponse.json(
+        { success: false, error: "Pass ?state=inactive to list workers taken off the roster" },
+        { status: 400 },
+      )
+    }
+
+    /**
+     * SCOPED THE SAME WAY THE ROSTER IT RESTORES INTO IS SCOPED.
+     *
+     * Workers carry an `estate` (text), not a location id, so this is the estate-picker clause
+     * from /api/attendance and NOT getAccessibleLocationIds -- that helper returns block ids,
+     * which no worker column holds. `estate IS NULL` still shows everywhere, the always-NULL-shows
+     * convention in lib/estate-filter.ts.
+     *
+     * Unscoped, this list offers a HoneyFarm admin viewing Sidapur a worker belonging to the other
+     * estate; restoring them puts somebody back onto a roster the viewer is not looking at, so the
+     * row appears to do nothing. That is the same defect the comment in /api/attendance warns
+     * about -- a scoped roster beside an unscoped companion query, describing different sets of
+     * people -- and this endpoint exists precisely to be used when somebody is confused about who
+     * is on the roster.
+     */
+    const activeEstate = resolveActiveEstate(
+      url.searchParams,
+      (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null,
+    )
+    const estateClause = activeEstate
+      ? accountsSql` AND (w.estate IS NULL OR w.estate = ${activeEstate})`
+      : accountsSql``
+
+    const rows = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT w.id, w.full_name, w.worker_type, w.daily_rate, w.monthly_wage, w.estate,
+               w.device_user_code, w.kind, w.headcount,
+               -- What the estate loses track of if they re-add them by name instead of restoring:
+               -- the history is attached to THIS row, not to the name.
+               (SELECT COUNT(*)::int FROM attendance_records r
+                 WHERE r.tenant_id = w.tenant_id AND r.worker_id = w.id) AS attendance_count,
+               (SELECT MAX(r.attendance_date)::text FROM attendance_records r
+                 WHERE r.tenant_id = w.tenant_id AND r.worker_id = w.id) AS last_seen,
+               -- Somebody by this name is ALREADY back on the roster, so restoring this row would
+               -- put two of them on the muster. Returned with the list rather than discovered on
+               -- click: Medappa have 29 inactive rows and seven such collisions, and a Restore
+               -- button that only fails when pressed is a worse answer than one that says why.
+               (SELECT a.full_name FROM attendance_workers a
+                 WHERE a.tenant_id = w.tenant_id AND a.active = TRUE
+                   AND LOWER(a.full_name) = LOWER(w.full_name)
+                 LIMIT 1) AS active_namesake
+        FROM attendance_workers w
+        WHERE w.tenant_id = ${tenantContext.tenantId}
+          AND w.active = FALSE
+          ${estateClause}
+        ORDER BY LOWER(w.full_name)
+      `,
+    )
+
+    return NextResponse.json({
+      success: true,
+      workers: rows.map((w: any) => ({
+        id: w.id,
+        name: w.full_name,
+        workerType: w.worker_type ?? null,
+        dailyRate: w.daily_rate != null ? Number(w.daily_rate) : null,
+        monthlyWage: w.monthly_wage != null ? Number(w.monthly_wage) : null,
+        estate: w.estate ?? null,
+        deviceUserCode: w.device_user_code ?? null,
+        kind: w.kind === "gang" ? "gang" : "individual",
+        headcount: w.headcount != null ? Number(w.headcount) : null,
+        attendanceCount: Number(w.attendance_count) || 0,
+        lastSeen: w.last_seen ?? null,
+        activeNamesake: w.active_namesake ?? null,
+      })),
+    })
+  } catch (error) {
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    // No isLocationAccessError arm here, deliberately. This handler calls neither
+    // validateLocationForTenant nor validateEstateForTenant, so that error cannot reach this
+    // block -- and a catch for an impossible error is a claim that the route is location-gated
+    // when it is not. The POST below keeps its arm because it genuinely calls both validators.
+    logServerError("Failed to list inactive workers", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: isMissingAttendanceSchemaError(error)
+          ? ATTENDANCE_SCHEMA_HELP
+          : sanitizeRouteError(error, "Failed to list inactive workers"),
+      },
+      { status: 500 },
+    )
+  }
 }
 
 export async function POST(request: Request) {
@@ -62,19 +188,42 @@ export async function POST(request: Request) {
     }
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    /**
+     * ⚠ THIS USED TO FILTER `active = TRUE`, WHICH MADE RE-ADDING A REMOVED WORKER SUCCEED.
+     *
+     * The natural recovery after an accidental removal is to type the name in again — and because
+     * the duplicate check could not see inactive rows, that created a SECOND Chitra. The new row
+     * has no history: the 33 attendance records, the wage ledger and the fingerprint id stay
+     * attached to the old id, so the estate ends up with a worker who looks right, pays right from
+     * today, and has silently lost every previous day. Payroll would then show two people.
+     *
+     * Now it finds them either way and says which case it is, because "already exists" is a
+     * useless answer for somebody looking at a roster that does not contain her.
+     */
     const existingRows = await runTenantQuery(
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT id
+        SELECT id, active
         FROM attendance_workers
         WHERE tenant_id = ${tenantContext.tenantId}
-          AND active = TRUE
           AND LOWER(full_name) = LOWER(${name})
+        ORDER BY active DESC
         LIMIT 1
       `,
     )
     if (existingRows.length > 0) {
+      const match = existingRows[0] as any
+      if (match.active === false) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `${name} is already on this estate but has been taken off the roster. Restore them from "No longer on the roster" in the Workers tab to keep their attendance and pay history, rather than adding them again.`,
+            inactiveWorkerId: match.id,
+          },
+          { status: 409 },
+        )
+      }
       return NextResponse.json({ success: false, error: "Employee already exists" }, { status: 409 })
     }
 
@@ -134,7 +283,15 @@ export async function POST(request: Request) {
     const bankAccount = String(body?.bankAccount || "").trim().slice(0, 60) || null
     const bankIfsc = String(body?.bankIfsc || "").trim().slice(0, 20) || null
 
-    const insertedRows = await runTenantQuery(
+    /**
+     * Same read-then-write window as the restore path. The duplicate check above runs in its own
+     * statement, so a concurrent create or restore can take the name before this INSERT lands. The
+     * partial unique index is what actually prevents it; this keeps the answer a sentence about
+     * the name rather than a 500.
+     */
+    let insertedRows
+    try {
+      insertedRows = await runTenantQuery(
       accountsSql,
       tenantContext,
       accountsSql`
@@ -175,7 +332,16 @@ export async function POST(request: Request) {
         RETURNING id, full_name, worker_type, daily_rate, monthly_wage, gender, kind, headcount, location_id, estate,
                   device_user_code, phone, bank_name, bank_account, bank_ifsc, created_at
       `,
-    )
+      )
+    } catch (error) {
+      if (isActiveWorkerNameConflict(error)) {
+        return NextResponse.json(
+          { success: false, error: `${name} was added to the roster a moment ago.` },
+          { status: 409 },
+        )
+      }
+      throw error
+    }
 
     const worker = insertedRows[0]
 

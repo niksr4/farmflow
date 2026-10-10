@@ -6,13 +6,17 @@ import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { normalizeAttendanceWorkerName, isMissingAttendanceSchemaError, ATTENDANCE_SCHEMA_HELP } from "@/lib/attendance"
+import {
+  normalizeAttendanceWorkerName,
+  isMissingAttendanceSchemaError,
+  isActiveWorkerNameConflict,
+  classifyWorkerUniqueViolation,
+  ATTENDANCE_SCHEMA_HELP,
+} from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
 import { isWorkerType } from "@/lib/worker-types"
-
-const isUniqueViolation = (error: unknown) => String((error as any)?.code || "") === "23505"
 
 // The list lives in lib/worker-types.ts. It used to be declared here AND retyped in
 // worker-profiles-tab.tsx, which is the contract-in-two-places shape that has already cost this
@@ -227,7 +231,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         `,
       )
     } catch (error) {
-      if (isUniqueViolation(error)) {
+      /**
+       * ⚠ THE NAME CASE MUST BE TESTED FIRST, and it was not being tested at all.
+       *
+       * attendance_workers has TWO unique indexes -- device code, and (tenant, lower(name)) where
+       * active. This catch read any 23505 as the device one, so renaming a worker to a name that
+       * is already on the roster answered "That device code is already assigned to another
+       * employee": a confident wrong answer pointing at a field the user did not touch.
+       *
+       * That is now on the recovery path. When a restore is refused because the name is taken, the
+       * message tells the estate to rename one of them -- so renaming is exactly what they do
+       * next, and it has to say what actually went wrong.
+       */
+      const conflict = classifyWorkerUniqueViolation(error)
+      if (conflict === "active-name") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Somebody called ${name ?? "that"} is already on the roster. Two active workers cannot share a name.`,
+          },
+          { status: 409 },
+        )
+      }
+      if (conflict === "device-code") {
         return NextResponse.json(
           { success: false, error: "That device code is already assigned to another employee" },
           { status: 409 },
@@ -268,6 +294,140 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to update worker profile"),
       },
       { status: isSchemaError ? 503 : 500 },
+    )
+  }
+}
+
+/**
+ * Put a worker back on the roster. The undo for DELETE, which had none.
+ *
+ * GATED ON `canDeleteModule`, THE SAME CHECK AS REMOVAL — deliberately, and it is the reason this
+ * is not on PUT. If restoring were merely a write permission, a role that can take somebody off
+ * the roster could create a state only a higher role can repair. Whoever can break it can fix it.
+ *
+ * Only ever sets `active = TRUE`. Deactivation stays with DELETE, so there is exactly one way to
+ * remove a worker and it is the one that writes an audit row.
+ */
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    const sessionUser = await requireModuleAccess("accounts")
+    if (!canDeleteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+
+    const existing = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT id, full_name, active FROM attendance_workers
+        WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
+    if (!existing.length) {
+      return NextResponse.json({ success: false, error: "Worker not found" }, { status: 404 })
+    }
+    if ((existing[0] as any).active === true) {
+      // Not an error: two taps on a slow connection should not read as a failure.
+      return NextResponse.json({ success: true, alreadyActive: true })
+    }
+
+    /**
+     * REFUSE WHEN THE NAME IS ALREADY BACK ON THE ROSTER. This is not theoretical: production has
+     * seven of these right now, all at Medappa Estates, and the shape is always the same --
+     * AMINA KHATUN active with 29 attendance records and working yesterday, AMINA KHATUN inactive
+     * with 4 from early September. They re-typed names instead of editing and deactivated the
+     * mistakes, so most of their 29 inactive rows are cleanup, not people waiting to come back.
+     *
+     * Restoring one regardless would put two identically-named people on tomorrow's muster, the
+     * writer would mark whichever row sorted first, and the history would split across both --
+     * strictly worse than the one-way door this endpoint exists to fix.
+     *
+     * Refused rather than merged. A merge is irreversible and guesses which row is the real
+     * person; at Laxmi, "Rafikul" active (66 records) and "Rafikul" inactive (30 records) are
+     * plausibly two different men who share a common name, and nothing here can tell. Renaming is
+     * reversible, already supported by PUT, and leaves the decision with the estate.
+     */
+    const namesake = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT id, full_name FROM attendance_workers
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND active = TRUE
+          AND LOWER(full_name) = LOWER(${(existing[0] as any).full_name})
+        LIMIT 1
+      `,
+    )
+    if (namesake.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            `${(namesake[0] as any).full_name} is already on the roster. Putting this record back ` +
+            `would show two people with the same name on the muster and split their history between ` +
+            `them. Rename one of them first, then restore.`,
+          conflictWorkerId: (namesake[0] as any).id,
+        },
+        { status: 409 },
+      )
+    }
+
+    /**
+     * The check above is a read-then-write, so a concurrent POST or a second restore can take the
+     * name between the SELECT and this UPDATE. The partial unique index is what actually stops the
+     * duplicate; this turns its 23505 into the same answer the pre-check gives, so losing the race
+     * reads as "that name is taken" rather than "something went wrong".
+     */
+    try {
+      await runTenantQuery(
+        accountsSql,
+        tenantContext,
+        accountsSql`
+          UPDATE attendance_workers
+          SET active = TRUE
+          WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
+        `,
+      )
+    } catch (error) {
+      if (isActiveWorkerNameConflict(error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              `${(existing[0] as any).full_name} was put back on the roster a moment ago. Rename ` +
+              `one of them if both belong there.`,
+          },
+          { status: 409 },
+        )
+      }
+      throw error
+    }
+
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "update",
+      entityType: "attendance_workers",
+      entityId: id,
+      before: existing[0] as any,
+      after: { id, full_name: (existing[0] as any).full_name, active: true, restored: true } as any,
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    logServerError("Failed to restore worker", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: isMissingAttendanceSchemaError(error)
+          ? ATTENDANCE_SCHEMA_HELP
+          : sanitizeRouteError(error, "Failed to restore worker"),
+      },
+      { status: 500 },
     )
   }
 }

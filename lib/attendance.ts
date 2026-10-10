@@ -43,6 +43,54 @@ export const normalizeAttendanceWorkerName = (value: unknown) =>
     .trim()
     .replace(/\s+/g, " ")
 
+/**
+ * THE DATABASE IS THE REAL GUARD AGAINST TWO ACTIVE WORKERS SHARING A NAME, and it has been all
+ * along:
+ *
+ *   CREATE UNIQUE INDEX idx_attendance_workers_tenant_name_active
+ *     ON attendance_workers (tenant_id, lower(full_name)) WHERE (active = true)
+ *
+ * Partial, so one active and any number of inactive namesakes coexist happily -- which is the
+ * state nine inactive workers on production are in. Verified against dev: flipping one of those
+ * to active raises 23505 on this constraint.
+ *
+ * So the route's own namesake check is a BETTER MESSAGE, not the thing preventing the duplicate.
+ * It still earns its place -- nine of forty-one inactive rows on prod would otherwise hit a
+ * server error for an entirely predictable condition -- but the check is a read-then-write and
+ * cannot close the window on its own under READ COMMITTED. A concurrent POST or a second restore
+ * can still win between the SELECT and the UPDATE, and the loser must answer 409 "that name is
+ * taken" rather than 500 "something went wrong".
+ */
+export const ACTIVE_WORKER_NAME_INDEX = "idx_attendance_workers_tenant_name_active"
+
+export const isActiveWorkerNameConflict = (error: unknown) => {
+  const e = error as { code?: string; constraint?: string; message?: string } | null
+  if (!e || typeof e !== "object") return false
+  if (e.constraint === ACTIVE_WORKER_NAME_INDEX) return true
+  // Neon's driver does not always surface `constraint`, so fall back to the pair that identifies
+  // it unambiguously: unique_violation plus the index name in the message.
+  return e.code === "23505" && String(e.message || "").includes(ACTIVE_WORKER_NAME_INDEX)
+}
+
+/**
+ * WHICH of attendance_workers' two unique indexes was hit. Extracted as a pure function because
+ * the ORDER of the checks is the bug, and order inside a route's catch block cannot be asserted
+ * without mocking a database.
+ *
+ * The PUT handler used to test the device-code case first by testing nothing at all -- it read any
+ * 23505 as a device clash. So renaming a worker onto a name already on the roster answered "That
+ * device code is already assigned to another employee", naming a field the user had not touched.
+ * Both indexes raise the same SQLSTATE, so the only thing separating them is which is asked about
+ * first, and the narrower question has to come first.
+ */
+export type WorkerUniqueViolation = "active-name" | "device-code" | null
+
+export const classifyWorkerUniqueViolation = (error: unknown): WorkerUniqueViolation => {
+  if (isActiveWorkerNameConflict(error)) return "active-name"
+  const code = String((error as { code?: string } | null)?.code || "")
+  return code === "23505" ? "device-code" : null
+}
+
 export const isMissingAttendanceSchemaError = (error: unknown) => {
   const message = String((error as Error)?.message || error || "")
   return message.includes('relation "attendance_workers"') || message.includes('relation "attendance_records"')
