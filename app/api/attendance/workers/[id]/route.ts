@@ -308,6 +308,47 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ success: true, alreadyActive: true })
     }
 
+    /**
+     * REFUSE WHEN THE NAME IS ALREADY BACK ON THE ROSTER. This is not theoretical: production has
+     * seven of these right now, all at Medappa Estates, and the shape is always the same --
+     * AMINA KHATUN active with 29 attendance records and working yesterday, AMINA KHATUN inactive
+     * with 4 from early September. They re-typed names instead of editing and deactivated the
+     * mistakes, so most of their 29 inactive rows are cleanup, not people waiting to come back.
+     *
+     * Restoring one regardless would put two identically-named people on tomorrow's muster, the
+     * writer would mark whichever row sorted first, and the history would split across both --
+     * strictly worse than the one-way door this endpoint exists to fix.
+     *
+     * Refused rather than merged. A merge is irreversible and guesses which row is the real
+     * person; at Laxmi, "Rafikul" active (66 records) and "Rafikul" inactive (30 records) are
+     * plausibly two different men who share a common name, and nothing here can tell. Renaming is
+     * reversible, already supported by PUT, and leaves the decision with the estate.
+     */
+    const namesake = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT id, full_name FROM attendance_workers
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND active = TRUE
+          AND LOWER(full_name) = LOWER(${(existing[0] as any).full_name})
+        LIMIT 1
+      `,
+    )
+    if (namesake.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            `${(namesake[0] as any).full_name} is already on the roster. Putting this record back ` +
+            `would show two people with the same name on the muster and split their history between ` +
+            `them. Rename one of them first, then restore.`,
+          conflictWorkerId: (namesake[0] as any).id,
+        },
+        { status: 409 },
+      )
+    }
+
     await runTenantQuery(
       accountsSql,
       tenantContext,

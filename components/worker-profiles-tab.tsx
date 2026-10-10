@@ -60,6 +60,8 @@ type InactiveWorker = {
   headcount: number | null
   attendanceCount: number
   lastSeen: string | null
+  /** Somebody by this name is already on the roster, so this row cannot be restored as it stands. */
+  activeNamesake: string | null
 }
 
 type Worker = {
@@ -246,15 +248,32 @@ export default function WorkerProfilesTab() {
   const [inactiveWorkers, setInactiveWorkers] = useState<InactiveWorker[]>([])
   const [showInactive, setShowInactive] = useState(false)
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [inactiveError, setInactiveError] = useState(false)
 
   const fetchInactive = useCallback(async () => {
     try {
-      const res = await fetch("/api/attendance/workers?state=inactive", { cache: "no-store" })
+      /**
+       * `scope=all` to match the roster above it, which fetches /api/attendance with the same
+       * flag. The endpoint honours the estate picker by default -- right for a general caller --
+       * but this screen deliberately shows every estate, and a scoped recovery list beside an
+       * unscoped roster is how you get "she is not in either list" on a multi-estate tenant.
+       */
+      const res = await fetch("/api/attendance/workers?state=inactive&scope=all", { cache: "no-store" })
       const data = await res.json()
-      if (data?.success) setInactiveWorkers(data.workers || [])
+      if (!res.ok || !data?.success) {
+        setInactiveError(true)
+        return
+      }
+      setInactiveWorkers(data.workers || [])
+      setInactiveError(false)
     } catch {
-      // Silent: this is a recovery affordance, not the roster. A failure here must not make the
-      // Workers tab look broken.
+      /**
+       * NOT SILENT ANY MORE. Swallowing this left the section hidden, which is pixel-identical to
+       * "nobody has been removed" -- so the one screen that can tell an estate where their missing
+       * worker went would quietly claim there is nobody to find. The roster above stays usable
+       * either way; only this block reports its own failure.
+       */
+      setInactiveError(true)
     }
   }, [])
 
@@ -547,7 +566,13 @@ export default function WorkerProfilesTab() {
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to deactivate")
       toast.success("Worker deactivated")
-      fetchWorkers()
+      /**
+       * BOTH LISTS, because this is the exact moment the undo has to exist. HoneyFarm's writer
+       * removed Chitra with a mis-tap and carried on working in the same session; refreshing only
+       * the roster takes her out of one list without putting her into the other, so the way back
+       * stays invisible until a page reload nobody has a reason to do.
+       */
+      await Promise.all([fetchWorkers(), fetchInactive()])
     } catch (err: any) {
       toast.error(err?.message || "Failed to deactivate worker")
     }
@@ -1503,7 +1528,29 @@ export default function WorkerProfilesTab() {
         never sees it. The count sits in the heading because the person who needs this usually does
         not know a worker is missing until the muster looks wrong.
       */}
-      {inactiveWorkers.length > 0 && (
+      {/*
+        The list could not be loaded, which is NOT the same screen as "nobody has been removed".
+        Rendered on its own because inactiveWorkers is empty in both cases, and this is the one
+        place an estate can find out where a missing worker went.
+      */}
+      {inactiveError && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <p className="text-sm font-medium">Could not load workers taken off the roster</p>
+              <p className="text-xs text-muted-foreground">
+                The active roster above is unaffected. If somebody is missing from the muster, try
+                again.
+              </p>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => fetchInactive()}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!inactiveError && inactiveWorkers.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             {/* An explicit aria-label because the title AND the description sit inside the
@@ -1562,20 +1609,31 @@ export default function WorkerProfilesTab() {
                       </p>
                     </div>
                     {canWrite && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={restoringId === w.id}
-                        onClick={() => handleRestore(w.id, w.name)}
-                      >
-                        {restoringId === w.id ? (
-                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserCheck className="mr-1.5 h-4 w-4" />
-                        )}
-                        Restore
-                      </Button>
+                      w.activeNamesake ? (
+                        /* Says why instead of failing on click. Medappa have seven of these: a
+                           name that is already back on the muster, usually because somebody
+                           retyped it rather than editing. Restoring anyway would put two of the
+                           same person on tomorrow's roll. */
+                        <p className="max-w-[16rem] text-xs text-amber-700 dark:text-amber-400">
+                          Already on the roster under this name. Rename one of them to restore this
+                          record.
+                        </p>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={restoringId === w.id}
+                          onClick={() => handleRestore(w.id, w.name)}
+                        >
+                          {restoringId === w.id ? (
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserCheck className="mr-1.5 h-4 w-4" />
+                          )}
+                          Restore
+                        </Button>
+                      )
                     )}
                   </div>
                 ))}

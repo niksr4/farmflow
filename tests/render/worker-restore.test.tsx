@@ -44,30 +44,74 @@ const CHITRA = {
   headcount: null,
   attendanceCount: 33,
   lastSeen: "2026-10-08",
+  activeNamesake: null as string | null,
 }
 
-/** Records every mutating call so "did Restore restore?" is answered by the request. */
-function mockApi(inactive = [CHITRA]) {
+/**
+ * A STATEFUL fake, not a canned response. The earlier version kept returning Chitra as inactive
+ * after the PATCH, so "restores via PATCH" passed on the request alone and would have gone on
+ * passing if the UI never moved her between the two lists. Here the PATCH mutates the fake's
+ * roster, exactly as the server would, and the test can then assert where she ended up.
+ */
+function mockApi(inactive: Array<typeof CHITRA> = [CHITRA]) {
   const writes: Array<{ url: string; method: string }> = []
+  const state = {
+    inactive: [...inactive],
+    active: [] as Array<typeof CHITRA>,
+    /** Resolves once the inactive list has actually been served, so a test can assert on an
+     *  EMPTY result without racing the request that produces it. */
+    inactiveServed: 0,
+  }
+
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = (init?.method || "GET").toUpperCase()
     if (method !== "GET") writes.push({ url, method })
-    const json = (body: unknown) =>
-      new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } })
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+
+    const restoreMatch = url.match(/^\/api\/attendance\/workers\/([^/?]+)/)
+    if (restoreMatch && method === "PATCH") {
+      const id = restoreMatch[1]
+      const row = state.inactive.find((w) => w.id === id)
+      if (row) {
+        state.inactive = state.inactive.filter((w) => w.id !== id)
+        state.active = [...state.active, row]
+      }
+      return json({ success: true })
+    }
+    if (restoreMatch && method === "DELETE") {
+      const id = restoreMatch[1]
+      const row = state.active.find((w) => w.id === id)
+      if (row) {
+        state.active = state.active.filter((w) => w.id !== id)
+        state.inactive = [...state.inactive, row]
+      }
+      return json({ success: true })
+    }
 
     if (url.startsWith("/api/attendance/workers?state=inactive")) {
-      return json({ success: true, workers: inactive })
+      state.inactiveServed += 1
+      return json({ success: true, workers: state.inactive })
     }
     if (url.startsWith("/api/attendance/workers")) return json({ success: true })
-    if (url.startsWith("/api/attendance")) return json({ success: true, workers: [], records: [], assignments: [] })
+    if (url.startsWith("/api/attendance")) {
+      return json({ success: true, workers: state.active, records: [], assignments: [] })
+    }
     if (url.startsWith("/api/locations")) return json({ success: true, locations: [] })
     if (url.startsWith("/api/worker-pay-rules")) return json({ success: true, effectiveRule: null, workerRule: null })
     return json({ success: true })
   })
   vi.stubGlobal("fetch", fetchMock)
-  return writes
+  return { writes, state, fetchMock }
 }
+
+/**
+ * The roster is fetched with scope=all so a worker on another estate stays reachable. The recovery
+ * list has to be cut the same way or a multi-estate tenant gets "she is in neither list".
+ */
+const inactiveRequests = (fetchMock: ReturnType<typeof mockApi>["fetchMock"]) =>
+  fetchMock.mock.calls.filter(([u]) => String(u).includes("state=inactive"))
 
 beforeEach(() => {
   toastError.mockClear()
@@ -99,7 +143,7 @@ describe("a worker taken off the roster can be found and put back", () => {
   })
 
   it("restores via PATCH — not DELETE, and not a full PUT edit", async () => {
-    const writes = mockApi()
+    const { writes } = mockApi()
     const user = userEvent.setup()
     render(<WorkerProfilesTab />)
     await user.click(await screen.findByRole("button", { name: /no longer on the roster/i }))
@@ -108,6 +152,78 @@ describe("a worker taken off the roster can be found and put back", () => {
     await waitFor(() => expect(writes.length).toBe(1))
     expect(writes[0]).toEqual({ url: "/api/attendance/workers/w-chitra", method: "PATCH" })
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Chitra is back on the roster"))
+  })
+
+  it("actually moves her — off the recovery list and back onto the roster", async () => {
+    // The request going out is only half of it. Asserting the verb alone would still pass if the
+    // UI never refreshed, leaving her listed as missing after a successful restore.
+    const { state } = mockApi()
+    const user = userEvent.setup()
+    render(<WorkerProfilesTab />)
+    await user.click(await screen.findByRole("button", { name: /no longer on the roster/i }))
+    await user.click(await screen.findByRole("button", { name: /^restore$/i }))
+
+    await waitFor(() => expect(state.active.map((w) => w.id)).toEqual(["w-chitra"]))
+    expect(state.inactive).toEqual([])
+    // …and the section empties out, because it only renders when it has contents.
+    await waitFor(() => expect(screen.queryByText(/No longer on the roster/)).not.toBeInTheDocument())
+  })
+
+  it("refuses the restore when that name is already back on the roster", async () => {
+    /**
+     * PRODUCTION HAS SEVEN OF THESE, all at Medappa Estates: AMINA KHATUN active with 29
+     * attendance records and working yesterday, AMINA KHATUN inactive with 4 from September. They
+     * retyped names instead of editing and deactivated the mistakes. Restoring one would put two
+     * identically-named people on the next muster and split the history between them, which is
+     * worse than the one-way door this whole feature exists to fix.
+     *
+     * Said on the row rather than on click: a button that only fails when pressed is a worse
+     * answer than one that explains itself.
+     */
+    mockApi([{ ...CHITRA, id: "w-amina", name: "AMINA KHATUN", activeNamesake: "AMINA KHATUN" }])
+    const user = userEvent.setup()
+    render(<WorkerProfilesTab />)
+    await user.click(await screen.findByRole("button", { name: /no longer on the roster/i }))
+
+    expect(await screen.findByText(/already on the roster under this name/i)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^restore$/i })).not.toBeInTheDocument()
+  })
+
+  it("puts a worker into the recovery list the moment they are deactivated", async () => {
+    /**
+     * The mis-tap flow. HoneyFarm's writer removed Chitra mid-session and kept working; if only
+     * the roster refreshes, she leaves one list without arriving in the other and the undo is
+     * invisible until a reload nobody has a reason to perform.
+     */
+    const { state, fetchMock } = mockApi([])
+    state.active = [{ ...CHITRA, id: "w-ravi", name: "Ravi" }]
+    vi.stubGlobal("confirm", () => true)
+    const user = userEvent.setup()
+    render(<WorkerProfilesTab />)
+
+    await user.click(await screen.findByRole("button", { name: /deactivate/i }))
+    await waitFor(() => expect(state.inactive.map((w) => w.id)).toEqual(["w-ravi"]))
+    // Re-read, not a stale render: the inactive list must have been fetched again after the DELETE.
+    await waitFor(() => expect(inactiveRequests(fetchMock).length).toBeGreaterThan(1))
+    expect(await screen.findByText("No longer on the roster (1)")).toBeInTheDocument()
+  })
+
+  it("says the recovery list is broken rather than showing the same screen as 'nobody removed'", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        const json = (b: unknown, status = 200) =>
+          new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } })
+        if (url.includes("state=inactive")) return json({ success: false, error: "boom" }, 500)
+        if (url.startsWith("/api/attendance")) return json({ success: true, workers: [] })
+        return json({ success: true })
+      }),
+    )
+    render(<WorkerProfilesTab />)
+
+    expect(await screen.findByText(/could not load workers taken off the roster/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument()
   })
 
   it("says so when the restore fails, instead of looking like it worked", async () => {
@@ -135,9 +251,23 @@ describe("a worker taken off the roster can be found and put back", () => {
   })
 
   it("stays out of the way entirely for an estate that has removed nobody", async () => {
-    // Four of the five tenants are in this state and must see no new chrome at all.
-    mockApi([])
+    /**
+     * ⚠ THIS ASSERTION IS ONLY WORTH ANYTHING AFTER THE RESPONSE LANDS. `inactiveWorkers` starts
+     * empty, so the previous version of this test — a bare waitFor on absence — was satisfied by
+     * the first render, before the request it was meant to be judging had even resolved. It would
+     * have passed with the section hard-coded to render on any non-empty response.
+     *
+     * So: wait for the request to have been SERVED, then for the roster that loads alongside it,
+     * and only then assert absence.
+     */
+    const { state, fetchMock } = mockApi([])
     render(<WorkerProfilesTab />)
-    await waitFor(() => expect(screen.queryByText(/No longer on the roster/)).not.toBeInTheDocument())
+
+    await waitFor(() => expect(state.inactiveServed).toBeGreaterThan(0))
+    await waitFor(() => expect(inactiveRequests(fetchMock).length).toBeGreaterThan(0))
+    await screen.findByText("Worker Roster")
+
+    expect(screen.queryByText(/No longer on the roster/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/could not load workers/i)).not.toBeInTheDocument()
   })
 })

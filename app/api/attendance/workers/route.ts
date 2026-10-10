@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { isLocationAccessError } from "@/lib/server/location-access"
+import { resolveActiveEstate } from "@/lib/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server/location-utils"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -59,6 +62,29 @@ export async function GET(request: Request) {
       )
     }
 
+    /**
+     * SCOPED THE SAME WAY THE ROSTER IT RESTORES INTO IS SCOPED.
+     *
+     * Workers carry an `estate` (text), not a location id, so this is the estate-picker clause
+     * from /api/attendance and NOT getAccessibleLocationIds -- that helper returns block ids,
+     * which no worker column holds. `estate IS NULL` still shows everywhere, the always-NULL-shows
+     * convention in lib/estate-filter.ts.
+     *
+     * Unscoped, this list offers a HoneyFarm admin viewing Sidapur a worker belonging to the other
+     * estate; restoring them puts somebody back onto a roster the viewer is not looking at, so the
+     * row appears to do nothing. That is the same defect the comment in /api/attendance warns
+     * about -- a scoped roster beside an unscoped companion query, describing different sets of
+     * people -- and this endpoint exists precisely to be used when somebody is confused about who
+     * is on the roster.
+     */
+    const activeEstate = resolveActiveEstate(
+      url.searchParams,
+      (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null,
+    )
+    const estateClause = activeEstate
+      ? accountsSql` AND (w.estate IS NULL OR w.estate = ${activeEstate})`
+      : accountsSql``
+
     const rows = await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -70,10 +96,19 @@ export async function GET(request: Request) {
                (SELECT COUNT(*)::int FROM attendance_records r
                  WHERE r.tenant_id = w.tenant_id AND r.worker_id = w.id) AS attendance_count,
                (SELECT MAX(r.attendance_date)::text FROM attendance_records r
-                 WHERE r.tenant_id = w.tenant_id AND r.worker_id = w.id) AS last_seen
+                 WHERE r.tenant_id = w.tenant_id AND r.worker_id = w.id) AS last_seen,
+               -- Somebody by this name is ALREADY back on the roster, so restoring this row would
+               -- put two of them on the muster. Returned with the list rather than discovered on
+               -- click: Medappa have 29 inactive rows and seven such collisions, and a Restore
+               -- button that only fails when pressed is a worse answer than one that says why.
+               (SELECT a.full_name FROM attendance_workers a
+                 WHERE a.tenant_id = w.tenant_id AND a.active = TRUE
+                   AND LOWER(a.full_name) = LOWER(w.full_name)
+                 LIMIT 1) AS active_namesake
         FROM attendance_workers w
         WHERE w.tenant_id = ${tenantContext.tenantId}
           AND w.active = FALSE
+          ${estateClause}
         ORDER BY LOWER(w.full_name)
       `,
     )
@@ -92,15 +127,17 @@ export async function GET(request: Request) {
         headcount: w.headcount != null ? Number(w.headcount) : null,
         attendanceCount: Number(w.attendance_count) || 0,
         lastSeen: w.last_seen ?? null,
+        activeNamesake: w.active_namesake ?? null,
       })),
     })
   } catch (error) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    if (isLocationAccessError(error)) {
-      return NextResponse.json({ success: false, error: "Location access denied" }, { status: 403 })
-    }
+    // No isLocationAccessError arm here, deliberately. This handler calls neither
+    // validateLocationForTenant nor validateEstateForTenant, so that error cannot reach this
+    // block -- and a catch for an impossible error is a claim that the route is location-gated
+    // when it is not. The POST below keeps its arm because it genuinely calls both validators.
     logServerError("Failed to list inactive workers", error)
     return NextResponse.json(
       {
