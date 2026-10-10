@@ -783,6 +783,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
       toast.success(`${name} removed`)
       setWorkers((cur) => cur.filter((w) => w.id !== id))
       setPresentWorkerIds((cur) => cur.filter((workerId) => workerId !== id))
+      setSavedPresentWorkerIds((cur) => cur.filter((workerId) => workerId !== id))
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to remove")
     } finally {

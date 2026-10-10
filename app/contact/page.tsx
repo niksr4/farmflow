@@ -43,7 +43,7 @@ export default function ContactPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to send message")
       setSubmitted(true)
     } catch (err: any) {
