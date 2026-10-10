@@ -934,6 +934,38 @@ aside a[href]:active {
 .dark .text-stone-500        { color: hsl(var(--muted-foreground) / 0.75); }
 .dark .text-stone-400        { color: hsl(var(--muted-foreground) / 0.60); }
 
+/* ---------------------------------------------------------------------------
+ * AND THE LIGHT SIDE OF THE SAME CLASS, which had no override at all.
+ *
+ * Everything above this point repairs hardcoded LIGHT classes for dark mode.
+ * `text-stone-400` needed the opposite: it is this app's muted-label colour,
+ * 383 uses across components/ and app/, and `defaultTheme` is "light", so most
+ * people read it raw at #a8a29e -- 2.46:1 on --card, against AA's 4.5:1. The
+ * `.dark` rule directly above made the class look theme-managed in both
+ * directions when it was only managed in one.
+ *
+ * WHY 0.8 AND NOT FULL. --muted-foreground at full alpha is 7.65:1 here, which
+ * is body-text weight -- mapping 383 secondary labels onto it would flatten the
+ * hierarchy rather than fix the contrast. 0.8 measures 4.58:1: it clears AA and
+ * still sits three points lighter than primary text. 0.75 was 4.06 and failed,
+ * so this is the lightest value that passes.
+ *
+ * Checked before going blanket: no light-mode DARK ground anywhere carries this
+ * class. All seven `bg-stone-800/900` neighbours are `dark:`-scoped, and the
+ * `.dark` rule above outranks this one on specificity, so dark mode is
+ * untouched. `text-stone-300` is deliberately NOT included -- its 78 uses are
+ * mostly light text on the dark marketing pages and correctly-paired
+ * `text-stone-700 dark:text-stone-300`, where darkening it would break the very
+ * thing this fixes. `text-stone-500` already passes at 4.68:1 and is left alone.
+ *
+ * The /80 and /90 variants get the same value: Tailwind emits them as separate
+ * classes so they need their own rules, and a gradation that sits below AA is
+ * not a gradation worth keeping.
+ * --------------------------------------------------------------------------- */
+.text-stone-400              { color: hsl(var(--muted-foreground) / 0.8); }
+.text-stone-400\/80          { color: hsl(var(--muted-foreground) / 0.8); }
+.text-stone-400\/90          { color: hsl(var(--muted-foreground) / 0.8); }
+
 /* Hero gradient stops — earthy from/via/to */
 .dark .from-amber-50\/70     { --tw-gradient-from: hsl(43 60% 6% / 0.4); }
 .dark .from-amber-50\/80     { --tw-gradient-from: hsl(43 60% 6% / 0.5); }
