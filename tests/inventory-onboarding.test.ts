@@ -23,14 +23,19 @@ describe("inventory onboarding helpers", () => {
     const steps = buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, access)
     const phases = buildLaunchGuidePhases(INITIAL_ONBOARDING_STATUS, access)
 
-    // The estate map is asked for unconditionally now: every figure the app produces is per-block
-    // or per-acre, so it is not gated on which modules happen to be on.
+    // Blocks and their acreage are asked for unconditionally: every figure the app produces is
+    // per-block or per-acre, so neither is gated on which modules happen to be on. They are two
+    // separate steps now, because naming a block unblocks recording and measuring it does not.
     expect(requests.map((request) => request.key)).toEqual([
-      "blocks_acreage", "storehouse", "inventory", "weather", "locations", "processing", "dispatch",
+      "blocks", "storehouse", "inventory", "processing_route", "blocks_acreage", "weather",
+      "locations", "processing", "dispatch",
     ])
-    // Processing and dispatch stay out of the checklist — they are seasonal, and an off-season
-    // estate would never be able to finish setup.
-    expect(steps.map((step) => step.key)).toEqual(["blocks_acreage", "storehouse", "inventory", "weather"])
+    // Processing and dispatch RECORDS stay out of the checklist: they are seasonal, and an
+    // off-season estate would never be able to finish setup. Asking how the estate processes is
+    // different, because the answer is a fact about the estate rather than a record of a day.
+    expect(steps.map((step) => step.key)).toEqual([
+      "blocks", "storehouse", "inventory", "processing_route", "blocks_acreage", "weather",
+    ])
     expect(phases.map((phase) => phase.id)).toEqual(["phase-1", "phase-2", "phase-3"])
   })
 
@@ -54,9 +59,11 @@ describe("inventory onboarding helpers", () => {
     const phases = buildLaunchGuidePhases(status, access)
 
     expect(requests.map((request) => request.key)).toEqual([
-      "blocks_acreage", "storehouse", "inventory", "weather",
+      "blocks", "storehouse", "inventory", "blocks_acreage", "weather",
     ])
-    expect(steps.map((step) => step.key)).toEqual(["blocks_acreage", "storehouse", "inventory", "weather"])
+    expect(steps.map((step) => step.key)).toEqual([
+      "blocks", "storehouse", "inventory", "blocks_acreage", "weather",
+    ])
     expect(phases).toHaveLength(1)
     expect(phases[0]).toMatchObject({
       id: "phase-1",

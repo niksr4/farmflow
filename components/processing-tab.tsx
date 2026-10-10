@@ -20,7 +20,8 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
+import { DEFAULT_COFFEE_VARIETIES, resolveProcessingRoute } from "@/lib/crop-config"
+import { dayOutturnPercent, deriveProcessingFigures } from "@/lib/processing-ratios"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -139,6 +140,14 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const { settings } = useTenantSettings()
   const searchParams = useSearchParams()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
+  /**
+   * Whether this estate pulps, dries whole, or both. Decides which cards below are rendered and
+   * which denominator every ratio uses. `both` for anyone who has not said, which shows everything
+   * and is what the screen did before the setting existed.
+   */
+  const processingRoute = resolveProcessingRoute(settings.estateProfile?.processingRoute)
+  const showsWetLine = processingRoute !== "natural"
+  const showsCherryLine = processingRoute !== "wet"
   // Mirrors inventory-system.tsx's own preview-mode computation: an owner previewing another
   // tenant's workspace should see the same read-only surface everywhere. user.role stays "owner"
   // for the whole duration of a preview (it's the raw, real session role), so checking it directly
@@ -161,6 +170,8 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [coffeeType, setCoffeeType] = useState<string>(COFFEE_TYPES[0])
   const [record, setRecord] = useState<Omit<ProcessingRecord, "id">>(emptyRecord)
+  // Null until the day has something to divide, which is what keeps the card off the screen.
+  const dayOutturn = dayOutturnPercent({ entry: record, route: processingRoute })
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
   const [previousRecord, setPreviousRecord] = useState<ProcessingRecord | null>(null)
   const [recentRecords, setRecentRecords] = useState<ProcessingRecord[]>([])
@@ -222,88 +233,22 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     }
   }, [toast])
 
+  /**
+   * All of this used to be eighty lines of inline arithmetic here, including the one line that
+   * assumed cherry is always made from green and float. It now lives in lib/processing-ratios.ts
+   * where it can be tested against a route; see the header there for what was wrong and why.
+   */
   const autoCalculateFields = useCallback(() => {
-    setRecord((prev) => {
-      const updated = { ...prev }
-
-      const cropToday = Number(prev.crop_today) || 0
-      const ripeToday = Number(prev.ripe_today) || 0
-      const greenToday = Number(prev.green_today) || 0
-      const floatToday = Number(prev.float_today) || 0
-      const wetParchment = Number(prev.wet_parchment) || 0
-      const dryParch = Number(prev.dry_parch) || 0
-      const dryCherry = Number(prev.dry_cherry) || 0
-
-      if (previousRecord) {
-        const prevCropTodate = Number(previousRecord.crop_todate) || 0
-        const prevRipeTodate = Number(previousRecord.ripe_todate) || 0
-        const prevGreenTodate = Number(previousRecord.green_todate) || 0
-        const prevFloatTodate = Number(previousRecord.float_todate) || 0
-        const prevDryPTodate = Number(previousRecord.dry_p_todate) || 0
-        const prevDryCherryTodate = Number(previousRecord.dry_cherry_todate) || 0
-        const prevDryPBagsTodate = Number(previousRecord.dry_p_bags_todate) || 0
-        const prevDryCherryBagsTodate = Number(previousRecord.dry_cherry_bags_todate) || 0
-
-        updated.crop_todate = Number.parseFloat((prevCropTodate + cropToday).toFixed(2))
-        updated.ripe_todate = Number.parseFloat((prevRipeTodate + ripeToday).toFixed(2))
-        updated.green_todate = Number.parseFloat((prevGreenTodate + greenToday).toFixed(2))
-        updated.float_todate = Number.parseFloat((prevFloatTodate + floatToday).toFixed(2))
-        updated.dry_p_todate = Number.parseFloat((prevDryPTodate + dryParch).toFixed(2))
-        updated.dry_cherry_todate = Number.parseFloat((prevDryCherryTodate + dryCherry).toFixed(2))
-
-        const dryPBags = Number.parseFloat((dryParch / bagWeightKg).toFixed(2))
-        const dryCherryBags = Number.parseFloat((dryCherry / bagWeightKg).toFixed(2))
-
-        updated.dry_p_bags = dryPBags
-        updated.dry_cherry_bags = dryCherryBags
-        updated.dry_p_bags_todate = Number.parseFloat((prevDryPBagsTodate + dryPBags).toFixed(2))
-        updated.dry_cherry_bags_todate = Number.parseFloat((prevDryCherryBagsTodate + dryCherryBags).toFixed(2))
-      } else {
-        updated.crop_todate = cropToday
-        updated.ripe_todate = ripeToday
-        updated.green_todate = greenToday
-        updated.float_todate = floatToday
-        updated.dry_p_todate = dryParch
-        updated.dry_cherry_todate = dryCherry
-
-        updated.dry_p_bags = Number.parseFloat((dryParch / bagWeightKg).toFixed(2))
-        updated.dry_cherry_bags = Number.parseFloat((dryCherry / bagWeightKg).toFixed(2))
-        updated.dry_p_bags_todate = updated.dry_p_bags
-        updated.dry_cherry_bags_todate = updated.dry_cherry_bags
-      }
-
-      if (cropToday > 0) {
-        updated.ripe_percent = Number.parseFloat(((ripeToday / cropToday) * 100).toFixed(2))
-        updated.green_percent = Number.parseFloat(((greenToday / cropToday) * 100).toFixed(2))
-        updated.float_percent = Number.parseFloat(((floatToday / cropToday) * 100).toFixed(2))
-        const greenPlusFloat = greenToday + floatToday
-        if (greenPlusFloat > 0) {
-          updated.dry_cherry_percent = Number.parseFloat(((dryCherry * 100) / greenPlusFloat).toFixed(2))
-        } else {
-          updated.dry_cherry_percent = 0
-        }
-      } else {
-        updated.ripe_percent = 0
-        updated.green_percent = 0
-        updated.float_percent = 0
-        updated.dry_cherry_percent = 0
-      }
-
-      if (ripeToday > 0) {
-        updated.fr_wp_percent = Number.parseFloat(((wetParchment / ripeToday) * 100).toFixed(2))
-      } else {
-        updated.fr_wp_percent = 0
-      }
-
-      if (wetParchment > 0) {
-        updated.wp_dp_percent = Number.parseFloat(((dryParch / wetParchment) * 100).toFixed(2))
-      } else {
-        updated.wp_dp_percent = 0
-      }
-
-      return updated
-    })
-  }, [bagWeightKg, previousRecord])
+    setRecord((prev) => ({
+      ...prev,
+      ...deriveProcessingFigures({
+        entry: prev,
+        previous: previousRecord,
+        bagWeightKg,
+        route: processingRoute,
+      }),
+    }))
+  }, [bagWeightKg, previousRecord, processingRoute])
 
   const loadRecentRecords = useCallback(async (pageIndex = 0, append = false, fetchAll = false) => {
     if (!selectedLocationId) {
@@ -1442,7 +1387,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-white/80">
+              {showsWetLine && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Wet parchment</CardTitle>
                 </CardHeader>
@@ -1455,12 +1400,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   {showAutoCalc && <div>
                     <Label htmlFor="processing-fr-wp-percent">FR-WP %</Label>
                     <Input id="processing-fr-wp-percent" type="number" inputMode="decimal" step="0.01" value={record.fr_wp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
-                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated (WP/Ripe Today)</p>
+                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated (WP / ripe cherry pulped)</p>
                   </div>}
                 </CardContent>
-              </Card>
+              </Card>}
 
-              <Card className="border-border/60 bg-white/80">
+              {showsWetLine && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Dry parchment</CardTitle>
                 </CardHeader>
@@ -1480,9 +1425,9 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (DP/WP)</p>
                   </div>}
                 </CardContent>
-              </Card>
+              </Card>}
 
-              <Card className="border-border/60 bg-white/80">
+              {showsCherryLine && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Dry cherry</CardTitle>
                 </CardHeader>
@@ -1499,36 +1444,63 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   {showAutoCalc && <div>
                     <Label htmlFor="processing-dry-cherry-percent">Dry Cherry %</Label>
                     <Input id="processing-dry-cherry-percent" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
-                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
+                    {/* Naming the denominator, because it is the thing that differs between estates
+                        and a bare "Auto-calculated" is how the old assumption stayed invisible. */}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {processingRoute === "natural"
+                        ? "Auto-calculated (cherry / whole crop)"
+                        : "Auto-calculated (cherry / crop not pulped)"}
+                    </p>
                   </div>}
                 </CardContent>
-              </Card>
+              </Card>}
 
               {showAutoCalc && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Bag output</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
-                  <div>
+                  {showsWetLine && <div>
                     <Label htmlFor="processing-dry-p-bags">Dry Parchment Bags</Label>
                     <Input id="processing-dry-p-bags" type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
-                  </div>
-                  <div>
+                  </div>}
+                  {showsWetLine && <div>
                     <Label htmlFor="processing-dry-p-bags-todate">Dry Parchment Bags To Date</Label>
                     <Input id="processing-dry-p-bags-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
-                  </div>
-                  <div>
+                  </div>}
+                  {showsCherryLine && <div>
                     <Label htmlFor="processing-dry-cherry-bags">Dry Cherry Bags</Label>
                     <Input id="processing-dry-cherry-bags" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
-                  </div>
-                  <div>
+                  </div>}
+                  {showsCherryLine && <div>
                     <Label htmlFor="processing-dry-cherry-bags-todate">Dry Cherry Bags To Date</Label>
                     <Input id="processing-dry-cherry-bags-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
-                  </div>
+                  </div>}
+                </CardContent>
+              </Card>}
+
+              {/* The number a planter is judged on, which the screen never showed. Omitted rather
+                  than shown as 0% when the day has nothing to divide, so an in-progress entry does
+                  not flash a terrible outturn at somebody mid-typing. */}
+              {showAutoCalc && dayOutturn && <Card className="border-primary/30 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="text-lg">{dayOutturn.label}</CardTitle>
+                  <CardDescription>
+                    {processingRoute === "natural"
+                      ? "Dry cherry against the fresh fruit that went to the yard."
+                      : processingRoute === "wet"
+                        ? "Dry parchment against the ripe cherry that went through the pulper."
+                        : "Everything dry today against everything picked today, both lines together."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-semibold tabular-nums text-foreground">
+                    {dayOutturn.percent.toFixed(2)}%
+                  </p>
                 </CardContent>
               </Card>}
               </div>

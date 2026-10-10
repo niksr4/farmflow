@@ -9,12 +9,16 @@ import {
   getOnboardingStatusRequests,
   INITIAL_ONBOARDING_STATUS,
   isBlocksAndAcreageDone,
+  isBlocksNamedDone,
   isInventoryDone,
+  isProcessingRouteDone,
   isTeamMemberDone,
   isWeatherDone,
   isWorkersDone,
   type OnboardingAccess,
+  type OnboardingStatusKey,
 } from "@/components/inventory-system/onboarding"
+import { resolveProcessingRoute } from "@/lib/crop-config"
 
 const fullAccess: OnboardingAccess = {
   canShowInventory: true,
@@ -27,9 +31,17 @@ const fullAccess: OnboardingAccess = {
 }
 
 describe("the order the estate is asked in", () => {
-  it("asks for the estate map first, because everything else is per-block", () => {
+  /**
+   * ⚠ THE ORDER CHANGED ON 2026-10-06 AND THE PRODUCTION DATA IS THE REASON. Of six tenants,
+   * exactly one had an acreage on every block and NOT ONE had a finished checklist. Five were
+   * stalled on step one, which was the all-or-nothing acreage gate. Medappa has 21 blocks and 29
+   * fully-rated workers, has been marking a muster for months, and still read 0 done.
+   *
+   * Asking for acreage first is sound reasoning about reports and wrong reasoning about onboarding.
+   */
+  it("asks for workers first, because the muster is the thing that happens every morning", () => {
     const steps = buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, fullAccess)
-    expect(steps[0].key).toBe("blocks_acreage")
+    expect(steps[0].key).toBe("workers")
   })
 
   it("asks for the storehouse before the stock that goes in it", () => {
@@ -37,12 +49,56 @@ describe("the order the estate is asked in", () => {
     expect(keys.indexOf("storehouse")).toBeLessThan(keys.indexOf("inventory"))
   })
 
-  it("follows the agreed sequence end to end", () => {
-    expect(buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, fullAccess).map((s) => s.key)).toEqual([
-      "blocks_acreage",
+  /**
+   * Naming a block and measuring it are separate steps now, and in this order. They were one step,
+   * and conflating "I can charge work to this block" with "I can compare this block to another" is
+   * what built the wall every tenant stopped at.
+   */
+  it("asks for a block's name before its acreage", () => {
+    const keys = buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, fullAccess).map((s) => s.key)
+    expect(keys.indexOf("blocks")).toBeLessThan(keys.indexOf("blocks_acreage"))
+  })
+
+  /**
+   * The PRINCIPLE, not the sequence. A step that unblocks daily recording must come before any step
+   * that only unblocks comparison or convenience. Stated as a partition so that inserting a step
+   * tomorrow has to respect the rule rather than just not break a hardcoded list.
+   */
+  it("puts everything that unblocks recording ahead of everything that does not", () => {
+    // Typed, so a typo in either list is a compile error rather than a silent indexOf of -1 that
+    // would quietly weaken the partition.
+    const UNBLOCKS_RECORDING: OnboardingStatusKey[] = [
+      "workers",
+      "blocks",
       "storehouse",
       "inventory",
+      "processing_route",
+    ]
+    const UNBLOCKS_NOTHING_YET: OnboardingStatusKey[] = ["blocks_acreage", "weather", "team_member"]
+
+    const keys = buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, fullAccess).map((s) => s.key)
+    const lastEssential = Math.max(...UNBLOCKS_RECORDING.map((k) => keys.indexOf(k)))
+    const firstOptional = Math.min(...UNBLOCKS_NOTHING_YET.map((k) => keys.indexOf(k)))
+
+    expect(lastEssential).toBeGreaterThanOrEqual(0)
+    expect(firstOptional).toBeGreaterThanOrEqual(0)
+    expect(
+      lastEssential,
+      `"${keys[firstOptional]}" is asked before "${keys[lastEssential]}", which an estate needs first`,
+    ).toBeLessThan(firstOptional)
+
+    // And the partition has to cover the list, or a step added tomorrow escapes the rule entirely.
+    expect([...keys].sort()).toEqual([...UNBLOCKS_RECORDING, ...UNBLOCKS_NOTHING_YET].sort())
+  })
+
+  it("follows the agreed sequence end to end", () => {
+    expect(buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, fullAccess).map((s) => s.key)).toEqual([
       "workers",
+      "blocks",
+      "storehouse",
+      "inventory",
+      "processing_route",
+      "blocks_acreage",
       "weather",
       "team_member",
     ])
@@ -53,9 +109,84 @@ describe("the order the estate is asked in", () => {
       ...fullAccess,
       canShowInventory: false,
       canShowLabor: false,
+      canShowProcessing: false,
       canManageUsers: false,
     }).map((s) => s.key)
-    expect(keys).toEqual(["blocks_acreage", "weather"])
+    expect(keys).toEqual(["blocks", "blocks_acreage", "weather"])
+  })
+
+  it("does not ask how an estate processes when it has no pulping screen", () => {
+    const keys = buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, {
+      ...fullAccess,
+      canShowProcessing: false,
+    }).map((s) => s.key)
+    expect(keys).not.toContain("processing_route")
+  })
+})
+
+describe("the processing route step cannot be born green", () => {
+  /**
+   * ⚠ THE VACUITY THIS STEP WAS ONE LINE AWAY FROM. Every reader resolves an unset route to "both"
+   * so that nothing is hidden from an estate that never answered. If this predicate did the same,
+   * the step would be complete for every tenant on day one and the question would never be asked.
+   *
+   * Null is the unanswered state. That distinction is the only thing making this step real, so it
+   * is asserted directly rather than trusted.
+   */
+  it("is not done when nobody has been asked", () => {
+    expect(isProcessingRouteDone({ settings: { estateProfile: {} } })).toBe(false)
+    expect(isProcessingRouteDone({ settings: { estateProfile: { processingRoute: null } } })).toBe(false)
+    expect(isProcessingRouteDone({})).toBe(false)
+  })
+
+  it("is not satisfied by the value a reader would have defaulted to", () => {
+    // resolveProcessingRoute(undefined) is "both". If that leaked in here the step would be free.
+    expect(resolveProcessingRoute(undefined)).toBe("both")
+    expect(isProcessingRouteDone({ settings: { estateProfile: { processingRoute: undefined } } })).toBe(false)
+  })
+
+  it.each(["wet", "natural", "both"])("is done once somebody says %s", (route) => {
+    expect(isProcessingRouteDone({ settings: { estateProfile: { processingRoute: route } } })).toBe(true)
+  })
+
+  it("is not done by a value that would be refused on write", () => {
+    expect(isProcessingRouteDone({ settings: { estateProfile: { processingRoute: "semi-washed" } } })).toBe(false)
+  })
+
+  it("reads the bare profile shape as well as the nested one", () => {
+    expect(isProcessingRouteDone({ estateProfile: { processingRoute: "wet" } })).toBe(true)
+  })
+})
+
+describe("a block needs a name before it needs an area", () => {
+  it("is done once every block is named", () => {
+    expect(isBlocksNamedDone({ locations: [{ kind: "block", name: "Top Field" }] })).toBe(true)
+  })
+
+  /**
+   * The split is only worth anything if naming can finish while acreage is still outstanding. That
+   * is Medappa's exact shape: 21 named blocks, none measured.
+   */
+  it("finishes for an estate whose blocks are all named and none measured", () => {
+    const medappaShape = {
+      locations: Array.from({ length: 21 }, (_, i) => ({ kind: "block", name: `Block ${i + 1}`, areaAcres: null })),
+    }
+    expect(isBlocksNamedDone(medappaShape)).toBe(true)
+    expect(isBlocksAndAcreageDone(medappaShape)).toBe(false)
+  })
+
+  it("is not done with a blank or whitespace name", () => {
+    expect(isBlocksNamedDone({ locations: [{ kind: "block", name: "" }] })).toBe(false)
+    expect(isBlocksNamedDone({ locations: [{ kind: "block", name: "   " }] })).toBe(false)
+    expect(isBlocksNamedDone({ locations: [{ kind: "block" }] })).toBe(false)
+  })
+
+  it("is not done with no blocks at all", () => {
+    expect(isBlocksNamedDone({ locations: [] })).toBe(false)
+  })
+
+  it("ignores the store and the general location, as the acreage check does", () => {
+    expect(isBlocksNamedDone({ locations: [{ kind: "block", name: "A" }, { kind: "store" }, { kind: "general" }] })).toBe(true)
   })
 })
 
