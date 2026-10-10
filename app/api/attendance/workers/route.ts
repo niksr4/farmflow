@@ -12,6 +12,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
 import {
   ATTENDANCE_MAX_WORKER_NAME_LENGTH,
+  isActiveWorkerNameConflict,
   ATTENDANCE_SCHEMA_HELP,
   isMissingAttendanceSchemaError,
   normalizeAttendanceWorkerName,
@@ -282,7 +283,15 @@ export async function POST(request: Request) {
     const bankAccount = String(body?.bankAccount || "").trim().slice(0, 60) || null
     const bankIfsc = String(body?.bankIfsc || "").trim().slice(0, 20) || null
 
-    const insertedRows = await runTenantQuery(
+    /**
+     * Same read-then-write window as the restore path. The duplicate check above runs in its own
+     * statement, so a concurrent create or restore can take the name before this INSERT lands. The
+     * partial unique index is what actually prevents it; this keeps the answer a sentence about
+     * the name rather than a 500.
+     */
+    let insertedRows
+    try {
+      insertedRows = await runTenantQuery(
       accountsSql,
       tenantContext,
       accountsSql`
@@ -323,7 +332,16 @@ export async function POST(request: Request) {
         RETURNING id, full_name, worker_type, daily_rate, monthly_wage, gender, kind, headcount, location_id, estate,
                   device_user_code, phone, bank_name, bank_account, bank_ifsc, created_at
       `,
-    )
+      )
+    } catch (error) {
+      if (isActiveWorkerNameConflict(error)) {
+        return NextResponse.json(
+          { success: false, error: `${name} was added to the roster a moment ago.` },
+          { status: 409 },
+        )
+      }
+      throw error
+    }
 
     const worker = insertedRows[0]
 

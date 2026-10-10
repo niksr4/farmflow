@@ -6,7 +6,12 @@ import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { normalizeAttendanceWorkerName, isMissingAttendanceSchemaError, ATTENDANCE_SCHEMA_HELP } from "@/lib/attendance"
+import {
+  normalizeAttendanceWorkerName,
+  isMissingAttendanceSchemaError,
+  isActiveWorkerNameConflict,
+  ATTENDANCE_SCHEMA_HELP,
+} from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
@@ -349,15 +354,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       )
     }
 
-    await runTenantQuery(
-      accountsSql,
-      tenantContext,
-      accountsSql`
-        UPDATE attendance_workers
-        SET active = TRUE
-        WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
-      `,
-    )
+    /**
+     * The check above is a read-then-write, so a concurrent POST or a second restore can take the
+     * name between the SELECT and this UPDATE. The partial unique index is what actually stops the
+     * duplicate; this turns its 23505 into the same answer the pre-check gives, so losing the race
+     * reads as "that name is taken" rather than "something went wrong".
+     */
+    try {
+      await runTenantQuery(
+        accountsSql,
+        tenantContext,
+        accountsSql`
+          UPDATE attendance_workers
+          SET active = TRUE
+          WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
+        `,
+      )
+    } catch (error) {
+      if (isActiveWorkerNameConflict(error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              `${(existing[0] as any).full_name} was put back on the roster a moment ago. Rename ` +
+              `one of them if both belong there.`,
+          },
+          { status: 409 },
+        )
+      }
+      throw error
+    }
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "update",

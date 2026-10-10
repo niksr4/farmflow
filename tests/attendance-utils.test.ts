@@ -6,6 +6,8 @@ import {
   normalizeAttendanceDate,
   normalizeAttendanceSchemaError,
   normalizeAttendanceWorkerName,
+  isActiveWorkerNameConflict,
+  ACTIVE_WORKER_NAME_INDEX,
 } from "../lib/attendance"
 
 describe("attendance helpers", () => {
@@ -27,5 +29,49 @@ describe("attendance helpers", () => {
 
     const normalized = normalizeAttendanceSchemaError(new Error('relation "attendance_workers" does not exist'))
     expect(normalized.message).toBe(ATTENDANCE_SCHEMA_HELP)
+  })
+})
+
+/**
+ * The restore path's namesake pre-check is a read-then-write, so the partial unique index
+ * idx_attendance_workers_tenant_name_active is what actually stops two active workers sharing a
+ * name. Verified against dev: flipping an inactive namesake to active raises 23505 on exactly this
+ * constraint. The route turns that into a 409, so this predicate decides whether a real user sees
+ * "that name is taken" or "something went wrong".
+ */
+describe("losing the race for an active worker name", () => {
+  it("recognises the violation by its constraint name", () => {
+    expect(isActiveWorkerNameConflict({ code: "23505", constraint: ACTIVE_WORKER_NAME_INDEX })).toBe(true)
+  })
+
+  it("still recognises it when the driver reports only a message", () => {
+    // Neon does not always populate `constraint`, which is how this would have slipped through to
+    // a 500 for a condition nine inactive workers on production are already in.
+    expect(
+      isActiveWorkerNameConflict({
+        code: "23505",
+        message: `duplicate key value violates unique constraint "${ACTIVE_WORKER_NAME_INDEX}"`,
+      }),
+    ).toBe(true)
+  })
+
+  it("does NOT claim every unique violation is a name clash", () => {
+    // attendance_workers also has a unique device code index. Answering "that name is taken" for a
+    // duplicate fingerprint id would send the estate looking for a worker who is not there.
+    expect(
+      isActiveWorkerNameConflict({
+        code: "23505",
+        constraint: "idx_attendance_workers_tenant_device_code",
+        message: 'duplicate key value violates unique constraint "idx_attendance_workers_tenant_device_code"',
+      }),
+    ).toBe(false)
+  })
+
+  it("ignores unrelated failures, so a real fault is not dressed up as a 409", () => {
+    expect(isActiveWorkerNameConflict(new Error("connection terminated"))).toBe(false)
+    expect(isActiveWorkerNameConflict({ code: "23503" })).toBe(false)
+    expect(isActiveWorkerNameConflict(null)).toBe(false)
+    expect(isActiveWorkerNameConflict(undefined)).toBe(false)
+    expect(isActiveWorkerNameConflict("23505")).toBe(false)
   })
 })
