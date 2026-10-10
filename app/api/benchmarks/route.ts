@@ -94,8 +94,8 @@ export async function GET(request: Request) {
         FROM tenants t
         LEFT JOIN processing_records pr
           ON pr.tenant_id = t.id
-          AND pr.process_date >= $2
-          AND pr.process_date <= $3
+          AND pr.process_date >= $1
+          AND pr.process_date <= $2
           AND pr.crop_today > 0
         LEFT JOIN sales_records sr
           ON sr.tenant_id = t.id

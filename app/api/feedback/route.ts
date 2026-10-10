@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       const html = `
         <h2 style="margin:0 0 16px;font-size:18px;color:#111">${typeLabel}</h2>
         <table style="font-size:14px;border-collapse:collapse;width:100%;margin-bottom:16px">
-          <tr><td style="padding:6px 0;color:#666;width:140px">User</td><td style="padding:6px 0;font-weight:600">${sessionUser.username}</td></tr>
+          <tr><td style="padding:6px 0;color:#666;width:140px">User</td><td style="padding:6px 0;font-weight:600">${escapeHtml(String(sessionUser.username ?? ""))}</td></tr>
           <tr><td style="padding:6px 0;color:#666">Tenant ID</td><td style="padding:6px 0;font-family:monospace;font-size:12px">${sessionUser.tenantId}</td></tr>
           <tr><td style="padding:6px 0;color:#666">Role</td><td style="padding:6px 0">${sessionUser.role}</td></tr>
           ${safePageContext ? `<tr><td style="padding:6px 0;color:#666">Current tab</td><td style="padding:6px 0">${safePageContext}</td></tr>` : ""}
