@@ -105,7 +105,9 @@ export async function GET(request: Request) {
           GROUP BY worker_id
         ),
         picking_earnings AS (
-          SELECT worker_id, COALESCE(SUM(kg_picked * rate_per_kg), 0) AS picking_total,
+          -- total_cost (scripts/154), not kg x rate. rate_per_kg is NULL on a day-rate row, so
+          -- the product is NULL, SUM skips it, and that picker's wages vanish from payroll.
+          SELECT worker_id, COALESCE(SUM(total_cost), 0) AS picking_total,
                  COALESCE(SUM(kg_picked), 0) AS total_kg
           FROM picking_records
           WHERE tenant_id = ${tenantContext.tenantId}

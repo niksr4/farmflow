@@ -41,8 +41,11 @@ const pickingBodySchema = z.object({
   payMode: z.enum(["piece", "daily", "daily_plus_incentive"]).default("piece"),
   /** Copied from the worker at entry time, never looked up later -- see scripts/154. */
   dayRate: z.number().min(0).max(99999).nullable().optional(),
-  /** 1 for an individual, the crew size for a family or contract gang. Multiplies a DAY rate only. */
-  headcount: z.number().int().min(1).max(999).default(1),
+  /**
+   * NOT ACCEPTED FROM THE CLIENT. headcount multiplies a day rate, so taking it from the body
+   * would let the caller choose the cost: 5 on an individual at Rs 494/day stores Rs 2,470 and
+   * five labourer-days. It is read from the roster below instead -- see rosterHeadcount.
+   */
   incentiveThresholdKg: z.number().min(0).max(9999).nullable().optional(),
   incentiveRatePerKg: z.number().min(0).max(99999).nullable().optional(),
   /**
@@ -125,6 +128,13 @@ export async function GET(request: Request) {
             pr.crop,
             pr.kg_picked,
             pr.rate_per_kg,
+            pr.pay_mode,
+            pr.day_rate,
+            pr.headcount,
+            pr.incentive_threshold_kg,
+            pr.incentive_rate_per_kg,
+            pr.kg_ripe,
+            pr.kg_green,
             -- Returned because POST and PUT both accept it. Without it a client cannot read back a
             -- stored 0.5 to show or re-submit, and would silently push the day back to a full 1.0
             -- on the next edit.
@@ -169,7 +179,24 @@ export async function GET(request: Request) {
         workerName: String(r.worker_name || ""),
         pickDate: String(r.pick_date),
         kgPicked: Number(r.kg_picked),
-        ratePerKg: Number(r.rate_per_kg),
+        /**
+         * NULL, NOT ZERO. Number(null) is 0, so this reported "Rs 0/kg" for every day-rate
+         * picker -- reintroducing in the response the exact lie that scripts/154 removed from
+         * storage, where rate_per_kg was made nullable precisely so a day-rate row could not
+         * claim a per-kg rate it does not have.
+         */
+        ratePerKg: r.rate_per_kg != null ? Number(r.rate_per_kg) : null,
+        /**
+         * Without these a client cannot explain `amount` and cannot round-trip an edit without
+         * guessing which mode produced it.
+         */
+        payMode: r.pay_mode ? String(r.pay_mode) : "piece",
+        dayRate: r.day_rate != null ? Number(r.day_rate) : null,
+        headcount: r.headcount != null ? Number(r.headcount) : 1,
+        incentiveThresholdKg: r.incentive_threshold_kg != null ? Number(r.incentive_threshold_kg) : null,
+        incentiveRatePerKg: r.incentive_rate_per_kg != null ? Number(r.incentive_rate_per_kg) : null,
+        kgRipe: r.kg_ripe != null ? Number(r.kg_ripe) : null,
+        kgGreen: r.kg_green != null ? Number(r.kg_green) : null,
         dayFraction: Number(r.day_fraction),
         amount: Number(r.amount),
         crop: r.crop ? String(r.crop) : "coffee",
@@ -206,7 +233,7 @@ export async function POST(request: Request) {
     }
     const {
       workerId, pickDate, crop, kgPicked, ratePerKg, locationId, notes, dayFraction,
-      payMode, dayRate, headcount, incentiveThresholdKg, incentiveRatePerKg, kgRipe, kgGreen,
+      payMode, dayRate, incentiveThresholdKg, incentiveRatePerKg, kgRipe, kgGreen,
     } = parsed.data
 
     /**
@@ -250,11 +277,24 @@ export async function POST(request: Request) {
     const workerRows = await runTenantQuery(
       accountsSql,
       tenantContext,
-      accountsSql`SELECT id FROM attendance_workers WHERE id = ${workerId}::uuid AND tenant_id = ${tenantContext.tenantId} AND active = TRUE LIMIT 1`,
+      accountsSql`SELECT id, kind, headcount FROM attendance_workers WHERE id = ${workerId}::uuid AND tenant_id = ${tenantContext.tenantId} AND active = TRUE LIMIT 1`,
     )
     if (!(workerRows as any[]).length) {
       return NextResponse.json({ success: false, error: "Worker not found" }, { status: 404 })
     }
+
+    /**
+     * HEADCOUNT COMES FROM THE ROSTER, NOT THE REQUEST. scripts/154 says this column mirrors
+     * labour_assignments.headcount "including the copied at entry time rule" -- and copying it
+     * means copying it from the worker, which is what makes it a fact rather than an assertion.
+     *
+     * Taken from the body it is a cost multiplier the caller chooses: headcount 5 on an
+     * individual at Rs 494/day stores Rs 2,470 and five estate labourer-days, with nothing raising
+     * an error. An individual is always 1; a crew defaults to the size the roster records.
+     */
+    const workerRow = (workerRows as any[])[0]
+    const rosterHeadcount =
+      workerRow?.kind === "gang" ? Math.max(1, Number(workerRow.headcount) || 1) : 1
 
     const inserted = await runTenantQuery(
       accountsSql,
@@ -277,7 +317,7 @@ export async function POST(request: Request) {
           ${dayFraction ?? 1},
           ${payMode},
           ${dayRate ?? null},
-          ${headcount},
+          ${rosterHeadcount},
           ${incentiveThresholdKg ?? null},
           ${incentiveRatePerKg ?? null},
           ${kgRipe ?? null},

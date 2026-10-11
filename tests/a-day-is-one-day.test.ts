@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
+import { executableSql } from "./helpers/executable-sql"
+
 /**
  * A worker's day cannot be booked twice.
  *
@@ -32,57 +34,6 @@ import { describe, expect, it } from "vitest"
  * only to prove its no-rewrite promise still holds.
  */
 const legacyCap = readFileSync("scripts/145-labour-day-cap-one-day.sql", "utf8")
-
-/**
- * COMMENTS REMOVED, THE WAY PLPGSQL READS THEM.
- *
- * Every assertion below is about what the database EXECUTES. Reading the raw file means a control
- * that has been commented out still satisfies its own test -- and commenting out is how a control
- * actually gets disabled, far more often than deleting it. My tamper tests only ever DELETED the
- * lock and the move conditions, which is the easier half, so the guard was verified against the
- * tamper it could survive. Raised by CodeRabbit on PR #55.
- *
- * Dollar-quoted bodies are deliberately NOT treated as opaque. SQL sees `$$ … $$` as one string,
- * but plpgsql then parses what is inside it, and that is where every rule in this file lives -- so
- * `--` and nested `/* … *\/` are stripped in there too. Single-quoted literals ARE preserved,
- * because the RAISE EXCEPTION messages are data and contain apostrophes and punctuation that would
- * otherwise be read as syntax.
- */
-const executableSql = (sql: string): string => {
-  let out = ""
-  let i = 0
-  let inString = false
-  let blockDepth = 0
-  while (i < sql.length) {
-    const two = sql.slice(i, i + 2)
-    if (inString) {
-      out += sql[i]
-      if (sql[i] === "'") {
-        if (sql[i + 1] === "'") { out += "'"; i += 2; continue }
-        inString = false
-      }
-      i += 1
-      continue
-    }
-    if (blockDepth > 0) {
-      if (two === "/*") { blockDepth += 1; i += 2; continue }
-      if (two === "*/") { blockDepth -= 1; i += 2; continue }
-      // Newlines kept so reported positions and ordering checks stay meaningful.
-      out += sql[i] === "\n" ? "\n" : " "
-      i += 1
-      continue
-    }
-    if (two === "/*") { blockDepth = 1; i += 2; continue }
-    if (two === "--") {
-      while (i < sql.length && sql[i] !== "\n") i += 1
-      continue
-    }
-    if (sql[i] === "'") { inString = true; out += sql[i]; i += 1; continue }
-    out += sql[i]
-    i += 1
-  }
-  return out
-}
 
 const cap = executableSql(readFileSync("scripts/152-picking-shares-the-day-budget.sql", "utf8"))
 const route = readFileSync("app/api/attendance/assignments/route.ts", "utf8")

@@ -174,8 +174,14 @@ ALTER TABLE picking_records
       CASE pay_mode
         WHEN 'piece' THEN COALESCE(kg_picked, 0) * COALESCE(rate_per_kg, 0)
         WHEN 'daily' THEN COALESCE(day_rate, 0) * headcount * day_fraction
+        -- ⚠ THE THRESHOLD IS PER PERSON, so it scales with headcount exactly as day_rate does.
+        -- Mixing the units silently overpays a crew: a family of 6 picking 300 kg against a 40 kg
+        -- threshold at Rs 3 would earn (300 - 40) x 3 = Rs 780 on a per-ROW threshold, where the
+        -- estate means (300 - 6x40) x 3 = Rs 180. day_rate is already per-head in the line above,
+        -- so a per-row threshold would make one expression speak both languages at once.
+        -- Identical for an individual, where headcount is 1.
         ELSE COALESCE(day_rate, 0) * headcount * day_fraction
-             + GREATEST(0, COALESCE(kg_picked, 0) - COALESCE(incentive_threshold_kg, 0))
+             + GREATEST(0, COALESCE(kg_picked, 0) - COALESCE(incentive_threshold_kg, 0) * headcount)
                * COALESCE(incentive_rate_per_kg, 0)
       END
     , 2)

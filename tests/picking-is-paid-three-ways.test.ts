@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs"
+import { globSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+
+import { executableSql } from "./helpers/executable-sql"
 
 /**
  * PICKING IS PAID THREE WAYS AT ONE ESTATE, IN ONE SEASON, SOMETIMES ON ONE DAY.
@@ -30,42 +33,6 @@ import { describe, expect, it } from "vitest"
  *   gang of 6 on a day rate          -> Rs 2964, 6 CONTRACT days
  *   gang of 6 piece (the real case)  -> Rs 1200, 0
  */
-
-/** Comment-aware, so a commented-out clause cannot satisfy an assertion about executable SQL. */
-const executableSql = (sql: string): string => {
-  let out = ""
-  let i = 0
-  let inString = false
-  let blockDepth = 0
-  while (i < sql.length) {
-    const two = sql.slice(i, i + 2)
-    if (inString) {
-      out += sql[i]
-      if (sql[i] === "'") {
-        if (sql[i + 1] === "'") { out += "'"; i += 2; continue }
-        inString = false
-      }
-      i += 1
-      continue
-    }
-    if (blockDepth > 0) {
-      if (two === "/*") { blockDepth += 1; i += 2; continue }
-      if (two === "*/") { blockDepth -= 1; i += 2; continue }
-      out += sql[i] === "\n" ? "\n" : " "
-      i += 1
-      continue
-    }
-    if (two === "/*") { blockDepth = 1; i += 2; continue }
-    if (two === "--") {
-      while (i < sql.length && sql[i] !== "\n") i += 1
-      continue
-    }
-    if (sql[i] === "'") { inString = true; out += sql[i]; i += 1; continue }
-    out += sql[i]
-    i += 1
-  }
-  return out
-}
 
 const migration = executableSql(readFileSync("scripts/154-picking-pay-modes.sql", "utf8"))
 
@@ -133,9 +100,23 @@ describe("the cost view reads the mode instead of assuming piece rate", () => {
   it("pays the incentive only on the kilos above the threshold, and never negatively", () => {
     // A picker who misses the threshold gets the day rate, not the day rate minus something.
     // Dad, on a bad day: they are "paid minimum wage nevertheless".
-    expect(migration).toMatch(
-      /GREATEST\(0, COALESCE\(kg_picked, 0\) - COALESCE\(incentive_threshold_kg, 0\)\)/,
-    )
+    expect(migration).toMatch(/GREATEST\(0, COALESCE\(kg_picked, 0\) - /)
+  })
+
+  it("scales the threshold by headcount, because the day rate it sits beside is per person", () => {
+    /**
+     * THE UNITS HAVE TO MATCH AND NEARLY DID NOT. day_rate is multiplied by headcount on the line
+     * above, so it is a per-person figure; kg_picked on a crew row is the whole crew's kilos. A
+     * per-ROW threshold would make one expression speak both languages:
+     *
+     *   family of 6, 300 kg, 40 kg threshold at Rs 3
+     *     per-row threshold   (300 - 40)   x 3 = Rs 780
+     *     per-person (meant)  (300 - 6x40) x 3 = Rs 180
+     *
+     * Nothing raises an error either way, and an individual is identical because headcount is 1 --
+     * so the overpayment would only ever appear on crew rows, which is where nobody is checking.
+     */
+    expect(migration).toMatch(/COALESCE\(incentive_threshold_kg, 0\) \* headcount/)
   })
 
   it("counts a labourer-day for a day rate and none for a kilo", () => {
@@ -234,5 +215,42 @@ describe("ripe and green, where the estate separates them", () => {
     expect(migration).toMatch(/WHEN 'piece' THEN COALESCE\(kg_picked, 0\) \* COALESCE\(rate_per_kg, 0\)/)
     expect(migration).toMatch(/COALESCE\(kg_picked, 0\) - COALESCE\(incentive_threshold_kg, 0\)/)
     expect(migration).not.toMatch(/kg_ripe \+ kg_green\) \* /)
+  })
+})
+
+describe("every reader of a picking row asks the row what it cost", () => {
+  /**
+   * ⚠ THE SWEEP THAT SHOULD HAVE HAPPENED WHEN pay_mode WAS ADDED, and did not.
+   *
+   * Making rate_per_kg nullable fixed the cost view and the picking route, and left
+   * payroll-summary and reconciliation still computing SUM(kg_picked * rate_per_kg). On a
+   * day-rate row that product is NULL, SUM SKIPS NULLS, and the picker's wages simply vanish from
+   * payroll -- no error, no zero, just a smaller number. Found by CodeRabbit, not by me, on a PR
+   * whose entire subject was that this arithmetic had moved.
+   *
+   * Derived rather than listed: this finds every file that reads the table and checks that file,
+   * so a consumer written next season is covered next season. A hand-kept list of two is exactly
+   * how the third instance hides.
+   */
+  const readers = globSync("{app,lib,components}/**/*.{ts,tsx}").filter((f) =>
+    readFileSync(f, "utf8").includes("picking_records"),
+  )
+
+  it("finds the readers at all, so this guard cannot pass by scanning nothing", () => {
+    // A derived set that silently becomes empty is a test that always passes.
+    expect(readers.length).toBeGreaterThan(0)
+  })
+
+  it("has none of them price a picking row themselves", () => {
+    const offenders = readers.filter((f) => {
+      const src = readFileSync(f, "utf8")
+      // Shape, not identifiers: any multiplication of a picked weight by a per-kg rate, in either
+      // order, with or without a table alias.
+      return /kg_picked\s*\*\s*(\w+\.)?rate_per_kg|(\w+\.)?rate_per_kg\s*\*\s*(\w+\.)?kg_picked/.test(src)
+    })
+    expect(
+      offenders,
+      "these price a picking row instead of reading total_cost, so day-rate wages vanish from their totals",
+    ).toEqual([])
   })
 })

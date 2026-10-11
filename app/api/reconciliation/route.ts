@@ -261,7 +261,8 @@ export async function GET(request: NextRequest) {
              GROUP BY worker_id
            ),
            picking_earnings AS (
-             SELECT worker_id, COALESCE(SUM(kg_picked * rate_per_kg), 0) AS picking_total
+             -- total_cost (scripts/154): kg x rate is NULL for a day-rate row and SUM drops it.
+             SELECT worker_id, COALESCE(SUM(total_cost), 0) AS picking_total
              FROM picking_records
              WHERE tenant_id = $1 AND pick_date BETWEEN $2::date AND $3::date
              GROUP BY worker_id
