@@ -124,7 +124,7 @@ export default function SignupRoute() {
                       source: "signup-page",
                     }),
                   })
-                  const data = await response.json()
+                  const data = await response.json().catch(() => ({}))
                   if (!response.ok || !data?.success) {
                     throw new Error(data?.error || "Failed to create estate")
                   }

@@ -213,7 +213,6 @@ const scan = () => {
  */
 const ACCEPTED: Record<string, { count: number; why: string }> = {
   "app/api/coffee-news/route.ts": { count: 1, why: "cache key for a news feed — a day-early key costs one refetch" },
-  "app/api/weather/rainfall-context/route.ts": { count: 1, why: "forecast context window, not a recorded figure" },
   "components/tenant-settings-page.tsx": { count: 1, why: "date in a download filename" },
   "components/inventory-system.tsx": { count: 2, why: "dates in two CSV download filenames" },
   "components/admin/utils.ts": { count: 1, why: "DEFAULT_WEEKLY_START, an admin date-picker seed the operator immediately overrides" },

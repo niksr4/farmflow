@@ -24,7 +24,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     const { id: idParam } = await context.params
     const id = Number(idParam)
 
-    if (!id || Number.isNaN(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return NextResponse.json({ success: false, message: "Invalid transaction id" }, { status: 400 })
     }
 

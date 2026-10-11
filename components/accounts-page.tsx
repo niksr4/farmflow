@@ -739,13 +739,11 @@ export default function AccountsPage({
     if (!deploymentsToExport) return
 
     const csvBody = buildCombinedAccountsCsv(deploymentsToExport)
-    const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvBody)
-    const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
-    link.setAttribute("download", buildAccountsCsvFilename(resolvedExportStartDate, resolvedExportEndDate))
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    // Blob, not a data: URI: encodeURI leaves "#" unescaped, which silently truncated the file at any "#" in a note.
+    downloadBlob(
+      new Blob(["\uFEFF" + csvBody], { type: "text/csv;charset=utf-8" }),
+      buildAccountsCsvFilename(resolvedExportStartDate, resolvedExportEndDate),
+    )
     toast.success(`Accounts CSV exported (${deploymentsToExport.length} entries)`)
 
     posthog.capture("accounts_export_downloaded", {
@@ -936,13 +934,10 @@ export default function AccountsPage({
           qifContent += "^\n"
         })
 
-      const encodedUri = encodeURI("data:text/plain;charset=utf-8," + qifContent)
-      const link = document.createElement("a")
-      link.setAttribute("href", encodedUri)
-      link.setAttribute("download", buildAccountsQifFilename(resolvedExportStartDate, resolvedExportEndDate))
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      downloadBlob(
+        new Blob([qifContent], { type: "text/plain;charset=utf-8" }),
+        buildAccountsQifFilename(resolvedExportStartDate, resolvedExportEndDate),
+      )
       toast.success(`Accounts ${canonicalFormat.toUpperCase()} exported (${deploymentsToExport.length} entries)`)
 
       posthog.capture("accounts_export_downloaded", {
