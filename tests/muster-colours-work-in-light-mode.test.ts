@@ -60,14 +60,19 @@ const SEMANTIC_HUES = [
 ] as const
 
 /**
- * `text-stone-400` is EXCLUDED ON PURPOSE, and it is not a free pass.
+ * `text-stone-400` is EXCLUDED FROM THIS SCAN BECAUSE IT IS FIXED CENTRALLY, NOT BECAUSE IT IS
+ * IGNORED.
  *
- * It measures 2.46:1 on the light card and also fails AA -- but it is the app's muted-label
- * convention, 365 uses across 49 component files, and `app/globals.css` already treats it as the
- * light value by patching only `.dark .text-stone-400`. Repainting it inside the muster alone
- * would make these five tabs disagree with the other forty-four files, which is a worse result
- * than the thing it fixes. It wants one light-mode override in `globals.css` mapping it onto
- * `--muted-foreground` (4.58:1), which is an app-wide visual decision and the user's call.
+ * It measured 2.46:1 on the light card -- the app's muted-label colour, 383 uses across
+ * `components/` and `app/`, failing AA for most of the people reading it. Repainting it inside the
+ * muster alone would have made these five tabs disagree with the other forty-odd files, so it was
+ * repaired where it belongs: one light-mode rule in `app/globals.css` mapping it onto
+ * `hsl(var(--muted-foreground) / 0.8)`, which measures 4.58:1 and stays lighter than body text.
+ *
+ * That makes the exclusion correct and the hue genuinely out of scope here -- but it also means
+ * this file's reason for skipping `stone` now depends on a rule in a DIFFERENT file that nothing
+ * else guards. `the app-wide muted label is repaired centrally` below asserts that rule exists, so
+ * deleting it fails a test rather than quietly restoring a 2.46:1 default across the whole app.
  */
 const EXCLUDED_HUE = "stone"
 
@@ -236,10 +241,44 @@ describe("the muster subtabs are legible in the theme the app actually opens in"
     expect(findBareDarkTunedText("components/payroll-summary-tab.tsx")).toEqual([])
   })
 
-  it("excludes the app-wide muted label, and says so where somebody will look", () => {
-    // Guards the reasoning, not the colour: if stone is ever folded into SEMANTIC_HUES, the
-    // comment explaining why it was left out must stop claiming otherwise.
+  it("the app-wide muted label is repaired centrally, which is why this scan skips it", () => {
+    /**
+     * The earlier version of this test asserted that THIS FILE contains the string
+     * "--muted-foreground" — satisfied by the comment above it, which is a test of its own prose.
+     * What actually matters is a rule in a different file, so that is what is checked.
+     *
+     * `.text-stone-400` has to be unprefixed to beat Tailwind's own utility at equal specificity
+     * (globals.css sits after `@tailwind utilities`), while `.dark .text-stone-400` outranks it on
+     * specificity and keeps dark mode as it was. Both halves are asserted, because losing either
+     * one silently breaks a theme.
+     */
     expect(SEMANTIC_HUES as readonly string[]).not.toContain(EXCLUDED_HUE)
-    expect(repoFile("tests/muster-colours-work-in-light-mode.test.ts")).toContain("--muted-foreground")
+
+    const css = repoFile("app/globals.css")
+
+    /**
+     * EVERY RULE, PINNED TO ITS VALUE. Raised by CodeRabbit on PR #69: this previously matched
+     * `^\.dark \.text-stone-400\s+\{` and nothing after it, so the dark value could be edited
+     * freely while a test claiming to protect "dark mode as it was" stayed green — and it checked
+     * only the unprefixed selector, so deleting `/80` or `/90` silently returned those labels to
+     * the 2.46:1 default. Tailwind emits each opacity variant as its own class, so each needs its
+     * own assertion; three rules sharing a value is three ways to lose it.
+     */
+    const rule = (selector: string, alpha: string) =>
+      new RegExp(
+        `^${selector.replace(/[.\\/]/g, (c) => `\\${c}`)}\\s+\\{\\s*color:\\s*hsl\\(var\\(--muted-foreground\\)\\s*/\\s*${alpha.replace(".", "\\.")}\\)`,
+        "m",
+      )
+
+    for (const selector of [".text-stone-400", ".text-stone-400\\/80", ".text-stone-400\\/90"]) {
+      expect(css, `${selector} lost its light-mode repair — those labels fall back to 2.46:1`).toMatch(
+        rule(selector, "0.8"),
+      )
+    }
+    expect(css, "the dark override must survive AT 0.60, or dark mode shifts too").toMatch(
+      rule(".dark .text-stone-400", "0.60"),
+    )
+    // stone-300 must NOT be swept in: its uses are light text on dark marketing pages.
+    expect(css).not.toMatch(/^\.text-stone-300\s+\{/m)
   })
 })
