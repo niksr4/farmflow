@@ -271,3 +271,54 @@ describe("a worker taken off the roster can be found and put back", () => {
     expect(screen.queryByText(/could not load workers/i)).not.toBeInTheDocument()
   })
 })
+
+/**
+ * THE ROSTER'S OWN LOAD HAS THE SAME DEFECT THE RECOVERY LIST HAD, and it is the more dangerous
+ * of the two. `fetchWorkers` reported only *thrown* errors; a 403 from the module gate or a 500
+ * arrives as `success: false` over a good HTTP round trip, so the list stayed empty and the empty
+ * branch renders "No workers yet — add your first worker".
+ *
+ * That sentence is an instruction. An estate with forty-one people following it creates duplicates
+ * — the exact failure the restore path in this same file exists to prevent.
+ */
+describe("a roster that failed to load is not an empty roster", () => {
+  const failing = (status: number, body: unknown) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        const json = (b: unknown, st = 200) =>
+          new Response(JSON.stringify(b), { status: st, headers: { "content-type": "application/json" } })
+        if (url.includes("state=inactive")) return json({ success: true, workers: [] })
+        if (url.startsWith("/api/attendance")) return json(body, status)
+        return json({ success: true })
+      }),
+    )
+
+  it("never tells an estate to add their first worker when the load was refused", async () => {
+    failing(403, { success: false, error: "Module access disabled" })
+    render(<WorkerProfilesTab />)
+
+    expect(await screen.findByText(/could not load the roster/i)).toBeInTheDocument()
+    expect(screen.queryByText(/add your first worker/i)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument()
+  })
+
+  it("does not claim a headcount it does not have", async () => {
+    // "0 active workers" is a measurement. On a refused load nothing was measured.
+    failing(500, { success: false, error: "boom" })
+    render(<WorkerProfilesTab />)
+
+    await screen.findByText(/could not load the roster/i)
+    expect(screen.queryByText(/0 active worker/i)).not.toBeInTheDocument()
+  })
+
+  it("still shows the real empty state for an estate that genuinely has nobody", async () => {
+    // The guard must not swallow the legitimate case: a new tenant SHOULD be told to add someone.
+    failing(200, { success: true, workers: [] })
+    render(<WorkerProfilesTab />)
+
+    expect(await screen.findByText(/add your first worker/i)).toBeInTheDocument()
+    expect(screen.queryByText(/could not load the roster/i)).not.toBeInTheDocument()
+  })
+})
