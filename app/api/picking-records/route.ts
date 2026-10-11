@@ -24,7 +24,34 @@ const pickingBodySchema = z.object({
   // have always meant in practice.
   crop: z.enum(["coffee", "pepper"]).default("coffee"),
   kgPicked: z.number().positive("kg picked must be positive").max(9999),
-  ratePerKg: z.number().min(0, "rate must be non-negative").max(99999),
+  /**
+   * NULLABLE NOW, because a day-rate row has no per-kg rate and storing 0 is a lie that computes.
+   * Still required for 'piece' -- enforced below, where the message can be a sentence rather than
+   * a Postgres constraint name.
+   */
+  ratePerKg: z.number().min(0, "rate must be non-negative").max(99999).nullable().optional(),
+  /**
+   * HOW THIS ROW IS PAID. All three coexist at one estate in one season (HoneyFarm, 2026-10-11):
+   * permanent checkroll and casual workers get a day rate plus an incentive, arabica fly picking
+   * gets minimum wage irrespective of quantity, and Assam or outside labour is straight per kilo.
+   * Everyone is weighed regardless, because the kilos are the crop figure and the block yield.
+   *
+   * Defaults to 'piece' so an older client that does not send it keeps its current meaning.
+   */
+  payMode: z.enum(["piece", "daily", "daily_plus_incentive"]).default("piece"),
+  /** Copied from the worker at entry time, never looked up later -- see scripts/154. */
+  dayRate: z.number().min(0).max(99999).nullable().optional(),
+  /** 1 for an individual, the crew size for a family or contract gang. Multiplies a DAY rate only. */
+  headcount: z.number().int().min(1).max(999).default(1),
+  incentiveThresholdKg: z.number().min(0).max(9999).nullable().optional(),
+  incentiveRatePerKg: z.number().min(0).max(99999).nullable().optional(),
+  /**
+   * The ripe/green split, where the estate separates them. Both or neither, and they must sum to
+   * kgPicked. Absent on the dry/cherry route, which records only a total -- absent rather than
+   * zero, because no such measurement was taken.
+   */
+  kgRipe: z.number().min(0).max(9999).nullable().optional(),
+  kgGreen: z.number().min(0).max(9999).nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
   /**
@@ -102,7 +129,10 @@ export async function GET(request: Request) {
             -- stored 0.5 to show or re-submit, and would silently push the day back to a full 1.0
             -- on the next edit.
             pr.day_fraction,
-            (pr.kg_picked * pr.rate_per_kg) AS amount,
+            -- The generated column (scripts/154), not a second copy of the formula. This read was
+            -- kg_picked x rate_per_kg, which is NULL for a day-rate row, so the whole point of
+            -- pay_mode would have been lost one SELECT after the view learned it.
+            pr.total_cost AS amount,
             pr.location_id,
             pr.notes,
             pr.created_at
@@ -120,7 +150,7 @@ export async function GET(request: Request) {
         accountsSql`
           SELECT
             COALESCE(SUM(kg_picked), 0) AS total_kg,
-            COALESCE(SUM(kg_picked * rate_per_kg), 0) AS total_amount
+            COALESCE(SUM(total_cost), 0) AS total_amount
           FROM picking_records pr
           WHERE pr.tenant_id = ${tenantContext.tenantId}
             ${workerFilter}${cropFilter} ${startFilter} ${endFilter} ${estateFilter}
@@ -174,7 +204,47 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
-    const { workerId, pickDate, crop, kgPicked, ratePerKg, locationId, notes, dayFraction } = parsed.data
+    const {
+      workerId, pickDate, crop, kgPicked, ratePerKg, locationId, notes, dayFraction,
+      payMode, dayRate, headcount, incentiveThresholdKg, incentiveRatePerKg, kgRipe, kgGreen,
+    } = parsed.data
+
+    /**
+     * THE SAME RULES THE DATABASE ENFORCES, CHECKED HERE SO THE ANSWER IS A SENTENCE.
+     * scripts/154 makes a half-specified row unstorable; without this the caller would get a
+     * constraint name. The database stays the authority -- this is the explanation, not the guard.
+     */
+    const missing =
+      payMode === "piece" && ratePerKg == null
+        ? "A per-kilo rate is needed when picking is paid by weight."
+        : payMode !== "piece" && dayRate == null
+          ? "A day rate is needed when picking is paid by the day."
+          : payMode === "daily_plus_incentive" && (incentiveThresholdKg == null || incentiveRatePerKg == null)
+            ? "An incentive needs both a threshold and a rate for the kilos above it."
+            : null
+    if (missing) {
+      return NextResponse.json({ success: false, error: missing }, { status: 400 })
+    }
+
+    /**
+     * Both or neither, and they must agree with the total. Checked before the insert because
+     * "ripe and green must add up to the total picked" is actionable and a CHECK violation is not.
+     */
+    if ((kgRipe == null) !== (kgGreen == null)) {
+      return NextResponse.json(
+        { success: false, error: "Record both ripe and green, or neither." },
+        { status: 400 },
+      )
+    }
+    if (kgRipe != null && kgGreen != null && Math.abs(kgRipe + kgGreen - kgPicked) > 0.001) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Ripe (${kgRipe} kg) and green (${kgGreen} kg) add up to ${kgRipe + kgGreen} kg, but the total picked is ${kgPicked} kg.`,
+        },
+        { status: 400 },
+      )
+    }
 
     // Verify worker belongs to this tenant
     const workerRows = await runTenantQuery(
@@ -190,17 +260,28 @@ export async function POST(request: Request) {
       accountsSql,
       tenantContext,
       accountsSql`
-        INSERT INTO picking_records (tenant_id, worker_id, pick_date, crop, kg_picked, rate_per_kg, location_id, notes, day_fraction)
+        INSERT INTO picking_records (
+          tenant_id, worker_id, pick_date, crop, kg_picked, rate_per_kg, location_id, notes,
+          day_fraction, pay_mode, day_rate, headcount, incentive_threshold_kg,
+          incentive_rate_per_kg, kg_ripe, kg_green
+        )
         VALUES (
           ${tenantContext.tenantId},
           ${workerId}::uuid,
           ${pickDate}::date,
           ${crop},
           ${kgPicked},
-          ${ratePerKg},
+          ${ratePerKg ?? null},
           ${locationId ?? null}::uuid,
           ${notes ?? null},
-          ${dayFraction ?? 1}
+          ${dayFraction ?? 1},
+          ${payMode},
+          ${dayRate ?? null},
+          ${headcount},
+          ${incentiveThresholdKg ?? null},
+          ${incentiveRatePerKg ?? null},
+          ${kgRipe ?? null},
+          ${kgGreen ?? null}
         )
         RETURNING id
       `,
