@@ -1,7 +1,6 @@
 import React, { Suspense } from "react"
 import type { Metadata, Viewport } from "next"
 import { cookies } from "next/headers"
-import { Fraunces, Manrope } from "next/font/google"
 import Script from "next/script"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
@@ -21,8 +20,9 @@ import WebVitals from "@/components/web-vitals"
 import { LocaleProvider } from "@/components/locale-provider"
 import { LOCALE_COOKIE_KEY, normalizeAppLocale } from "@/lib/i18n"
 
-const bodyFont = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-body" })
-const displayFont = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap", variable: "--font-display" })
+// Self-hosted, and shared with components/public-site-shell.tsx so the app and the marketing site
+// cannot drift onto different weights of the same typeface. See app/fonts/index.ts for why.
+import { bodyFont, displayFont } from "@/app/fonts"
 
 const resolveMetadataBase = () => {
   const explicitUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim()

@@ -126,13 +126,19 @@ function mockPayroll(payload: Record<string, unknown>) {
   return fetchMock
 }
 
-/** Fills the screen the way an admin does: pick nothing, press Generate, wait for figures. */
-async function generate() {
+/**
+ * Fills the screen the way an admin does: pick nothing, press Generate, wait for figures.
+ *
+ * `waitForName` is which worker proves the payload has landed. It defaults to the standard
+ * fixture; a test that supplies its own roster has to say whose row to wait for, because waiting
+ * for a name that is not in the payload fails on the wait rather than on the assertion.
+ */
+async function generate(waitForName = "Manoj") {
   const user = userEvent.setup()
   const { container } = render(<PayrollSummaryTab />)
   await user.click(screen.getByRole("button", { name: /generate/i }))
   const table = await screen.findByRole("table")
-  await waitFor(() => expect(within(table).getByText("Manoj")).toBeInTheDocument())
+  await waitFor(() => expect(within(table).getByText(waitForName)).toBeInTheDocument())
 
   /**
    * Both layouts are in the document at once — jsdom has no CSS, so `md:hidden` and `hidden
@@ -306,8 +312,53 @@ describe("the exported sheet reconciles with the screen", () => {
   it("every line has as many fields as the header, rules on", async () => {
     const rows = await csvFrom(true)
     const width = rows[0].length
-    expect(width).toBe(16)
+    // 17 since "Retention Not Held" joined its two siblings. The figure is deliberately spelled out
+    // rather than derived from rows[0], or this asserts only that a file is rectangular.
+    expect(width).toBe(17)
     expect(rows.every((row) => row.length === width)).toBe(true)
+  })
+
+  it("exports all three shortfalls WITH THEIR AMOUNTS, not just the column names", async () => {
+    /**
+     * Retention was the one of the three computed and never exported, so a wage sheet could show a
+     * net of zero with no column accounting for the difference.
+     *
+     * ⚠ This asserted only the three HEADERS until CodeRabbit pointed out (PR #68) that it would
+     * pass with every value at "0.00" — a column that exists and is always empty is the same
+     * invisible as no column, and naming it would have looked like coverage. So the fixture now
+     * carries a nonzero figure for each and the cells are read by header position.
+     */
+    mockPayroll({
+      usesRules: true,
+      workers: [{ ...MANOJ, retentionShortfall: 260, advanceShortfall: 140, deductionShortfall: 75 }],
+      totals: { ...TOTALS, retentionShortfall: 260, advanceShortfall: 140, deductionShortfall: 75 },
+    })
+    const { user } = await generate()
+
+    let captured = ""
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob | MediaSource) => {
+      void (blob as Blob).text().then((text) => { captured = text })
+      return "blob:payroll"
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {})
+    await user.click(screen.getByRole("button", { name: /^csv$/i }))
+    await waitFor(() => expect(captured).not.toBe(""))
+
+    const rows = captured.split("\n").map((line) => line.split(","))
+    const header = rows[0]
+    const at = (row: string[], name: string) => row[header.indexOf(name)]
+
+    // The worker's own line.
+    expect(at(rows[1], "Retention Not Held (₹)")).toBe("260.00")
+    expect(at(rows[1], "Advance Not Recovered (₹)")).toBe("140.00")
+    expect(at(rows[1], "Deduction Not Taken (₹)")).toBe("75.00")
+
+    // And the TOTAL line, which is a separate branch of the same builder.
+    const total = rows.at(-1) as string[]
+    expect(total[0]).toBe("TOTAL")
+    expect(at(total, "Retention Not Held (₹)")).toBe("260.00")
+    expect(at(total, "Advance Not Recovered (₹)")).toBe("140.00")
+    expect(at(total, "Deduction Not Taken (₹)")).toBe("75.00")
   })
 
   it("carries the rule columns, so the net can be arrived at from the figures beside it", async () => {
@@ -356,6 +407,64 @@ describe("what the screen says when the numbers cannot be trusted", () => {
     })
     await generate()
     expect(screen.getByText(/1 monthly-paid worker has no salary/)).toBeInTheDocument()
+  })
+
+  it("says how much retention the wage could not cover, instead of a net of zero with no reason", async () => {
+    /**
+     * THE THIRD SHORTFALL. lib/pay-rules.ts clamps retention to gross and reports the rest;
+     * tests/payroll-adds-up.test.ts pins the arithmetic (gross 100, retention due 360 -> holds 100,
+     * net 0, 260 over). The figure reached the browser and no component read it, so the screen
+     * showed a worker earning nothing with nothing to explain where it went.
+     *
+     * Asserted on BOTH layouts, because they are independent blocks of JSX over one payload.
+     */
+    const thin = {
+      ...MANOJ,
+      id: "w-thin",
+      name: "Sunitha",
+      daysPresent: 1,
+      attendanceEarnings: 100,
+      pickingKg: 0,
+      pickingEarnings: 0,
+      adjustments: 0,
+      deductions: 0,
+      deductionsTaken: 0,
+      overtime: 0,
+      advanceRecovered: 0,
+      retention: 100,
+      retentionShortfall: 260,
+      netPayable: 0,
+    }
+    mockPayroll({ usesRules: true, workers: [thin], totals: { ...TOTALS, retentionShortfall: 260 } })
+    const { table, phone } = await generate("Sunitha")
+
+    // Desktop: in the Retention column, beside what was actually held.
+    expect(readTable(table).cell(0, "Retention")).toBe("-₹100(₹260 short)")
+
+    /**
+     * AND IN THE DESKTOP TOTAL. Raised by CodeRabbit on PR #68: the worker rows showed each
+     * shortfall and the phone's totals card showed the aggregate, but the desktop total showed
+     * only retention held — the two layouts disagreeing about one period, which is the one thing
+     * they must never do. Nothing covered the footer, so dropping it again went unnoticed by all
+     * fifteen tests in this file.
+     */
+    // Spaced, unlike the worker cell above: that one's "(… short)" is a tooltip trigger sitting
+    // flush against the figure, this one is plain text in the footer.
+    expect(readTable(table).footerCell("Retention")).toBe("-₹840 (₹260 short)")
+
+    /**
+     * Phone: scoped to SUNITHA'S OWN CARD, not to the phone region.
+     *
+     * `within(phone).getAllByText("Could not hold")` passed with the worker line deleted, because
+     * the totals card carries the same label and getAllByText found that instead. A query broad
+     * enough to match either card cannot tell which one rendered — found by tamper-testing this
+     * test, not by reading it.
+     */
+    const card = within(phone).getByText("Sunitha").closest("div.rounded-lg")
+    expect(card, "Sunitha's phone card must exist").not.toBeNull()
+    const own = within(card as HTMLElement)
+    expect(own.getByText("Could not hold")).toBeInTheDocument()
+    expect(own.getByText("₹260")).toBeInTheDocument()
   })
 
   it("marks a worker who has left the roster rather than dropping their final settlement", async () => {

@@ -14,24 +14,15 @@ import { resolveLocationCompatibility } from "@/lib/server/location-compatibilit
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
+import { coffeeFormSql, coffeeVarietySql, parseCoffeeForm, parseCoffeeVariety } from "@/lib/crop-config"
+
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const canonicalizeCoffeeType = (value: string | null | undefined) => {
-  const normalized = String(value || "").trim().toLowerCase()
-  if (!normalized) return null
-  if (normalized.includes("arabica")) return "Arabica"
-  if (normalized.includes("robusta")) return "Robusta"
-  return null
-}
+// Write-path validation: null means refuse. Spellings live in lib/crop-config.
+const canonicalizeCoffeeType = parseCoffeeVariety
 
-const canonicalizeBagType = (value: string | null | undefined) => {
-  const normalized = String(value || "").trim().toLowerCase()
-  if (!normalized) return null
-  if (normalized.includes("cherry")) return "Dry Cherry"
-  if (normalized.includes("parchment")) return "Dry Parchment"
-  return null
-}
+const canonicalizeBagType = parseCoffeeForm
 
 export async function GET(request: Request) {
   try {
@@ -105,16 +96,12 @@ export async function GET(request: Request) {
       `,
       sql`
         SELECT 
-          CASE
-            WHEN lower(coffee_type) LIKE '%arabica%' THEN 'Arabica'
-            WHEN lower(coffee_type) LIKE '%robusta%' THEN 'Robusta'
-            ELSE COALESCE(NULLIF(trim(coffee_type), ''), 'Unknown')
-          END as coffee_type,
-          CASE
-            WHEN lower(bag_type) LIKE '%cherry%' THEN 'Dry Cherry'
-            WHEN lower(bag_type) LIKE '%parchment%' THEN 'Dry Parchment'
-            ELSE COALESCE(NULLIF(trim(bag_type), ''), 'Unknown')
-          END as bag_type,
+          -- Generated from the same patterns as parseCoffeeForm/parseCoffeeVariety, because this
+          -- is where the grouping happens. The ELSE used to echo the raw value, so one row reading
+          -- "Dry P" became a third bag type on screen and a bag of parchment went missing from the
+          -- parchment total. An unrecognised value is now named, not invented.
+          ${sql.unsafe(coffeeVarietySql("coffee_type"))} as coffee_type,
+          ${sql.unsafe(coffeeFormSql("bag_type"))} as bag_type,
           COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
           COALESCE(SUM(NULLIF(kgs_received, 0)), 0) as kgs_received
         FROM dispatch_records

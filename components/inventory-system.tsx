@@ -4241,6 +4241,7 @@ export default function InventorySystem() {
                 key={estateRemountKey}
                 estateName={tenantSettings.estateName || ""}
                 canShowAccounts={canShowAccounts}
+                musterRecordsLabour={musterRecordsLabour}
                 canShowRainfallSection={canShowRainfallSection}
                 selectedLocationId={selectedLocationId}
                 defaultWage={tenantSettings.laborWages?.defaultInHouseWage}

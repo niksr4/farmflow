@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { execSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { estateTodayDate, istClock, istDate, istNowParts, istTodayParts, todayIso } from "@/lib/date-utils"
+import { estateTodayDate, istClock, istDate, istDateIso, istNowParts, istTodayParts, todayIso } from "@/lib/date-utils"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 /**
@@ -814,5 +814,75 @@ describe("date-fns is never handed the host's now", () => {
     const roundTripped = `${estateTodayDate().getFullYear()}-${String(estateTodayDate().getMonth() + 1).padStart(2, "0")}-${String(estateTodayDate().getDate()).padStart(2, "0")}`
     expect(roundTripped, "date-fns reads these same local parts").toBe(todayIso())
     expect(roundTripped).toBe("2026-09-21")
+  })
+})
+
+/**
+ * THE EIGHTH SIGNATURE: the offset, hand-rolled.
+ *
+ * `new Date(t + 5.5 * 3600_000).toISOString().slice(0, 10)` produces the correct IST date, and every
+ * guard above was blind to it. The derivation scan keys on `new Date()` with no arguments; this is
+ * `new Date(expr)`. The rendering scan keys on toLocale*; this uses toISOString. The date-fns scan
+ * keys on date-fns; this uses none.
+ *
+ * Three sites carried it, including lib/server/agents/daily-digest-agent.ts -- the file whose entire
+ * job is telling an estate what happened yesterday, and the one place none of the date rules reached.
+ *
+ * IT IS NOT WRONG TODAY, which is why it survived eight passes. It is correct precisely as long as
+ * India observes no DST, and lib/date-utils.ts declines to make that bet in its own docstring:
+ * "the arithmetic version is correct only because IST happens to have no DST, which is a fact about
+ * India the code should not quietly rely on." A guard that only catches wrong answers cannot catch a
+ * right answer resting on an assumption nobody restated.
+ */
+const HAND_ROLLED_IST_OFFSET =
+  /(?:5\.5\s*\*\s*(?:60\s*\*\s*60\s*\*\s*1000|3600_?000|3_?600_?000)|19_?800_?000|330\s*\*\s*60\s*\*\s*1000)/
+
+const handRolledOffsetFiles = (): string[] => {
+  const files = execSync("git ls-files app components lib hooks", { encoding: "utf8" })
+    .split("\n")
+    .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+  return files.filter((f) => HAND_ROLLED_IST_OFFSET.test(stripComments(readFileSync(resolve(process.cwd(), f), "utf8"))))
+}
+
+describe("the IST offset is never written as a number", () => {
+  it("nothing adds 5.5 hours by hand", () => {
+    /**
+     * Comments stripped: lib/date-utils.ts and daily-digest-agent.ts both QUOTE the arithmetic while
+     * explaining why they do not use it, and a guard that fires on its own explanation is the trap
+     * this file has now hit four separate times.
+     */
+    expect(
+      handRolledOffsetFiles(),
+      "use todayIso() / istDateIso() / istClock() — stating the zone costs nothing, and the " +
+        "arithmetic is correct only while India has no DST",
+    ).toEqual([])
+  })
+
+  it("recognises the shapes the three real sites were written in", () => {
+    // Verbatim from daily-digest-agent, attendance/yearly and attendance/monthly before the fix.
+    expect(HAND_ROLLED_IST_OFFSET.test("const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000")).toBe(true)
+    expect(HAND_ROLLED_IST_OFFSET.test("new Date(Date.now() + 5.5 * 3600_000)")).toBe(true)
+    // And the equivalents somebody would reach for next.
+    expect(HAND_ROLLED_IST_OFFSET.test("t + 19800000")).toBe(true)
+    expect(HAND_ROLLED_IST_OFFSET.test("t + 330 * 60 * 1000")).toBe(true)
+    // Not an ordinary number that happens to look similar.
+    expect(HAND_ROLLED_IST_OFFSET.test("const timeout = 5 * 60 * 1000")).toBe(false)
+    expect(HAND_ROLLED_IST_OFFSET.test("const ratio = 5.5 * 2")).toBe(false)
+  })
+
+  it("istDateIso gives the estate's date for an instant, not the host's", () => {
+    // 2026-09-20 20:00 UTC is already 2026-09-21 in IST. This is the call daily-digest makes.
+    expect(istDateIso("2026-09-20T20:00:00Z")).toBe("2026-09-21")
+    // ...and does not roll early for a viewer or host east of IST.
+    expect(istDateIso("2026-09-21T13:30:00Z")).toBe("2026-09-21")
+    // The arithmetic form agrees TODAY, which is exactly why this needed a guard rather than a bug
+    // report: both answers are right until the day the offset changes.
+    const viaOffset = new Date(Date.parse("2026-09-20T20:00:00Z") + 5.5 * 3600_000).toISOString().slice(0, 10)
+    expect(viaOffset).toBe(istDateIso("2026-09-20T20:00:00Z"))
+  })
+
+  it("survives a missing or unparseable instant instead of throwing", () => {
+    expect(istDateIso(null)).toBe("")
+    expect(istDateIso("not a date")).toBe("")
   })
 })

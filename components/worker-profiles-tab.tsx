@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useSingleFlight } from "@/hooks/use-single-flight"
-import { todayIso } from "@/lib/date-utils"
-import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
+import { useSingleFlightSubmit } from "@/hooks/use-single-flight"
+import { todayIso, formatDateOnly } from "@/lib/date-utils"
+import { Plus, Pencil, UserX, UserCheck, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
+import { formatCurrency } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -43,6 +44,26 @@ function MobileField({ label, value, mono = false }: { label: string; value: str
   )
 }
 
+/**
+ * A worker taken off the roster. Carries the history counts on purpose: the number is the argument
+ * for restoring rather than re-typing the name, because the records belong to the row, not the name.
+ */
+type InactiveWorker = {
+  id: string
+  name: string
+  workerType: string | null
+  dailyRate: number | null
+  monthlyWage: number | null
+  estate: string | null
+  deviceUserCode: string | null
+  kind: "individual" | "gang"
+  headcount: number | null
+  attendanceCount: number
+  lastSeen: string | null
+  /** Somebody by this name is already on the roster, so this row cannot be restored as it stands. */
+  activeNamesake: string | null
+}
+
 type Worker = {
   id: string
   name: string
@@ -78,17 +99,34 @@ const formatGender = (g: string | null) => (g ? GENDER_LABELS[g] ?? g : null)
  * Falls back rather than being exhaustive: a type added to lib/worker-types.ts should show up
  * as a plain badge, not crash the roster.
  */
+/*
+ * ⚠ THESE WERE WRITTEN DARK-FIRST AND THE APP DEFAULTS TO LIGHT.
+ *
+ * Every one of them was a bare `text-<hue>-300` on a 10% tint of the same hue, which over a 99%
+ * -lightness card measured 1.44:1 (amber) to 1.85:1 (violet). AA wants 4.5:1 for text this size.
+ * The type coding was therefore invisible in the theme nearly everyone sees -- and invisible is
+ * worse than absent here, because the badge still occupied the row and still looked deliberate.
+ *
+ * Nothing caught it: no lint rule reads colour, and tests/render/* asserts text content, which is
+ * present either way. app/globals.css has `.dark` overrides for hardcoded LIGHT classes (the
+ * opposite direction), so there was no safety net pointing this way.
+ *
+ * The shape is the one attendance-scanner-tab.tsx already uses: an explicit `-50` ground with
+ * `-800` text, inverted to the old tint-and-300 for dark. Measured light / dark: violet 8.19/9.28,
+ * emerald 7.29/11.25, sky 7.09/10.28, amber 6.84/11.89, stone 9.84/11.51.
+ */
 const WORKER_TYPE_COLORS: Partial<Record<WorkerType, string>> = {
-  staff: "border-violet-400/30 bg-violet-400/10 text-violet-300",
-  proprietor: "border-violet-400/30 bg-violet-400/10 text-violet-300",
-  chkroll_pf: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-  casuals: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-  seasonal_assam: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-  permanent: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-  seasonal: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-  contractor: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+  staff: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-400/10 dark:text-violet-300",
+  proprietor: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-400/10 dark:text-violet-300",
+  chkroll_pf: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300",
+  casuals: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300",
+  seasonal_assam: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
+  permanent: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300",
+  seasonal: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
+  contractor: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-300",
 }
-const WORKER_TYPE_FALLBACK = "border-stone-400/30 bg-stone-400/10 text-stone-300"
+const WORKER_TYPE_FALLBACK =
+  "border-stone-200 bg-stone-50 text-stone-700 dark:border-stone-400/30 dark:bg-stone-400/10 dark:text-stone-300"
 
 const EMPTY_FORM = {
   name: "",
@@ -194,6 +232,51 @@ export default function WorkerProfilesTab() {
     }
   }, [])
 
+  /**
+   * The workers taken off the roster, and the way back.
+   *
+   * ⚠ Deactivating was a ONE-WAY DOOR until 2026-10-09. The soft delete keeps every attendance and
+   * pay record, but nothing in the product ever selected an inactive row again — so a worker
+   * removed by a mis-tap was invisible to every role, including the estate's own admin, and the
+   * only recovery was an UPDATE against production. HoneyFarm hit it: a tap at 10:38, between
+   * marking attendance at 08:11 and marking more at 10:39, and Chitra was gone from the next
+   * morning's muster with 33 records still attached to her.
+   *
+   * Loaded separately from the roster because the roster comes from /api/attendance, which serves
+   * the daily roll and must never be able to return an inactive worker.
+   */
+  const [inactiveWorkers, setInactiveWorkers] = useState<InactiveWorker[]>([])
+  const [showInactive, setShowInactive] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [inactiveError, setInactiveError] = useState(false)
+
+  const fetchInactive = useCallback(async () => {
+    try {
+      /**
+       * `scope=all` to match the roster above it, which fetches /api/attendance with the same
+       * flag. The endpoint honours the estate picker by default -- right for a general caller --
+       * but this screen deliberately shows every estate, and a scoped recovery list beside an
+       * unscoped roster is how you get "she is not in either list" on a multi-estate tenant.
+       */
+      const res = await fetch("/api/attendance/workers?state=inactive&scope=all", { cache: "no-store" })
+      const data = await res.json()
+      if (!res.ok || !data?.success) {
+        setInactiveError(true)
+        return
+      }
+      setInactiveWorkers(data.workers || [])
+      setInactiveError(false)
+    } catch {
+      /**
+       * NOT SILENT ANY MORE. Swallowing this left the section hidden, which is pixel-identical to
+       * "nobody has been removed" -- so the one screen that can tell an estate where their missing
+       * worker went would quietly claim there is nobody to find. The roster above stays usable
+       * either way; only this block reports its own failure.
+       */
+      setInactiveError(true)
+    }
+  }, [])
+
   const fetchWorkers = useCallback(async () => {
     try {
       // no-store because this reloads immediately after a save; a cached response would show the
@@ -230,6 +313,25 @@ export default function WorkerProfilesTab() {
     }
   }, [])
 
+  /** Defined after fetchWorkers because it refreshes both lists. */
+  const handleRestore = useCallback(
+    async (id: string, name: string) => {
+      setRestoringId(id)
+      try {
+        const res = await fetch(`/api/attendance/workers/${id}`, { method: "PATCH" })
+        const data = await res.json()
+        if (!res.ok || !data.success) throw new Error(data.error || "Could not restore")
+        toast.success(`${name} is back on the roster`)
+        await Promise.all([fetchWorkers(), fetchInactive()])
+      } catch (err: any) {
+        toast.error(err?.message || "Could not restore this worker")
+      } finally {
+        setRestoringId(null)
+      }
+    },
+    [fetchWorkers, fetchInactive],
+  )
+
   /**
    * The estate-wide rule in force today. `worker_id IS NULL` rows only — a per-worker override is
    * that worker's business and is loaded by their own panel.
@@ -258,7 +360,10 @@ export default function WorkerProfilesTab() {
     fetchWorkers()
     fetchLocations()
     loadEstateRule()
-  }, [fetchWorkers, fetchLocations, loadEstateRule])
+    // Loaded on mount rather than on opening the section, so the heading can carry the count and
+    // somebody who does not know a worker is missing still sees that one is.
+    fetchInactive()
+  }, [fetchWorkers, fetchLocations, loadEstateRule, fetchInactive])
 
   const handleAddUnguarded = async () => {
     if (!form.name.trim()) return
@@ -296,7 +401,16 @@ export default function WorkerProfilesTab() {
     }
   }
 
-  const handleAdd = useSingleFlight(handleAddUnguarded)
+  /**
+   * The add-worker form submits on Enter, with the name field autofocused — so adding a roster of
+   * thirty is type, Enter, type, Enter, rather than reaching for Save each time. Medappa's writer
+   * entering 33 people is the case that matters.
+   *
+   * useSingleFlightSubmit rather than guarding the handler: the guard drops the second call, and if
+   * that call has not yet reached preventDefault the browser performs a native submit and reloads
+   * the page mid-POST. See the long note in hooks/use-single-flight.ts.
+   */
+  const handleAddSubmit = useSingleFlightSubmit(handleAddUnguarded)
 
   const startEdit = (worker: Worker) => {
     setEditingId(worker.id)
@@ -452,7 +566,13 @@ export default function WorkerProfilesTab() {
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to deactivate")
       toast.success("Worker deactivated")
-      fetchWorkers()
+      /**
+       * BOTH LISTS, because this is the exact moment the undo has to exist. HoneyFarm's writer
+       * removed Chitra with a mis-tap and carried on working in the same session; refreshing only
+       * the roster takes her out of one list without putting her into the other, so the way back
+       * stays invisible until a page reload nobody has a reason to do.
+       */
+      await Promise.all([fetchWorkers(), fetchInactive()])
     } catch (err: any) {
       toast.error(err?.message || "Failed to deactivate worker")
     }
@@ -534,7 +654,12 @@ export default function WorkerProfilesTab() {
         )}
 
         {isAdding && (
+          /* The <form> sits inside CardContent (which renders a div and cannot change tag) and
+             deliberately does not re-indent its 230 lines of children: the behaviour change is two
+             button types and this wrapper, and burying that in a whitespace diff would make it
+             unreviewable. Every other button inside is already type="button". */
           <CardContent className="border-t border-border/50 pt-4">
+          <form onSubmit={handleAddSubmit}>
             {/* Person or crew, and it sits above the name because it changes what the name means.
                 The muster tab has offered this since scripts/115; this roster -- which calls itself
                 the shared roster feeding Attendance, Picking, Ledger and Payroll -- could display a
@@ -760,20 +885,22 @@ export default function WorkerProfilesTab() {
               )}
             </div>
             <div className="mt-3 flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
                 <X className="mr-1 h-4 w-4" /> Cancel
               </Button>
               {/* A crew with no headcount is refused by the route anyway; disabling here says so
-                  before the round trip instead of after it. */}
+                  before the round trip instead of after it. Also what stops an Enter on an empty
+                  name doing nothing in silence -- a disabled submit cannot fire. */}
               <Button
+                type="submit"
                 size="sm"
                 disabled={!form.name.trim() || saving || (form.kind === "gang" && !(Number(form.headcount) >= 1))}
-                onClick={handleAdd}
               >
                 {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
                 Save
               </Button>
             </div>
+          </form>
           </CardContent>
         )}
 
@@ -1394,6 +1521,127 @@ export default function WorkerProfilesTab() {
           )}
         </CardContent>
       </Card>
+
+      {/*
+        NO LONGER ON THE ROSTER — the undo that did not exist.
+        Only rendered when there is something in it, so an estate that has never removed anybody
+        never sees it. The count sits in the heading because the person who needs this usually does
+        not know a worker is missing until the muster looks wrong.
+      */}
+      {/*
+        The list could not be loaded, which is NOT the same screen as "nobody has been removed".
+        Rendered on its own because inactiveWorkers is empty in both cases, and this is the one
+        place an estate can find out where a missing worker went.
+      */}
+      {inactiveError && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <p className="text-sm font-medium">Could not load workers taken off the roster</p>
+              <p className="text-xs text-muted-foreground">
+                The active roster above is unaffected. If somebody is missing from the muster, try
+                again.
+              </p>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={() => fetchInactive()}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!inactiveError && inactiveWorkers.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            {/* An explicit aria-label because the title AND the description sit inside the
+                button, so its computed name would otherwise be the whole paragraph —
+                unusable to a screen reader, and ambiguous to any query looking for
+                "Restore", which the description contains. */}
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 text-left"
+              onClick={() => setShowInactive((v) => !v)}
+              aria-expanded={showInactive}
+              aria-label={`${showInactive ? "Hide" : "Show"} the ${inactiveWorkers.length} worker${inactiveWorkers.length === 1 ? "" : "s"} no longer on the roster`}
+            >
+              <div>
+                <CardTitle className="text-base">
+                  No longer on the roster ({inactiveWorkers.length})
+                </CardTitle>
+                <CardDescription>
+                  Taken off the muster, with every attendance and pay record kept. Restore anyone to
+                  put them back.
+                </CardDescription>
+              </div>
+              {showInactive ? (
+                <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+          </CardHeader>
+          {showInactive && (
+            <CardContent className="border-t border-border/50 pt-4">
+              <div className="divide-y divide-border/50">
+                {inactiveWorkers.map((w) => (
+                  <div key={w.id} className="flex flex-wrap items-center gap-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{w.name}</span>
+                        {w.workerType && (
+                          <Badge variant="outline" className={cn("text-xs", WORKER_TYPE_COLORS[w.workerType as WorkerType] ?? WORKER_TYPE_FALLBACK)}>
+                            {workerTypeLabel(w.workerType)}
+                          </Badge>
+                        )}
+                        {w.kind === "gang" && (
+                          <span className="text-xs text-muted-foreground">crew of {w.headcount ?? "?"}</span>
+                        )}
+                      </div>
+                      {/* The reason to restore rather than retype: this history belongs to this
+                          row. Adding the name again starts an empty one. */}
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {w.attendanceCount > 0
+                          ? `${w.attendanceCount} day${w.attendanceCount === 1 ? "" : "s"} recorded`
+                          : "no attendance recorded"}
+                        {w.lastSeen ? `, last on ${formatDateOnly(w.lastSeen)}` : ""}
+                        {w.estate ? ` · ${w.estate}` : ""}
+                        {w.dailyRate != null ? ` · ${formatCurrency(w.dailyRate)}/day` : ""}
+                      </p>
+                    </div>
+                    {canWrite && (
+                      w.activeNamesake ? (
+                        /* Says why instead of failing on click. Medappa have seven of these: a
+                           name that is already back on the muster, usually because somebody
+                           retyped it rather than editing. Restoring anyway would put two of the
+                           same person on tomorrow's roll. */
+                        <p className="max-w-[16rem] text-xs text-amber-700 dark:text-amber-400">
+                          Already on the roster under this name. Rename one of them to restore this
+                          record.
+                        </p>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={restoringId === w.id}
+                          onClick={() => handleRestore(w.id, w.name)}
+                        >
+                          {restoringId === w.id ? (
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserCheck className="mr-1.5 h-4 w-4" />
+                          )}
+                          Restore
+                        </Button>
+                      )
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   )
 }

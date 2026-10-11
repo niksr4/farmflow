@@ -5,6 +5,7 @@ import type { AssistantSearchResult } from "@/lib/ai-assistant"
 import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { formatCurrency } from "@/lib/format"
+import { istDateIso } from "@/lib/date-utils"
 
 type AssistantSearchInput = {
   tenantId: string
@@ -27,9 +28,7 @@ const normalizeRole = (value: string) => String(value || "").trim().toLowerCase(
 // Neon returns Postgres date columns as JS Date objects, whose default
 // String() form is not ISO — format those via the IST calendar day instead.
 const formatDateLabel = (value: unknown) =>
-  value instanceof Date
-    ? value.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
-    : String(value || "").slice(0, 10)
+  value instanceof Date ? istDateIso(value) : String(value || "").slice(0, 10)
 
 const formatAmount = (value: unknown) => formatCurrency(Number(value) || 0)
 

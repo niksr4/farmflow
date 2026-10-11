@@ -5,13 +5,14 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Fraunces, Manrope } from "next/font/google"
 import { Sun, Moon } from "lucide-react"
 import { useLocale } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 
-const display = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"] })
-const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] })
+// The same two declarations app/layout.tsx uses. These were separate before, with DIFFERENT weight
+// lists for the same faces -- two sources of truth for one typeface, and nothing would have failed
+// if they drifted apart.
+import { bodyFont as body, displayFont as display } from "@/app/fonts"
 
 type PublicSiteShellProps = {
   children: ReactNode

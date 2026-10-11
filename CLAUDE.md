@@ -28,11 +28,29 @@ Primary market: India (INR billing via Razorpay planned)
 - Every table has a `tenant_id` column. RLS enforces isolation at the DB level.
 - `lib/server/tenant-db.ts` — wraps all DB calls with tenant context
 - `lib/server/db.ts` — Neon connection; uses `DATABASE_URL_DEV` in non-prod, `DATABASE_URL` in prod
+  - ⚠ **`sql` is NEVER falsy.** It is `baseUrl ? neon(baseUrl) : createUnavailableClient()`, so an
+    unconfigured database gives a stub that THROWS on use, not `undefined`. Every `if (!sql)` and
+    `if (x && sql)` therefore reads as "configured" unconditionally. Gate on **`isDbConfigured`**.
+    This shipped a dead branch in `requireSessionUser` and a test that mocked `sql` as `undefined` —
+    a shape production cannot produce — which passed while pinning the mock instead of the behaviour.
+  - `adminSql` **falls back to `sql`** when no owner URL is set, so gating DDL on `isDbConfigured`
+    can still hand you the DML-only runtime role. Use **`isAdminDbConfigured`** for DDL.
 - Tenant schema bootstrapped by `scripts/20-tenant-schema.sql` and subsequent migrations
 
 ### Auth
 - Credentials-based (username + password). `lib/auth.ts` (client), `lib/server/auth.ts` (server)
 - Sessions are always 30 days (`sessionMode: "app"`) — no short web sessions
+- **A session carrying a user id whose `users` row is gone is refused** (since 2026-09-29).
+  `requireSessionUser` used to fall back to the JWT's own `role`/`tenantId` when the lookup found
+  nobody, so deleting a user — or moving them between tenants — left a working token with the old
+  permissions for up to a month. Revoking access did not revoke access. That was the upstream cause
+  of four separate downstream fixes (#32, #35, #42, #47), which remain as defence-in-depth.
+  - **Read "carrying a user id" literally.** Every token minted by `authorize()` has one, so that is
+    the live path. A legacy token with only a `name` still reaches the username lookup, which can
+    resolve a DIFFERENT account if that username has since been reused — so revocation is not
+    absolute for those. The id path deliberately does not fall through to it for exactly that reason.
+  - When the database is unconfigured (`!isDbConfigured`) the claims are trusted, because nothing has
+    said the account is gone — that is a configuration state, not a deletion.
 - Email verification via one-time tokens (signup flow)
 - MFA supported (`scripts/43-mfa.sql`, `lib/server/mfa.ts`)
 - Roles: `owner`, `manager`, `user` — owner bypasses all module checks
@@ -195,15 +213,22 @@ Route: `app/admin/`
 
 ## Component Architecture
 
-`components/inventory-system.tsx` is the main dashboard shell — **5,064 lines** as of 2026-09-18.
-This line previously said "~8,300", which was true at some point and then quietly was not; check it
-with `wc -l` rather than trusting the number here.
+`components/inventory-system.tsx` is the main dashboard shell — **4,974 lines** as of 2026-09-30.
+This line has now been wrong twice: it said "~8,300" until 2026-09-18 and "5,064" until today. It
+will be wrong again. **Measure it, do not read it here** — and the same goes for the two numbers
+below, which were also both wrong (42 files, and "20 over 1000 lines"):
 
-Extracted modules live in `components/inventory-system/` (42 files) and `lib/`. **Read the
-directory, not a list in this file** — an inventory of forty-two filenames in a doc is a list that
+```bash
+wc -l components/inventory-system.tsx
+ls components/inventory-system/ | wc -l
+git ls-files '*.ts' '*.tsx' | grep -v ^tests/ | xargs wc -l | awk '$1>1000 && $2!="total"' | wc -l
+```
+
+Extracted modules live in `components/inventory-system/` (**45 files**) and `lib/`. **Read the
+directory, not a list in this file** — an inventory of forty-five filenames in a doc is a list that
 rots, and the last one did.
 
-**20 files are still over 1000 lines.** To see them, in size order:
+**19 files are still over 1000 lines.** To see them, in size order:
 
 ```bash
 git ls-files '*.ts' '*.tsx' | grep -v ^tests/ | xargs wc -l | sort -rn | head -25
@@ -295,6 +320,31 @@ Three failure modes, each of which has actually happened here:
 above were caught that way and not by review — including one replacement that was *weaker* than the
 scan it replaced.
 
+⚠ **AND VERIFY THE TAMPER ACTUALLY APPLIED.** On 2026-10-08 four tamper attempts were silent
+no-ops: the `perl -0pi -e 's/…/'` patterns did not match (escaping, or the string spanned lines),
+the file was untouched, the test passed, and a passing test after a tamper reads exactly like
+"the guard is fine". **An unverified tamper is indistinguishable from a vacuous guard.** Assert the
+mutation landed before trusting the result:
+
+```python
+s = open(path).read(); assert NEEDLE in s          # fail loudly if the pattern is wrong
+open(path, "w").write(s.replace(NEEDLE, BROKEN))
+```
+
+Two further traps from the same session, both of which produced a green test over broken code:
+
+- **Tampering a thing the test does not actually reach.** A test that re-implements the logic it is
+  checking — rather than importing it — stays green when the real implementation is mutated. One
+  guard inlined its own copy of a scan's exemption rules; breaking the scan changed nothing. If a
+  helper reads a file by path, split it so the pure part takes *source text* and point the test at
+  that.
+- **A query broad enough to match the wrong element.** `within(phone).getAllByText("Could not hold")`
+  passed with the worker row deleted, because the totals card carries the same label. Scope to the
+  row/card under test.
+
+Also: `cp` your backup **before** tampering and restore from that. `git checkout <file>` discards
+*all* uncommitted work in the file, which silently threw away a whole batch of fixes once.
+
 CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 
 ---
@@ -302,13 +352,42 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-09-18 the highest file is `151-update-inventory-onconflict-partial-index.sql`; prod has
-**149** rows in `schema_migrations` and dev has **150**. This line said `130-*` and "as of
-2026-08-20" for four weeks after that stopped being true — **count it, do not read it here**:
+As of **2026-10-09**: highest file on `main` is `153-one-crop-taxonomy.sql`; **prod** has 150 rows
+and tops out at `152-picking-shares-the-day-budget.sql`; **dev** has 152 rows and tops out at 153.
+This line said `130-*` and "as of 2026-08-20" for four weeks after that stopped being true, then
+`151` for another nine days — **count it, do not read it here**:
 
 ```bash
 ls scripts/*.sql | sed 's#scripts/##' | sort -t- -k1 -n | tail -1   # highest file
 ```
+
+⚠ **PROD IS AT 152 AND `main` HAS NO 152 FILE.** Read that twice, because it is not a mistake.
+`ls scripts/` on `main` jumps 151 → 153, while prod's ledger reads …151, **152**…. 152 lives on PR
+#55's branch and was applied to prod on 2026-10-09 out of order, because the day-cap it installs is
+only a schema change while `picking_records` has zero rows; after the first real pick it becomes a
+wage reconciliation. So **neither "highest file on main" nor "highest row in prod" is a reliable
+statement about the other.** Query the ledger, and sort numerically.
+
+⚠ **THE RUNNER HAS NO SINGLE-FILE OPTION.** `pnpm migrate:prod` applies *everything* pending in
+whatever `scripts/` the working tree currently holds — there is no `--only`. So running it from
+`main` right now applies **153**, not 152. Applying one specific migration means checking out a
+branch whose `scripts/` contains it and nothing later; 152 was applied from
+`feat/picking-shares-the-day-budget`, which carries 148–152 and no 153. **Check which branch you are
+on before pointing the runner at prod.**
+
+⚠ **DEV CAN BE AHEAD OF `main`, AND IS.** Applying a migration to dev is how you test it, so a
+migration on an unmerged branch is already in dev's ledger while its file does not exist on `main`.
+So "dev minus prod" is not a list of what is waiting to ship — it can include work that may never
+ship in that form. Compare against the *files on the branch you are on*, not against dev.
+
+⚠ **`CREATE OR REPLACE FUNCTION` IN A MIGRATION CAN REWRITE A LIVE WRITE PATH.** 152 looks like it
+only touches the empty `picking_records` table, and it also replaces the body of
+`labour_assignments_day_cap()` — which the trigger from 116 still points at, on a table holding
+every tenant's muster. It was safe because the shared budget sums to the same figure while picking
+is empty *and* because 0 worker-days were over the 2-job limit, both measured first. Before applying
+anything with `CREATE OR REPLACE`, find out which triggers point at the names it replaces, and
+verify afterwards that the behaviour you depended on survived — in that case the
+downward-correction exemption, without which 16 over-a-day worker-days become unfixable.
 
 ⚠ **A fresh database does NOT run migrations 1–87.** `migrate.mjs` has
 `BOOTSTRAP_CUTOFF = "87-default-activity-codes.sql"`: when `schema_migrations` is *empty*,
@@ -391,6 +470,34 @@ A formatted string cannot be re-offset by anybody. Send instants **as well** whe
 them, name the two differently (`checkInClock` vs `checkInTime`), and say in a comment which is for
 display.
 
+**In the browser, use the helpers in `lib/date-utils.ts` and never hand-roll any of this:**
+
+| want | use |
+|---|---|
+| the estate's today, `YYYY-MM-DD` | `todayIso()` |
+| any instant as the estate's date | `istDateIso(instant)` |
+| any instant as an IST wall clock | `istClock(instant)` |
+| an instant as a human IST date | `istDate(instant, opts)` |
+| the estate's today for **date-fns** | `estateTodayDate()` |
+| a stored `YYYY-MM-DD` for display | `formatDateOnly(value)` — reads its literal parts, no zone |
+
+⚠ **SEVEN SIGNATURES OF ONE BUG, and each new guard was blind to the next.** The count is the point:
+five were known by 2026-09-24, and two more were found on 2026-09-30 in a sweep for something else.
+`tests/today-is-the-estates-today.test.ts` holds all of them.
+
+1. `new Date().toISOString().slice(0,10)` — UTC, not IST
+2. the same via `.split("T")`
+3. `new Date().getMonth()` / `getDate()` / `getDay()` / `getHours()` — the host's calendar
+4. the **variable** form of 3 (`const now = new Date()` on one line, `now.getMonth()` on another)
+5. `getDay()`/`getHours()` against estate-time windows
+6. `toLocaleDateString` / `toLocaleTimeString` **with no `timeZone`** — a locale picks the FORMAT, not
+   the offset, so `"en-IN"` does not make it IST
+7. **date-fns**: `format(d, …)`, `startOfWeek(d)`, `isToday(d)` all read a Date's LOCAL parts, so
+   seeding any of them with `new Date()` puts the whole screen on the viewer's calendar
+
+`isToday`/`isFuture`/`isPast` from date-fns are **banned outright** — they take no reference date, so
+they are always the host's opinion. Compare `YYYY-MM-DD` strings against `todayIso()` instead.
+
 ### Three ways this has actually broken, all silent
 
 1. **`String(dateObject)` renders the SERVER's zone** and appends a human zone name. `lib/server/db`
@@ -420,6 +527,59 @@ more than one `process.env.TZ`.
 Also: `String(date).slice(0,10)` is the date-side signature of the same class, and "5:30 AM on every
 row" is its display-side twin. CI sets no `TZ`, so a timezone-dependent test passes or fails on the
 runner's accident.
+
+---
+
+## Colour: the app opens in LIGHT, and the safety net faces the other way
+
+**`app/layout.tsx` sets `defaultTheme="light"`.** So an unprefixed Tailwind colour is what nearly
+every estate actually sees, and a bare `text-emerald-400` is a *light-mode* value no matter what it
+was written for. Measured against the real `--card` token (`0 0% 99%`):
+
+| class | contrast | |
+|---|---|---|
+| `text-amber-300` | **1.44:1** | the "N workers have no daily rate" banner |
+| `text-violet-300` | **1.85:1** | worker-type badges |
+| `text-emerald-400` | **1.92:1** | NET PAYABLE, the one figure payroll exists to show |
+| `text-sky-400` / `text-rose-400` | 2.14 / 2.69:1 | bonus, deductions |
+| `text-stone-400` | **2.46:1** | the app-wide muted label, 383 uses |
+
+AA wants 4.5:1. Payroll and the Workers roster were written dark-first and carried 42 of these.
+
+⚠ **`app/globals.css` LOOKS LIKE THEME COVERAGE AND IS ONE-WAY.** Its long block of
+`.dark .text-*` / `.dark .bg-*` rules repairs hardcoded *light* classes for dark mode — the
+opposite problem. Nothing repaired dark-first classes for light mode, and because the block exists,
+the whole area reads as managed. `.dark .text-stone-400` had been there for months with no light
+counterpart.
+
+**Fixes, in the order to reach for them:**
+
+1. An app-wide convention belongs in `globals.css` once, not in 49 files. `text-stone-400` is now
+   `hsl(var(--muted-foreground) / 0.8)` = 4.58:1. Note **0.8, not the full token** — full is 7.65:1,
+   which is body-text weight, and mapping 383 secondary labels onto it flattens the hierarchy
+   instead of fixing contrast. 0.75 measures 4.06 and fails.
+2. A semantic colour in a component gets paired: `text-emerald-700 dark:text-emerald-400`,
+   `text-rose-700 dark:text-rose-400`, `text-sky-700 dark:text-sky-400`,
+   `text-amber-700 dark:text-amber-500`. `attendance-report-tab.tsx` is the model.
+3. A badge gets the `<hue>-50` ground + `<hue>-800` text shape from `attendance-scanner-tab.tsx`,
+   inverted to a tint + `-300` for dark.
+
+**Shades 200–400 are the dangerous band.** 50/100 are only legible on a saturated ground, so a bare
+one is self-evidently deliberate; 500+ already pass on white. `stone-500` passes at 4.68:1.
+
+⚠ **Do NOT sweep `text-stone-300` into a global rule.** Its ~78 uses are mostly light text on the
+dark marketing pages (`journey-page.tsx`, `capabilities-page.tsx`) plus correctly-paired
+`text-stone-700 dark:text-stone-300`. Darkening it breaks exactly what the stone-400 fix repairs.
+
+**Verify in the compiled bundle, not the source.** cssnano merges adjacent rules, so the three
+stone-400 rules come out as one selector group and a per-rule grep finds nothing — which looks
+identical to the fix being absent. Find the newest file under `.next` and read it; `find … | head -1`
+picks an arbitrary stale chunk.
+
+`tests/muster-colours-work-in-light-mode.test.ts` guards the muster subtabs, derives its file list
+from the workspace's own imports, and asserts the `globals.css` rule exists. **No lint rule reads
+colour and render tests assert text *content*, which is identical whether or not anybody can read
+it** — so a guard is the only thing that can see this class of bug.
 
 ---
 
@@ -468,6 +628,27 @@ PostHog deliberately: a single blocked transport is what hid the original proble
 Only a session that went stale **while visible** with no `pagehide` is reported as a crash — a
 stale *hidden* session is a routine iOS background reclaim and alerting on it would bury the signal.
 
+⚠ **THAT WAS NOT ENOUGH, AND THE BEACON SPENT A MONTH MEASURING THE WRONG THING.** "Visible, no
+`pagehide`" does not mean the app died. On Android — which is where essentially all this traffic is —
+putting the phone in your pocket ends the renderer without `pagehide`, while the last heartbeat still
+reads `visible` because the person was looking at the screen until they stopped. A crash and "I
+finished and left" are the same record from inside the page.
+
+Production, 90 days, sampled: 42 events, 6 users, and the gap between the session dying and the next
+load had a **median of 15.4 hours** (max 95.7). Seven of ten reports arrived between 08:11 and 09:50
+IST — writers opening the app to start the day, with the beacon reporting *yesterday's* "crash". Peak
+heap was 2.3% of the device limit, so nothing was ever under pressure. It was counting how many days
+somebody used FarmFlow, while sitting at the top of Sentry as the loudest issue in the project.
+
+So there is a third condition (`MAX_CRASH_RETURN_GAP_MS`, 5 minutes): **a crash is defined by the user
+coming back.** Somebody whose app dies mid-muster relaunches immediately, because they are standing in
+a field halfway through a task. Known blind spot, accepted: a crash bad enough that they give up for
+the day now looks like a clean exit.
+
+**Before doing stabilisation work on a crash number, check what the number is counting.** Two agent
+reports and one of my own theories all said "iOS memory pressure"; the data said Android, 2.3% heap,
+and 15 hours.
+
 ### Request cancellation
 
 `lib/abortable.ts` + `hooks/use-abortable.ts`.
@@ -483,6 +664,35 @@ stale *hidden* session is a routine iOS background reclaim and alerting on it wo
 - Two sites intentionally still use a stale flag: `verify-email-page.tsx` (a POST — must not be
   aborted) and the workspace-bootstrap effect in `inventory-system.tsx` (fires on tenant change,
   not on interaction; cancelling it means threading signals through three separate useCallbacks).
+
+### Forms: Enter, and the untyped-button trap
+
+⚠ **`components/ui/button.tsx` SETS NO DEFAULT `type`.** It spreads props onto a bare `<button>`,
+and HTML's default inside a form is `type="submit"`. So the moment you wrap something in a
+`<form>`, every untyped `<Button>` in it becomes a submit — a Cancel button starts writing records.
+Tamper-confirmed: untyping one Cancel made dismissing the pay-rule form save a rule. **Give every
+button inside a form an explicit `type`.**
+
+**Most of this app's forms are `<div>` + `onClick`, so Enter does nothing.** Roughly 20 components
+use `useSingleFlight` on a button; only a handful use `useSingleFlightSubmit` with a real
+`<form onSubmit>`. On a phone that means the keyboard's action key is inert too. It is worth fixing
+where somebody types a number and expects to commit it — the muster's money forms were converted
+for exactly that reason.
+
+**Use `useSingleFlightSubmit`, never `useSingleFlight`, for a form.** `hooks/use-single-flight.ts`
+documents why at length: the guard *drops* the second call, so if that call has not yet reached
+`event.preventDefault()` the browser performs a native submit and reloads the page mid-POST. The
+helper calls `preventDefault` unconditionally and first, which is why the guarded action takes no
+event at all.
+
+**A `<form>` tag in the source proves nothing** — the submit still has to reach the handler through
+a correctly-typed button. Grepping for the tag passes on every broken intermediate state. Mount it
+and press Enter: `tests/render/muster-forms-submit-on-enter.test.tsx`.
+
+Also: a placeholder is not a label. It disappears the moment somebody types, so a form with two
+placeholder-"labelled" fields cannot be checked once filled. Use `FieldLabel`
+(`components/ui/field-label.tsx`) — a bound `<Label htmlFor>` plus an optional focusable tooltip
+trigger — and mark required fields `*`.
 
 ## Cron Jobs
 
@@ -566,6 +776,28 @@ Key env vars:
 **Current state:** merging to `main` auto-deploys straight to production — no staging environment,
 no manual promotion gate. **`main` itself is gated** (below), so nothing arrives unreviewed or
 untested, but the moment it arrives it is live for every tenant.
+
+⚠ **A GREEN `CodeRabbit` CHECK DOES NOT MEAN IT REVIEWED ANYTHING.** On PR #68 the check read
+`pass` while its own detail said *"Review skipped: manual review required for this OSS repository"*
+— and a hand-triggered review then produced **5 findings**, one of which was a real hole in a guard
+written and tamper-tested four ways in that same PR. The check reports that the integration ran,
+not that a review happened or that it was clean. **Read the findings, on all three surfaces**
+(inline comments, the walkthrough, and the review `body` — the `body` is the one that has hidden
+findings before):
+
+```bash
+gh api repos/niksr4/farmflow/pulls/<N>/reviews  --jq '.[] | "[\(.user.login)] \(.state) bodylen=\(.body|length)"'
+gh api repos/niksr4/farmflow/pulls/<N>/comments --jq '.[] | "\(.path):\(.line)  \(.body|split("\n")[0])"'
+gh api repos/niksr4/farmflow/issues/<N>/comments --jq '.[] | select(.user.login=="coderabbitai[bot]") | .body'
+```
+
+Reviews are **rate-limited to roughly one an hour** on this tier, so a request can come back refused
+rather than reviewed — and a refusal is not a pass. **Never push to the branch while a review is
+running**: it aborts with "base or head changed", which has happened twice.
+
+⚠ **`.github/workflows/coderabbit-trigger.yml` cannot fire for its own PR.** GitHub takes
+`pull_request` workflows from the **base** branch, so until that file is on `main` it does nothing,
+and the trigger has to be typed by hand.
 
 **A gate AT VERCEL is not available on this plan. A gate AT GITHUB is — see
 [docs/RELEASE-FLOW.md](docs/RELEASE-FLOW.md).**
