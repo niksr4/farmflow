@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, BarChart3, CheckCircle2, Copy, HelpCircle, Loader2, Save } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -320,7 +320,10 @@ export default function SeasonDashboard() {
     router.push(`/dashboard?tab=${tab}`)
   }
 
+  // Latest-request-wins: switching fiscal year quickly must not let the older year's response land last.
+  const summarySeqRef = useRef(0)
   const loadSummary = useCallback(async () => {
+    const seq = ++summarySeqRef.current
     setLoading(true)
     setError(null)
     try {
@@ -329,15 +332,17 @@ export default function SeasonDashboard() {
         `/api/season-summary?fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`,
       )
       const data = await response.json()
+      if (seq !== summarySeqRef.current) return
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load season summary")
       }
       setSummary(data as SeasonSummary)
     } catch (err: any) {
+      if (seq !== summarySeqRef.current) return
       console.error("Error loading season summary:", err)
       setError(err.message || "Failed to load season summary")
     } finally {
-      setLoading(false)
+      if (seq === summarySeqRef.current) setLoading(false)
     }
   }, [selectedFiscalYear])
 

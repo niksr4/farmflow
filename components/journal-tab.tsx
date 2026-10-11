@@ -111,13 +111,16 @@ export default function JournalTab() {
       }
       const loaded = Array.isArray(data.locations) ? data.locations : []
       setLocations(loaded)
-      if (loaded.length && form.locationId === LOCATION_NONE) {
-        setForm((prev) => ({ ...prev, locationId: loaded[0].id }))
+      if (loaded.length) {
+        // Functional update with no dependency on form.locationId: depending on it re-ran this
+        // loader whenever the user picked "No location", which snapped the field back to the
+        // first location immediately.
+        setForm((prev) => (prev.locationId === LOCATION_NONE ? { ...prev, locationId: loaded[0].id } : prev))
       }
     } catch (error) {
       console.error("Failed to load locations", error)
     }
-  }, [form.locationId])
+  }, [])
 
   const fetchEntries = useCallback(async () => {
     setLoading(true)

@@ -36,14 +36,22 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
 
   useEffect(() => {
     setMounted(true)
-    const stored = localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null
-    if (stored === "light" || stored === "dark") setActiveTheme(stored)
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null
+      if (stored === "light" || stored === "dark") setActiveTheme(stored)
+    } catch {
+      // Storage blocked (private mode / site data disabled): keep the default theme.
+    }
   }, [])
 
   const toggleTheme = () => {
     const next = activeTheme === "dark" ? "light" : "dark"
     setActiveTheme(next)
-    localStorage.setItem(STORAGE_KEY, next)
+    try {
+      localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      // Preference just will not persist.
+    }
   }
 
   // Page background/content always follows the prop — only the nav chrome follows user preference
@@ -175,7 +183,7 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
         </div>
       </header>
 
-      <main className={`relative z-10 px-4 pb-16 pt-8 sm:px-6 sm:pb-20 sm:pt-12 ${isDark ? "" : ""}`}>{children}</main>
+      <main className={`relative z-10 px-4 pb-16 pt-8 sm:px-6 sm:pb-20 sm:pt-12`}>{children}</main>
 
       <footer
         className={`px-4 py-8 backdrop-blur sm:px-6 ${

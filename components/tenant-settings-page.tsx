@@ -288,7 +288,7 @@ export default function TenantSettingsPage() {
     fetch("/api/account/preferences")
       .then((r) => r.json())
       .then((data) => {
-        if (data?.success && data.preferences?.email) {
+        if (data?.success) {
           setDigestEmail(data.preferences.digestEmail || "")
         }
       })
@@ -480,7 +480,13 @@ export default function TenantSettingsPage() {
     }
   }, [isOwner, tenantId, toast])
 
+  // Latest-request-wins for the per-user loaders: picking user B while user A's response is still in
+  // flight must not leave A's permissions on screen under B's name (Save would then write them to B).
+  const userModulesSeqRef = useRef(0)
+  const userLocationsSeqRef = useRef(0)
+
   const loadUserModules = useCallback(async (userId: string) => {
+    const seq = ++userModulesSeqRef.current
     if (!userId) {
       setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
       setUserModuleSource("default")
@@ -491,6 +497,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch(`/api/admin/user-modules?userId=${userId}`)
       const data = await response.json()
+      if (seq !== userModulesSeqRef.current) return
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load user modules")
       }
@@ -499,15 +506,17 @@ export default function TenantSettingsPage() {
       )
       setUserModuleSource(data.source || "default")
     } catch (error: any) {
+      if (seq !== userModulesSeqRef.current) return
       toast({ title: "Error", description: error.message || "Failed to load user modules", variant: "destructive" })
       setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
       setUserModuleSource("default")
     } finally {
-      setIsUserModulesLoading(false)
+      if (seq === userModulesSeqRef.current) setIsUserModulesLoading(false)
     }
   }, [toast])
 
   const loadUserLocations = useCallback(async (userId: string) => {
+    const seq = ++userLocationsSeqRef.current
     if (!userId) {
       setUserLocationPermissions([])
       setUserLocationSource("default")
@@ -518,17 +527,19 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch(`/api/admin/user-locations?userId=${userId}`)
       const data = await response.json()
+      if (seq !== userLocationsSeqRef.current) return
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load user locations")
       }
       setUserLocationPermissions(data.locations || [])
       setUserLocationSource(data.source || "default")
     } catch (error: any) {
+      if (seq !== userLocationsSeqRef.current) return
       toast({ title: "Error", description: error.message || "Failed to load user locations", variant: "destructive" })
       setUserLocationPermissions([])
       setUserLocationSource("default")
     } finally {
-      setIsUserLocationsLoading(false)
+      if (seq === userLocationsSeqRef.current) setIsUserLocationsLoading(false)
     }
   }, [toast])
 
@@ -572,6 +583,12 @@ export default function TenantSettingsPage() {
             name: String(location?.name || ""),
             code: String(location?.code || ""),
             estate: location?.estate ? String(location.estate) : null,
+            // Carry the rest of the serialized row through. Dropping these made the edit form open
+            // blank, so renaming a block PATCHed areaAcres/latitude/longitude as null and wiped them.
+            areaAcres: location?.areaAcres != null ? Number(location.areaAcres) : null,
+            kind: location?.kind === "store" ? "store" : location?.kind === "general" ? "general" : "block",
+            latitude: location?.latitude != null ? Number(location.latitude) : null,
+            longitude: location?.longitude != null ? Number(location.longitude) : null,
           }))
         : []
       setLocations(nextLocations)

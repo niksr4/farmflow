@@ -61,8 +61,9 @@ export default function MobileSidebarDrawer({
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out dark:bg-neutral-900",
-          isOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-white shadow-2xl transition-[transform,visibility] duration-300 ease-in-out dark:bg-neutral-900",
+          // invisible when closed so off-screen links are not reachable by keyboard / screen reader
+          isOpen ? "visible translate-x-0" : "invisible -translate-x-full",
         )}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-4 py-3">
@@ -78,6 +79,7 @@ export default function MobileSidebarDrawer({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close menu"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors touch-manipulation"
           >
             <X className="h-4 w-4" />

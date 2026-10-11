@@ -138,7 +138,7 @@ export default function HomeKpiCardsGrid({
                   <span className="text-xs text-stone-600 dark:text-stone-400">Coffee</span>
                 </div>
                 <span className="text-sm font-semibold tabular-nums text-stone-800 dark:text-stone-200">
-                  {revenueTotalsLoading ? "—" : fmtCur(coffeeRevenueTotal)}
+                  {revenueTotalsLoading || revenueTotalsError ? "—" : fmtCur(coffeeRevenueTotal)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -147,7 +147,7 @@ export default function HomeKpiCardsGrid({
                   <span className="text-xs text-stone-600 dark:text-stone-400">Other</span>
                 </div>
                 <span className="text-sm font-semibold tabular-nums text-stone-800 dark:text-stone-200">
-                  {revenueTotalsLoading ? "—" : fmtCur(otherRevenueTotal)}
+                  {revenueTotalsLoading || revenueTotalsError ? "—" : fmtCur(otherRevenueTotal)}
                 </span>
               </div>
               <div className="border-t border-stone-100 pt-2 dark:border-white/[0.05]">

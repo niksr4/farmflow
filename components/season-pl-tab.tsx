@@ -110,19 +110,25 @@ export default function SeasonPlTab() {
   const kpisRef = useRef<HTMLDivElement>(null)
   const breakdownRef = useRef<HTMLDivElement>(null)
   const buyersRef = useRef<HTMLDivElement>(null)
+  // Only the latest request may write state: clicking presets quickly otherwise lets a slow
+  // earlier response overwrite the range now shown in the header.
+  const requestSeqRef = useRef(0)
 
   const fetchPl = useCallback(async (r: DateRange) => {
+    const seq = ++requestSeqRef.current
     setLoading(true)
     setError(null)
     try {
       const res = await fetch(`/api/season-pl?start=${r.start}&end=${r.end}`)
       const json: SeasonPLResponse = await res.json()
+      if (seq !== requestSeqRef.current) return
       if (!json.success) throw new Error(json.error ?? "Failed to load P&L")
       setData(json)
     } catch (e: any) {
+      if (seq !== requestSeqRef.current) return
       setError(e.message)
     } finally {
-      setLoading(false)
+      if (seq === requestSeqRef.current) setLoading(false)
     }
   }, [])
 

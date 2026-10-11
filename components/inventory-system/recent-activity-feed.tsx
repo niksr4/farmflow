@@ -41,7 +41,8 @@ const MODULE_STYLES: Record<string, ModuleStyle> = {
       </svg>
     ),
   },
-  labour: {
+  // Keyed "labor": that is what /api/recent-activity emits (lib/activity-contracts.ts).
+  labor: {
     bg: "bg-violet-50", text: "text-violet-700",
     icon: (
       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
