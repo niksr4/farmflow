@@ -52,8 +52,9 @@ export async function GET(request: Request) {
     const fiscalYearStart = searchParams.get("fiscalYearStart")
     const fiscalYearEnd = searchParams.get("fiscalYearEnd")
     const all = searchParams.get("all") === "true"
-    const limit = Number(searchParams.get("limit") || "50")
-    const offset = Number(searchParams.get("offset") || "0")
+    // Clamped: an unreadable or negative value used to reach Postgres as "NaN"/-1 and surface as a 500.
+    const limit = Math.min(Math.max(Number.parseInt(searchParams.get("limit") || "50", 10) || 50, 1), 500)
+    const offset = Math.max(Number.parseInt(searchParams.get("offset") || "0", 10) || 0, 0)
 
     if (date && locationId) {
       const params: Array<string | null> = [tenantContext.tenantId, locationId, date]

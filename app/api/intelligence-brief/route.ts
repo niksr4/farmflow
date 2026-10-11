@@ -110,7 +110,7 @@ export async function GET(request: Request) {
     const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
     const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
 
-    const cacheKey = `intelligence-brief:${scopedUser.tenantId}:${startDateIso}:${endDateIso}:${activeEstate || "all"}`
+    const cacheKey = `intelligence-brief:${scopedUser.tenantId}:${startDateIso}:${endDateIso}:${activeEstate || "all"}:${isScopedUser ? "u" : "a"}:${[...enabledModules].sort().join(",")}`
     const cachedBrief = await readResponseCache(cacheKey, 2 * 60 * 60)
     if (cachedBrief !== null) {
       return NextResponse.json({ success: true, ...(cachedBrief as Record<string, unknown>) })
