@@ -44,7 +44,7 @@ const SEARCH_RESULT_DETAIL_LIMIT = 220
 const ADMIN_OR_OWNER_ROLES = new Set(["admin", "owner"])
 
 // Same-origin relative path only: "//host" and "/\\host" are protocol-relative and would navigate off-site.
-const isSafeInternalHref = (href: string) => href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/\\")
+export const isSafeInternalHref = (href: string) => href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/\\")
 
 const normalizeAssistantRole = (role?: string | null) => String(role || "").trim().toLowerCase()
 
