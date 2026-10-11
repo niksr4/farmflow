@@ -44,7 +44,10 @@ export function useAiValidate(
           signal: abort.signal,
         })
         if (abort.signal.aborted) return
+        // An error body is not a ValidationResult; advisory validation just stays silent.
+        if (!res.ok) return
         const data: ValidationResult = await res.json()
+        if (abort.signal.aborted) return
         setResult(data)
       } catch {
         // AbortError or network failure — silently ignore
@@ -58,11 +61,16 @@ export function useAiValidate(
   useEffect(() => {
     if (!enabled) return
     if (value === null || value === undefined || value === "") {
+      // Cancel any in-flight check so a late response cannot resurrect a stale warning.
+      abortRef.current?.abort()
+      setValidating(false)
       setResult(null)
       return
     }
     const num = Number(value)
     if (!Number.isFinite(num) || num < minValue) {
+      abortRef.current?.abort()
+      setValidating(false)
       setResult(null)
       return
     }
@@ -77,6 +85,9 @@ export function useAiValidate(
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, enabled])
+
+  // Cancel any outstanding request on unmount.
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   return { result, validating }
 }

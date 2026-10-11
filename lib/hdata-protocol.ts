@@ -180,7 +180,8 @@ export function parseHdataDeviceInfo(json: Record<string, unknown> | null): Hdat
   const info = (json.fk_info ?? null) as Record<string, unknown> | null
   if (!info || typeof info !== "object") return null
 
-  const num = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : null)
+  const num = (value: unknown) =>
+    value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : Number(value)
   const time = parseHdataTimestamp(json.fk_time)
 
   return {

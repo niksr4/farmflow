@@ -126,7 +126,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
 
         if (!response.ok) {
           console.error("❌ Labour API error:", response.status, responseText)
-          setError(responseText || `Failed to load deployments (${response.status})`)
+          setError(data?.message || data?.error || `Failed to load deployments (${response.status})`)
           setDeployments([])
           setHasMore(false)
           setTotalCount(0)
@@ -134,7 +134,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           return
         }
 
-        if (data.success && Array.isArray(data.deployments)) {
+        if (data?.success && Array.isArray(data.deployments)) {
           const nextTotalCount = Number(data.totalCount) || 0
           const nextTotalCost = Number(data.totalCost) || 0
           setTotalCount(nextTotalCount)
@@ -156,7 +156,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setPage(pageIndex)
           setAllLoaded(fetchAll || (nextTotalCount > 0 && nextDeploymentsLength >= nextTotalCount))
           setError(null)
-        } else if (data.success && Array.isArray(data.transactions)) {
+        } else if (data?.success && Array.isArray(data.transactions)) {
           // Backward-compat for older response shape.
           const nextDeployments = data.transactions
           const nextTotalCount = Number(data.totalCount) || nextDeployments.length
@@ -171,7 +171,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setError(null)
         } else {
           console.error("❌ Invalid response format:", data)
-          setError(data.message || "Failed to load deployments")
+          setError(data?.message || "Failed to load deployments")
           setDeployments([])
           setHasMore(false)
           setTotalCount(0)
@@ -182,7 +182,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         // an error here would make fast navigation look like the app breaking.
         if (isAbortError(err)) return
         console.error("❌ Error fetching labour deployments:", err)
-        setError(err.message || "Failed to fetch deployments")
+        setError("Failed to fetch deployments")
         setDeployments([])
         setHasMore(false)
         setTotalCount(0)

@@ -76,15 +76,21 @@ export default function WorkspaceHints({ onAction }: WorkspaceHintsProps) {
   useEffect(() => {
     setDismissed(getDismissed())
     setFetchFailed(false)
-    fetch("/api/dashboard/hints", { cache: "no-store" })
+    const controller = new AbortController()
+    fetch("/api/dashboard/hints", { cache: "no-store", signal: controller.signal })
       .then((r) => r.json())
       .then((data) => {
         if (data.success && Array.isArray(data.hints)) {
           setHints(data.hints)
         }
       })
-      .catch(() => setFetchFailed(true))
-      .finally(() => setLoaded(true))
+      .catch(() => {
+        if (!controller.signal.aborted) setFetchFailed(true)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoaded(true)
+      })
+    return () => controller.abort()
   }, [retryCount])
 
   const visible = hints.filter((hint) => hint.dismissible === false || !dismissed.has(hint.id))
@@ -238,7 +244,7 @@ export default function WorkspaceHints({ onAction }: WorkspaceHintsProps) {
                 <button
                   onClick={() => dismiss(hint.id)}
                   className="absolute right-3 top-3 rounded-full p-1.5 text-stone-500 transition-colors hover:bg-white/80 hover:text-stone-800"
-                  aria-label="Dismiss"
+                  aria-label={`Dismiss: ${hint.title}`}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>

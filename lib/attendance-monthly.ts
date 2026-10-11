@@ -263,8 +263,12 @@ export function monthlyAttendanceToCsv(
   days: MonthlyDay[],
   estateName: string,
 ): string {
-  const escape = (value: string | number) =>
-    /[",\n]/.test(String(value)) ? `"${String(value).replace(/"/g, '""')}"` : String(value)
+  // Worker names are user-entered: neutralise spreadsheet formula prefixes, and quote CR as well as LF.
+  const escape = (input: string | number) => {
+    const raw = String(input)
+    const value = /^[=+@\t\r]/.test(raw) ? `'${raw}` : raw
+    return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+  }
 
   const lead = ["No", "Code", "Emp Name"]
   const tail = ["P", "HP", "A", "WO", "WOP", "Payable days"]

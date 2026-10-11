@@ -62,7 +62,7 @@ export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }
       } catch (error: any) {
         if (cancelled) return
         setVerifyState("error")
-        setStatusDetail(error?.message || "Verification failed. Request a new link below.")
+        setStatusDetail(error instanceof TypeError ? "Verification failed. Request a new link below." : error?.message || "Verification failed. Request a new link below.")
       }
     }
 
@@ -94,7 +94,7 @@ export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }
       setStatusDetail(t("public.verify.sentMessage", { email: data.maskedEmail || email.trim().toLowerCase() }))
     } catch (error: any) {
       setVerifyState("error")
-      setStatusDetail(error?.message || "Unable to resend verification email")
+      setStatusDetail(error instanceof TypeError ? "Unable to resend verification email" : error?.message || "Unable to resend verification email")
     } finally {
       setIsResending(false)
     }

@@ -328,6 +328,7 @@ export default function WelcomeOnboardingPage() {
                       <button
                         key={bundle.id}
                         type="button"
+                        aria-pressed={selected}
                         onClick={() => setDraft((current) => (current ? { ...current, moduleBundleId: bundle.id } : current))}
                         className={`rounded-2xl border p-4 text-left transition ${
                           selected ? "border-emerald-500 bg-emerald-50 shadow-sm" : "border-border/70 bg-white hover:border-emerald-200"
@@ -390,7 +391,7 @@ export default function WelcomeOnboardingPage() {
               </div>
 
               {error ? (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+                <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
               ) : null}
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

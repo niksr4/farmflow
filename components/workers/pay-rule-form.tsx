@@ -133,6 +133,10 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
       toast.error("Enter an overtime amount greater than zero, or choose No overtime rule")
       return
     }
+    if (!form.effectiveFrom) {
+      toast.error("Choose the date this rule is in force from")
+      return
+    }
     if (form.retentionMode === "percent_of_day" && (retentionValue as number) > 100) {
       toast.error("A percentage of the day's pay cannot be more than 100")
       return

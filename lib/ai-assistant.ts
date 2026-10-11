@@ -43,6 +43,9 @@ const SEARCH_RESULT_TITLE_LIMIT = 120
 const SEARCH_RESULT_DETAIL_LIMIT = 220
 const ADMIN_OR_OWNER_ROLES = new Set(["admin", "owner"])
 
+// Same-origin relative path only: "//host" and "/\\host" are protocol-relative and would navigate off-site.
+export const isSafeInternalHref = (href: string) => href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/\\")
+
 const normalizeAssistantRole = (role?: string | null) => String(role || "").trim().toLowerCase()
 
 type WorkspaceDefinition = {
@@ -149,7 +152,7 @@ export function sanitizeAssistantActionLinks(input: unknown, maxActions = 4): As
       const href = typeof action.href === "string" ? action.href.trim() : ""
       const description =
         typeof action.description === "string" ? action.description.trim().slice(0, ACTION_DESCRIPTION_LIMIT) : ""
-      if (!label || !href.startsWith("/")) {
+      if (!label || !isSafeInternalHref(href)) {
         return null
       }
       return {
@@ -176,7 +179,7 @@ export function sanitizeAssistantSearchResults(input: unknown, maxResults = 8): 
       const detail = typeof result.detail === "string" ? result.detail.trim().slice(0, SEARCH_RESULT_DETAIL_LIMIT) : ""
       const href = typeof result.href === "string" ? result.href.trim() : ""
       const isSupportedType = ["inventory", "transaction", "expense", "location", "dispatch", "sale", "receivable", "journal"].includes(type)
-      if (!id || !title || !detail || !href.startsWith("/") || !isSupportedType) {
+      if (!id || !title || !detail || !isSafeInternalHref(href) || !isSupportedType) {
         return null
       }
       return {
@@ -193,7 +196,7 @@ export function sanitizeAssistantSearchResults(input: unknown, maxResults = 8): 
 
 export function buildAssistantActionHref(action: AssistantActionTarget): string {
   const href = String(action.href || "").trim()
-  if (href.startsWith("/")) {
+  if (isSafeInternalHref(href)) {
     return href
   }
 
