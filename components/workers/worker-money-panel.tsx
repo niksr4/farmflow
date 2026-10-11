@@ -13,7 +13,7 @@ import { todayIso } from "@/lib/date-utils"
 import { outstandingAdvance, type LedgerEntry, type PayRule } from "@/lib/pay-rules"
 import { validateWorkerLedgerDraft } from "@/lib/worker-ledger-validation"
 import PayRuleForm from "@/components/workers/pay-rule-form"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlight, useSingleFlightSubmit } from "@/hooks/use-single-flight"
 
 /**
  * Everything about one worker's money, in the one place that already holds every other fact about
@@ -277,7 +277,8 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
    * use it — the two handling money did not, and an advance is the most expensive row in the
    * product to duplicate. On a phone, on a slow connection, two taps is not an unusual thing to do.
    */
-  const submit = useSingleFlight(submitUnguarded)
+  // A real <form onSubmit>, so Enter saves an advance -- see the note on the markup below.
+  const submit = useSingleFlightSubmit(submitUnguarded)
   const saveEdit = useSingleFlight(saveEditUnguarded)
   const remove = useSingleFlight(removeUnguarded)
 
@@ -316,18 +317,50 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
         </div>
 
         <div className="rounded-lg border p-3">
+          {/*
+            ⚠ THIS CARD IS CALLED "PAY RULE" AND USED TO REPORT ONLY RETENTION.
+            A rule row carries a retention half and an overtime half, independently settable, and
+            the overtime half was not rendered anywhere on the worker's screen — so a worker on
+            "₹90 an hour overtime, no retention" read as "No retention set.", under a heading
+            naming the whole rule. The estate could not see from here that an overtime rule existed
+            at all, which is also why the detachment note below matters.
+          */}
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pay rule</div>
-          {rule?.retentionMode ? (
+          {rule?.retentionMode || rule?.overtimeMode ? (
             <>
-              <div className="mt-1 text-sm font-semibold">
-                {rule.retentionMode === "percent_of_day"
-                  ? `${rule.retentionValue}% of the day`
-                  : `${formatCurrency(rule.retentionValue ?? 0)} per day`}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {retentionPerDay != null ? `${formatCurrency(retentionPerDay)} on a full day · ` : ""}
-                in force since {rule.effectiveFrom}
-              </p>
+              {rule.retentionMode ? (
+                <>
+                  {/* `?? "—"` on the multiplier and percentage branches, which had no fallback
+                      while the currency ones did, so a null value would have read "null% of the
+                      day" on a worker's own card.
+                      NOT because such a row can exist: scripts/149 constrains
+                      (mode IS NULL) = (value IS NULL) and both CHECKs are confirmed present on
+                      prod, so the database forbids it and nothing seeds this table. It is here
+                      because the TypeScript type is `number | null` independently of that, and a
+                      fallback costs one operator. */}
+                  <div className="mt-1 text-sm font-semibold">
+                    {rule.retentionMode === "percent_of_day"
+                      ? `${rule.retentionValue ?? "—"}% of the day`
+                      : `${formatCurrency(rule.retentionValue ?? 0)} per day`}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {retentionPerDay != null ? `${formatCurrency(retentionPerDay)} on a full day · ` : ""}
+                    held back since {rule.effectiveFrom}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">No retention.</p>
+              )}
+              {rule.overtimeMode ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Overtime:{" "}
+                  {rule.overtimeMode === "explicit_hourly"
+                    ? `${formatCurrency(rule.overtimeValue ?? 0)} an hour`
+                    : rule.overtimeMode === "multiplier_of_day"
+                      ? `${rule.overtimeValue ?? "—"}× the whole day`
+                      : `${rule.overtimeValue ?? "—"}× the hourly rate`}
+                </p>
+              ) : null}
               {/* Which rule this is, said plainly. "20% since 1 June" on somebody's card reads as
                   a decision made about them, and acting on it as though it were is how the estate
                   rule got changed from a single worker's screen. */}
@@ -336,7 +369,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
               </p>
             </>
           ) : (
-            <p className="mt-1 text-sm text-muted-foreground">No retention set.</p>
+            <p className="mt-1 text-sm text-muted-foreground">No pay rule set.</p>
           )}
           {canAdmin && (
             <button
@@ -351,16 +384,38 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
       </div>
 
       {editingRule && canAdmin && (
-        <PayRuleForm
-          workerId={workerId}
-          dailyRate={dailyRate}
-          // The effective rule seeds the fields, so an override starts from what the worker is on
-          // today rather than from blank -- but only their OWN row may be corrected or removed.
-          current={rule}
-          currentRuleId={ownRule?.id ?? null}
-          onSaved={() => { setEditingRule(false); load() }}
-          onCancel={() => setEditingRule(false)}
-        />
+        <div className="space-y-2">
+          {/*
+            AN OVERRIDE IS A WHOLE ROW, AND IT STOPS FOLLOWING THE ESTATE FOREVER.
+            resolveRuleForDate returns the worker's row entire -- it does not merge field by field
+            with the estate default, and a worker row wins no matter how much newer the estate rule
+            is. So this is not "retention 20% plus a tweak"; it is this person's complete rule from
+            now on, and raising everybody to 25% next June will not reach them.
+
+            That is the intended design (an estate must not drag along somebody deliberately put on
+            10%) and it is why the fields below are seeded from the EFFECTIVE rule rather than
+            blank -- opening this form pre-fills what they are on today, so saving cannot silently
+            drop the half you did not come here to change. Said out loud because nothing else on
+            this screen says it, and the consequence lands months later in a wage sheet.
+          */}
+          {!ownRule && (
+            <p className="rounded border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              This replaces the estate rule for {workerName} completely, and from now on they stop
+              following it — later changes to the estate rule will not reach them. The fields start
+              from what they are on today, so leave the parts you do not want to change.
+            </p>
+          )}
+          <PayRuleForm
+            workerId={workerId}
+            dailyRate={dailyRate}
+            // The effective rule seeds the fields, so an override starts from what the worker is on
+            // today rather than from blank -- but only their OWN row may be corrected or removed.
+            current={rule}
+            currentRuleId={ownRule?.id ?? null}
+            onSaved={() => { setEditingRule(false); load() }}
+            onCancel={() => setEditingRule(false)}
+          />
+        </div>
       )}
 
       <div>
@@ -377,8 +432,19 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
           )}
         </div>
 
+        {/*
+          A <form>, so typing an amount and pressing Enter records the advance. It was a div with
+          an onClick Save, so Enter did nothing and the phone keyboard's action key did nothing
+          either -- on the one screen in the muster where somebody is standing in front of a worker
+          handing over cash. useSingleFlightSubmit keeps the double-tap guard without the
+          native-submit trap it documents (preventDefault has to run on every submit, not only the
+          one the guard lets through).
+
+          The edit and remove controls on the history rows below stay useSingleFlight button
+          handlers: they sit outside this form, and each row would need its own.
+        */}
         {adding && canAdmin && (
-          <div className="mb-3 space-y-3 rounded-lg border bg-muted/30 p-3">
+          <form onSubmit={submit} className="mb-3 space-y-3 rounded-lg border bg-muted/30 p-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor={`worker-money-${workerId}-type`} className="text-xs">Type</Label>
@@ -427,12 +493,12 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
             )}
 
             <div className="flex gap-2">
-              <Button size="sm" onClick={submit} disabled={saving}>
+              <Button type="submit" size="sm" disabled={saving}>
                 {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null} Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
             </div>
-          </div>
+          </form>
         )}
 
         {entries.length === 0 ? (

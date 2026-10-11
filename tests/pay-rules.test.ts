@@ -100,6 +100,83 @@ describe("the rule in force is the one that was in force then", () => {
   })
 })
 
+describe("an override REPLACES the estate rule, it does not merge with it", () => {
+  /**
+   * The question this answers: "everyone retains 20%, and Manoj also gets ₹90/hour overtime" is
+   * NOT a worker row carrying only overtime. resolveRuleForDate returns the worker's row entire,
+   * so the retention half of such a row is null and Manoj retains NOTHING, while the estate's 20%
+   * goes on applying to everybody else. Nothing errors and no screen disagrees.
+   *
+   * The whole-row rule is deliberate and load-bearing: the all-null "stop" idiom above depends on
+   * it exactly. If resolution merged field by field, an all-null row would inherit every field it
+   * left blank and could never switch anything off.
+   *
+   * So this is pinned rather than fixed. The UI's protection is a different mechanism entirely --
+   * the per-worker form seeds its fields from the EFFECTIVE rule (worker-money-panel.tsx passes
+   * `current={rule}`, not `ownRule`), so saving carries today's values forward and a partial
+   * override cannot be created by accident there. That seeding is the only thing standing between
+   * this behaviour and a silently un-retained worker, which is worth a test naming it.
+   */
+  const estate = rule({ retentionMode: "percent_of_day", retentionValue: 20 })
+
+  it("drops the estate's retention for a worker whose own row sets only overtime", () => {
+    const rules = [
+      estate,
+      rule({ workerId: "w1", effectiveFrom: "2026-02-01", overtimeMode: "explicit_hourly", overtimeValue: 90 }),
+    ]
+    const manoj = resolveRuleForDate(rules, "w1", "2026-08-01")
+
+    expect(manoj?.overtimeMode).toBe("explicit_hourly")
+    // The half he never set is null, not inherited — this is the trap, stated.
+    expect(manoj?.retentionMode).toBeNull()
+    expect(retentionForDay(manoj, 600, 1)).toBe(0)
+
+    // And everybody else is untouched, which is what makes it invisible.
+    expect(retentionForDay(resolveRuleForDate(rules, "w2", "2026-08-01"), 600, 1)).toBe(120)
+  })
+
+  it("keeps both halves when the row carries both, which is what the form writes", () => {
+    // The same intent expressed correctly: restate retention on the worker's own row. This is the
+    // shape the UI produces, because it pre-fills from the effective rule.
+    const rules = [
+      estate,
+      rule({
+        workerId: "w1",
+        effectiveFrom: "2026-02-01",
+        retentionMode: "percent_of_day",
+        retentionValue: 20,
+        overtimeMode: "explicit_hourly",
+        overtimeValue: 90,
+      }),
+    ]
+    const manoj = resolveRuleForDate(rules, "w1", "2026-08-01")
+
+    expect(retentionForDay(manoj, 600, 1)).toBe(120)
+    expect(manoj?.overtimeMode).toBe("explicit_hourly")
+  })
+
+  it("stops following the estate rule from then on, however much newer the estate rule is", () => {
+    // The consequence that lands months later: an override written to change overtime also freezes
+    // that worker's retention, so an estate-wide rise never reaches them.
+    const rules = [
+      estate,
+      rule({ effectiveFrom: "2026-06-01", retentionMode: "percent_of_day", retentionValue: 25 }),
+      rule({
+        workerId: "w1",
+        effectiveFrom: "2026-02-01",
+        retentionMode: "percent_of_day",
+        retentionValue: 20,
+        overtimeMode: "explicit_hourly",
+        overtimeValue: 90,
+      }),
+    ]
+
+    // Everyone moves to 25% in June. The overridden worker stays on the 20% their row carries.
+    expect(retentionForDay(resolveRuleForDate(rules, "w2", "2026-08-01"), 600, 1)).toBe(150)
+    expect(retentionForDay(resolveRuleForDate(rules, "w1", "2026-08-01"), 600, 1)).toBe(120)
+  })
+})
+
 describe("retention: both readings of twenty percent", () => {
   const pct = rule({ retentionMode: "percent_of_day", retentionValue: 20 })
   const flat = rule({ retentionMode: "flat_per_day", retentionValue: 120 })

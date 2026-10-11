@@ -41,6 +41,19 @@ type PayrollWorker = {
   /** All absent, and every line below hidden, for an estate that has set no rules. */
   overtime?: number
   retention?: number
+  /**
+   * Retention the wage could not cover — THE THIRD OF THREE SHORTFALLS, and the one that was left out.
+   *
+   * `lib/pay-rules.ts` clamps retention to gross (`Math.min(retentionDue, gross)`) and reports the
+   * remainder here. `tests/payroll-adds-up.test.ts` pins the case exactly: a Rs 100 week against a
+   * Rs 360 retention holds Rs 100, nets Rs 0, and leaves Rs 260 over.
+   *
+   * It was computed, carried through lib/payroll-period.ts, serialised by the API — and read by no
+   * component, so that Rs 260 simply was not on the screen. Its two siblings were both already
+   * shown ("Could not deduct", "Could not recover"); the reasoning in the deductionsTaken comment
+   * above is this case word for word, and retention was the one it was not applied to.
+   */
+  retentionShortfall?: number
   advanceRecovered?: number
   advanceShortfall?: number
   heldAfter?: number
@@ -65,6 +78,7 @@ type Totals = {
   adjustments: number
   overtime?: number
   retention?: number
+  retentionShortfall?: number
   advanceRecovered?: number
   advanceShortfall?: number
   netPayable: number
@@ -152,7 +166,7 @@ export default function PayrollSummaryTab() {
       "Worker", "Type", "Days Present", "Daily Rate (₹)", "Attendance Earnings (₹)",
       "Picking (kg)", "Picking Earnings (₹)", "Adjustments (₹)", "Deductions (₹)",
       ...(showRuleColumns
-        ? ["Overtime (₹)", "Retention Held (₹)", "Advance Recovered (₹)", "Advance Not Recovered (₹)", "Deduction Not Taken (₹)", "Still Owed (₹)"]
+        ? ["Overtime (₹)", "Retention Held (₹)", "Retention Not Held (₹)", "Advance Recovered (₹)", "Advance Not Recovered (₹)", "Deduction Not Taken (₹)", "Still Owed (₹)"]
         : []),
       "Net Payable (₹)",
     ]
@@ -170,6 +184,7 @@ export default function PayrollSummaryTab() {
         ? [
             (Number(w.overtime) || 0).toFixed(2),
             (Number(w.retention) || 0).toFixed(2),
+            (Number(w.retentionShortfall) || 0).toFixed(2),
             (Number(w.advanceRecovered) || 0).toFixed(2),
             (Number(w.advanceShortfall) || 0).toFixed(2),
             (Number(w.deductionShortfall) || 0).toFixed(2),
@@ -190,6 +205,7 @@ export default function PayrollSummaryTab() {
           ? [
               (Number(totals.overtime) || 0).toFixed(2),
               (Number(totals.retention) || 0).toFixed(2),
+              (Number(totals.retentionShortfall) || 0).toFixed(2),
               (Number(totals.advanceRecovered) || 0).toFixed(2),
               (Number(totals.advanceShortfall) || 0).toFixed(2),
               (Number(totals.deductionShortfall) || 0).toFixed(2),
@@ -238,7 +254,7 @@ export default function PayrollSummaryTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <IndianRupee className="h-4 w-4 text-emerald-400" />
+            <IndianRupee className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
             Payroll Summary
           </CardTitle>
           <CardDescription>
@@ -249,26 +265,34 @@ export default function PayrollSummaryTab() {
           {/* Whole weeks, Sunday to Saturday, because that is the range an estate paying on a
               Saturday actually runs. Stepping by whole weeks also keeps one advance instalment per
               run — an arbitrary nine-day range would take a single instalment for nine days' work. */}
+          {/*
+            `sm:h-8`, NOT `h-8`. Button and Input are both mobile-first already -- `size="sm"` is
+            `h-10 sm:h-9`, Input is `h-11 sm:h-10` -- so a flat `h-8` override was throwing that
+            away and forcing a 32px target on a phone. The nav directly above this card was raised
+            to `min-h-11` for exactly this reason ("they are how a writer gets between the roll and
+            the roster on a phone"), and these five controls, the ones that pick which week gets
+            paid, had quietly stayed at 32. Compacting only from `sm:` up keeps the desktop density.
+          */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Pay week</span>
-            <Button size="sm" variant="outline" className="h-8" onClick={() => shiftWeek(-1)}>
+            <Button size="sm" variant="outline" className="sm:h-8" onClick={() => shiftWeek(-1)}>
               ← Previous
             </Button>
-            <Button size="sm" variant="outline" className="h-8" onClick={() => shiftWeek(0)}>
+            <Button size="sm" variant="outline" className="sm:h-8" onClick={() => shiftWeek(0)}>
               This week
             </Button>
-            <Button size="sm" variant="outline" className="h-8" onClick={() => shiftWeek(1)}>
+            <Button size="sm" variant="outline" className="sm:h-8" onClick={() => shiftWeek(1)}>
               Next →
             </Button>
           </div>
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
             <div className="flex items-center gap-3 sm:block sm:space-y-1.5">
               <Label htmlFor="payroll-start-date" className="text-xs shrink-0">Start date</Label>
-              <Input id="payroll-start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-full sm:w-36 text-sm" />
+              <Input id="payroll-start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full text-sm sm:h-8 sm:w-36" />
             </div>
             <div className="flex items-center gap-3 sm:block sm:space-y-1.5">
               <Label htmlFor="payroll-end-date" className="text-xs shrink-0">End date</Label>
-              <Input id="payroll-end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-full sm:w-36 text-sm" />
+              <Input id="payroll-end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full text-sm sm:h-8 sm:w-36" />
             </div>
             <TooltipProvider>
               <Tooltip>
@@ -296,7 +320,7 @@ export default function PayrollSummaryTab() {
           </div>
 
           {missingRateCount > 0 && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-sm text-amber-300">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
                 {missingRateCount} worker{missingRateCount !== 1 ? "s" : ""} {missingRateCount !== 1 ? "have" : "has"} no daily rate set — their attendance earnings will show as ₹0.{" "}
@@ -306,7 +330,7 @@ export default function PayrollSummaryTab() {
           )}
 
           {missingSalaryCount > 0 && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-sm text-amber-300">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
                 {missingSalaryCount} monthly-paid worker{missingSalaryCount !== 1 ? "s have" : " has"} no salary
@@ -334,19 +358,19 @@ export default function PayrollSummaryTab() {
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" />
                                 </TooltipTrigger>
                                 <TooltipContent>Paid monthly, but no salary recorded — this line is ₹0</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           )}
                           {w.fromSalary && (
-                            <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-400">
+                            <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-400">
                               salary
                             </span>
                           )}
                           {w.onRoster === false && (
-                            <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500">
+                            <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-500">
                               left
                             </span>
                           )}
@@ -354,7 +378,7 @@ export default function PayrollSummaryTab() {
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" />
                                 </TooltipTrigger>
                                 <TooltipContent>No daily rate set — attendance earnings are ₹0</TooltipContent>
                               </Tooltip>
@@ -369,7 +393,7 @@ export default function PayrollSummaryTab() {
                       </div>
                       <div className="text-right shrink-0">
                         <div className="text-xs text-muted-foreground">Net payable</div>
-                        <div className="font-semibold text-sm text-emerald-400">{formatCurrency(w.netPayable)}</div>
+                        <div className="font-semibold text-sm text-emerald-700 dark:text-emerald-400">{formatCurrency(w.netPayable)}</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -385,34 +409,39 @@ export default function PayrollSummaryTab() {
                       </>}
                       {w.adjustments > 0 && <>
                         <span className="text-muted-foreground">Bonus / adjustment</span>
-                        <span className="text-right text-sky-400">+{formatCurrency(w.adjustments)}</span>
+                        <span className="text-right text-sky-700 dark:text-sky-400">+{formatCurrency(w.adjustments)}</span>
                       </>}
                       {withheld(w) > 0 && <>
                         <span className="text-muted-foreground">Deductions</span>
-                        <span className="text-right text-rose-400">-{formatCurrency(withheld(w))}</span>
+                        <span className="text-right text-rose-700 dark:text-rose-400">-{formatCurrency(withheld(w))}</span>
                       </>}
                       {Number(w.deductionShortfall) > 0 && <>
-                        <span className="text-amber-600 dark:text-amber-500">Could not deduct</span>
-                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(w.deductionShortfall))}</span>
+                        <span className="text-amber-700 dark:text-amber-500">Could not deduct</span>
+                        <span className="text-right text-amber-700 dark:text-amber-500">{formatCurrency(Number(w.deductionShortfall))}</span>
                       </>}
                       {/* Each of these appears only when the estate's own rules produced it, so a
                           tenant that has set nothing sees exactly the card it saw before. */}
                       {Number(w.overtime) > 0 && <>
                         <span className="text-muted-foreground">Overtime</span>
-                        <span className="text-right text-emerald-400">+{formatCurrency(Number(w.overtime))}</span>
+                        <span className="text-right text-emerald-700 dark:text-emerald-400">+{formatCurrency(Number(w.overtime))}</span>
                       </>}
                       {Number(w.retention) > 0 && <>
                         <span className="text-muted-foreground">Retention held</span>
-                        <span className="text-right text-rose-400">-{formatCurrency(Number(w.retention))}</span>
+                        <span className="text-right text-rose-700 dark:text-rose-400">-{formatCurrency(Number(w.retention))}</span>
+                      </>}
+                      {Number(w.retentionShortfall) > 0 && <>
+                        {/* Stated, never carried forward, exactly like the other two. */}
+                        <span className="text-amber-700 dark:text-amber-500">Could not hold</span>
+                        <span className="text-right text-amber-700 dark:text-amber-500">{formatCurrency(Number(w.retentionShortfall))}</span>
                       </>}
                       {Number(w.advanceRecovered) > 0 && <>
                         <span className="text-muted-foreground">Advance recovered</span>
-                        <span className="text-right text-rose-400">-{formatCurrency(Number(w.advanceRecovered))}</span>
+                        <span className="text-right text-rose-700 dark:text-rose-400">-{formatCurrency(Number(w.advanceRecovered))}</span>
                       </>}
                       {Number(w.advanceShortfall) > 0 && <>
                         {/* Stated, never carried into next week. The estate decides what to do. */}
-                        <span className="text-amber-600 dark:text-amber-500">Could not recover</span>
-                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(w.advanceShortfall))}</span>
+                        <span className="text-amber-700 dark:text-amber-500">Could not recover</span>
+                        <span className="text-right text-amber-700 dark:text-amber-500">{formatCurrency(Number(w.advanceShortfall))}</span>
                       </>}
                       {Number(w.owedAfter) > 0 && <>
                         <span className="text-muted-foreground">Still owes after this</span>
@@ -425,7 +454,7 @@ export default function PayrollSummaryTab() {
                   <div className="rounded-lg border-2 border-border bg-muted/30 p-3">
                     <div className="flex justify-between font-semibold text-sm mb-2">
                       <span>Total ({workers.length} workers)</span>
-                      <span className="text-emerald-400">{formatCurrency(totals.netPayable)}</span>
+                      <span className="text-emerald-700 dark:text-emerald-400">{formatCurrency(totals.netPayable)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                       <span className="text-muted-foreground">Days present</span>
@@ -438,34 +467,38 @@ export default function PayrollSummaryTab() {
                       </>}
                       {totals.adjustments > 0 && <>
                         <span className="text-muted-foreground">Bonus / adjustment</span>
-                        <span className="text-right text-sky-400">+{formatCurrency(totals.adjustments)}</span>
+                        <span className="text-right text-sky-700 dark:text-sky-400">+{formatCurrency(totals.adjustments)}</span>
                       </>}
                       {totals.deductions > 0 && <>
                         <span className="text-muted-foreground">Deductions</span>
-                        <span className="text-right text-rose-400">-{formatCurrency(totals.deductions)}</span>
+                        <span className="text-right text-rose-700 dark:text-rose-400">-{formatCurrency(totals.deductions)}</span>
                       </>}
                       {/* The worker cards above itemise all three; without them here the total was
                           a net nobody could arrive at from the lines beneath it — the same failure
                           the export had, on the layout a phone actually shows. */}
                       {Number(totals.overtime) > 0 && <>
                         <span className="text-muted-foreground">Overtime</span>
-                        <span className="text-right text-emerald-400">+{formatCurrency(Number(totals.overtime))}</span>
+                        <span className="text-right text-emerald-700 dark:text-emerald-400">+{formatCurrency(Number(totals.overtime))}</span>
                       </>}
                       {Number(totals.retention) > 0 && <>
                         <span className="text-muted-foreground">Retention held</span>
-                        <span className="text-right text-rose-400">-{formatCurrency(Number(totals.retention))}</span>
+                        <span className="text-right text-rose-700 dark:text-rose-400">-{formatCurrency(Number(totals.retention))}</span>
+                      </>}
+                      {Number(totals.retentionShortfall) > 0 && <>
+                        <span className="text-amber-700 dark:text-amber-500">Could not hold</span>
+                        <span className="text-right text-amber-700 dark:text-amber-500">{formatCurrency(Number(totals.retentionShortfall))}</span>
                       </>}
                       {Number(totals.advanceRecovered) > 0 && <>
                         <span className="text-muted-foreground">Advance recovered</span>
-                        <span className="text-right text-rose-400">-{formatCurrency(Number(totals.advanceRecovered))}</span>
+                        <span className="text-right text-rose-700 dark:text-rose-400">-{formatCurrency(Number(totals.advanceRecovered))}</span>
                       </>}
                       {Number(totals.advanceShortfall) > 0 && <>
-                        <span className="text-amber-600 dark:text-amber-500">Could not recover</span>
-                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(totals.advanceShortfall))}</span>
+                        <span className="text-amber-700 dark:text-amber-500">Could not recover</span>
+                        <span className="text-right text-amber-700 dark:text-amber-500">{formatCurrency(Number(totals.advanceShortfall))}</span>
                       </>}
                       {Number(totals.deductionShortfall) > 0 && <>
-                        <span className="text-amber-600 dark:text-amber-500">Could not deduct</span>
-                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(totals.deductionShortfall))}</span>
+                        <span className="text-amber-700 dark:text-amber-500">Could not deduct</span>
+                        <span className="text-right text-amber-700 dark:text-amber-500">{formatCurrency(Number(totals.deductionShortfall))}</span>
                       </>}
                     </div>
                   </div>
@@ -529,7 +562,7 @@ export default function PayrollSummaryTab() {
                             <TableHead className="text-right">
                               <Tooltip>
                                 <TooltipTrigger className="cursor-default underline decoration-dotted underline-offset-2">Retention</TooltipTrigger>
-                                <TooltipContent>Held back this period under the estate&apos;s retention rule. Paid out when the worker leaves.</TooltipContent>
+                                <TooltipContent>Held back this period under the estate&apos;s retention rule. Paid out when the worker leaves. Amber means the wage could not cover all of it.</TooltipContent>
                               </Tooltip>
                             </TableHead>
                             <TableHead className="text-right">
@@ -550,14 +583,14 @@ export default function PayrollSummaryTab() {
                             <span className="flex items-center gap-1.5">
                               {w.name}
                               {w.fromSalary && (
-                                <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-400">
+                                <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-400">
                                   salary
                                 </span>
                               )}
                               {w.onRoster === false && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500 cursor-default">
+                                    <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-500 cursor-default">
                                       left
                                     </span>
                                   </TooltipTrigger>
@@ -567,7 +600,7 @@ export default function PayrollSummaryTab() {
                               {w.missingMonthlyWage && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400 cursor-default" />
+                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400 cursor-default" />
                                   </TooltipTrigger>
                                   <TooltipContent>Paid monthly, but no salary recorded — this line is ₹0. Set it in the Workers tab.</TooltipContent>
                                 </Tooltip>
@@ -575,7 +608,7 @@ export default function PayrollSummaryTab() {
                               {w.missingDailyRate && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400 cursor-default" />
+                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400 cursor-default" />
                                   </TooltipTrigger>
                                   <TooltipContent>No daily rate set — attendance earnings are ₹0. Set rate in Workers tab.</TooltipContent>
                                 </Tooltip>
@@ -593,10 +626,10 @@ export default function PayrollSummaryTab() {
                           <TableCell className="text-right text-sm">{w.attendanceEarnings > 0 ? formatCurrency(w.attendanceEarnings) : "—"}</TableCell>
                           <TableCell className="text-right text-sm">{w.pickingKg > 0 ? w.pickingKg.toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "—"}</TableCell>
                           <TableCell className="text-right text-sm">{w.pickingEarnings > 0 ? formatCurrency(w.pickingEarnings) : "—"}</TableCell>
-                          <TableCell className="text-right text-sm text-sky-400">{w.adjustments > 0 ? `+${formatCurrency(w.adjustments)}` : "—"}</TableCell>
+                          <TableCell className="text-right text-sm text-sky-700 dark:text-sky-400">{w.adjustments > 0 ? `+${formatCurrency(w.adjustments)}` : "—"}</TableCell>
                           <TableCell className="text-right text-sm">
                             {withheld(w) > 0 || Number(w.deductionShortfall) > 0 ? (
-                              <span className={Number(w.deductionShortfall) > 0 ? "text-amber-600 dark:text-amber-500" : "text-rose-400"}>
+                              <span className={Number(w.deductionShortfall) > 0 ? "text-amber-700 dark:text-amber-500" : "text-rose-700 dark:text-rose-400"}>
                                 -{formatCurrency(withheld(w))}
                                 {Number(w.deductionShortfall) > 0 ? (
                                   <Tooltip>
@@ -628,15 +661,31 @@ export default function PayrollSummaryTab() {
                           */}
                           {showRuleColumns && (
                             <>
-                              <TableCell className="text-right text-sm text-emerald-400">
+                              <TableCell className="text-right text-sm text-emerald-700 dark:text-emerald-400">
                                 {Number(w.overtime) > 0 ? `+${formatCurrency(Number(w.overtime))}` : "—"}
                               </TableCell>
-                              <TableCell className="text-right text-sm text-rose-400">
-                                {Number(w.retention) > 0 ? `-${formatCurrency(Number(w.retention))}` : "—"}
+                              <TableCell className="text-right text-sm">
+                                {Number(w.retention) > 0 || Number(w.retentionShortfall) > 0 ? (
+                                  <span className={Number(w.retentionShortfall) > 0 ? "text-amber-700 dark:text-amber-500" : "text-rose-700 dark:text-rose-400"}>
+                                    -{formatCurrency(Number(w.retention) || 0)}
+                                    {Number(w.retentionShortfall) > 0 ? (
+                                      <Tooltip>
+                                        <TooltipTrigger className="ml-1 cursor-default underline decoration-dotted underline-offset-2">
+                                          ({formatCurrency(Number(w.retentionShortfall))} short)
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          This period&apos;s wage could not cover the full retention, so only what it could reach was held. Not carried forward — the estate decides.
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    ) : null}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
                               </TableCell>
                               <TableCell className="text-right text-sm">
                                 {Number(w.advanceRecovered) > 0 || Number(w.advanceShortfall) > 0 ? (
-                                  <span className={Number(w.advanceShortfall) > 0 ? "text-amber-600 dark:text-amber-500" : "text-rose-400"}>
+                                  <span className={Number(w.advanceShortfall) > 0 ? "text-amber-700 dark:text-amber-500" : "text-rose-700 dark:text-rose-400"}>
                                     -{formatCurrency(Number(w.advanceRecovered) || 0)}
                                     {Number(w.advanceShortfall) > 0 ? (
                                       // The header tooltip promises amber means "could not all be
@@ -657,7 +706,7 @@ export default function PayrollSummaryTab() {
                               </TableCell>
                             </>
                           )}
-                          <TableCell className="text-right font-semibold text-sm text-emerald-400">{formatCurrency(w.netPayable)}</TableCell>
+                          <TableCell className="text-right font-semibold text-sm text-emerald-700 dark:text-emerald-400">{formatCurrency(w.netPayable)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -669,18 +718,27 @@ export default function PayrollSummaryTab() {
                           <TableCell className="text-right text-sm">{formatCurrency(totals.attendanceEarnings)}</TableCell>
                           <TableCell className="text-right text-sm">{totals.pickingKg.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</TableCell>
                           <TableCell className="text-right text-sm">{formatCurrency(totals.pickingEarnings)}</TableCell>
-                          <TableCell className="text-right text-sm text-sky-400">+{formatCurrency(totals.adjustments)}</TableCell>
-                          <TableCell className="text-right text-sm text-rose-400">-{formatCurrency(totals.deductions)}</TableCell>
+                          <TableCell className="text-right text-sm text-sky-700 dark:text-sky-400">+{formatCurrency(totals.adjustments)}</TableCell>
+                          <TableCell className="text-right text-sm text-rose-700 dark:text-rose-400">-{formatCurrency(totals.deductions)}</TableCell>
                           {/* Must match the header and body cell counts exactly, or every figure in
                               the footer shifts one column left and lands under the wrong heading. */}
                           {showRuleColumns && (
                             <>
-                              <TableCell className="text-right text-sm text-emerald-400">+{formatCurrency(Number(totals.overtime) || 0)}</TableCell>
-                              <TableCell className="text-right text-sm text-rose-400">-{formatCurrency(Number(totals.retention) || 0)}</TableCell>
-                              <TableCell className="text-right text-sm text-rose-400">-{formatCurrency(Number(totals.advanceRecovered) || 0)}</TableCell>
+                              <TableCell className="text-right text-sm text-emerald-700 dark:text-emerald-400">+{formatCurrency(Number(totals.overtime) || 0)}</TableCell>
+                              {/* The aggregate shortfall belongs here too. The phone's totals card
+                                  itemises it and the worker rows above each show their own, so a
+                                  desktop total without it was the two layouts disagreeing about
+                                  the same period — the one thing they must never do. */}
+                              <TableCell className="text-right text-sm">
+                                <span className={Number(totals.retentionShortfall) > 0 ? "text-amber-700 dark:text-amber-500" : "text-rose-700 dark:text-rose-400"}>
+                                  -{formatCurrency(Number(totals.retention) || 0)}
+                                  {Number(totals.retentionShortfall) > 0 ? ` (${formatCurrency(Number(totals.retentionShortfall))} short)` : ""}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right text-sm text-rose-700 dark:text-rose-400">-{formatCurrency(Number(totals.advanceRecovered) || 0)}</TableCell>
                             </>
                           )}
-                          <TableCell className="text-right text-sm text-emerald-400">{formatCurrency(totals.netPayable)}</TableCell>
+                          <TableCell className="text-right text-sm text-emerald-700 dark:text-emerald-400">{formatCurrency(totals.netPayable)}</TableCell>
                         </TableRow>
                       </TableFooter>
                     )}
