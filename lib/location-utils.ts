@@ -86,6 +86,8 @@ export async function validateLocationForTenant(
   locationId: string | null,
 ): Promise<string | null> {
   if (!locationId) return null
+  // A malformed id would make the ::uuid cast throw (22P02 -> 500); it is "invalid for this tenant".
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(locationId)) return null
   const rows = await runTenantQuery(
     sql,
     tenantContext,

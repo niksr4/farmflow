@@ -90,6 +90,11 @@ const formatExportDate = (value: string | null | undefined) => {
 }
 
 const csvEscape = (value: string | number | null | undefined) => `"${String(value ?? "").replace(/"/g, '""')}"`
+// Free-text cells (buyer, notes, batch) are user-typed; a leading = + - @ would run as a formula in Excel.
+const csvText = (value: string | null | undefined) => {
+  const text = String(value ?? "")
+  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
+}
 const csvRow = (values: Array<string | number | null | undefined>) => values.map(csvEscape).join(",")
 
 const getEstateTokens = (record: SalesExportRecord) =>
@@ -150,17 +155,17 @@ export const buildSalesCsv = (recordsInput: SalesExportRecord[], bagWeightKg: nu
 
   const toDetailRow = (record: SalesExportRecord) => [
     formatExportDate(record.sale_date),
-    record.batch_no || "",
+    csvText(record.batch_no),
     resolveSalesEstateDisplay(record),
     record.coffee_type || "",
     toNumber(record.bags_sold).toString(),
     formatBagTypeLabel(record.bag_type),
     resolveSalesKgs(record, bagWeightKg).toFixed(2),
-    record.buyer_name || "",
+    csvText(record.buyer_name),
     toNumber(record.price_per_bag).toString(),
     toNumber(record.revenue).toString(),
-    record.bank_account || "",
-    record.notes || "",
+    csvText(record.bank_account),
+    csvText(record.notes),
   ]
 
   // Section 1: sorted by date

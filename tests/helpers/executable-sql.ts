@@ -13,6 +13,16 @@
  * String-aware (so an apostrophe inside a literal does not start a comment), handles nested block
  * comments, and preserves newlines so reported positions and any index-ordering assertions stay
  * meaningful.
+ *
+ * DOLLAR-QUOTED BODIES ARE DELIBERATELY NOT OPAQUE. SQL sees `$$ … $$` as one string, but plpgsql
+ * then parses what is inside it, and that is where the rules these guards check actually live --
+ * so `--` and block comments are stripped in there too. Single-quoted literals ARE preserved,
+ * because RAISE EXCEPTION messages are data and contain apostrophes and punctuation that would
+ * otherwise be read as syntax.
+ *
+ * Worth knowing about the tamper tests that justify this: the originals only ever DELETED the
+ * lock and the move conditions, which is the easier half. Commenting a control out is how one
+ * actually gets disabled, and that was the case the guard could not see.
  */
 export const executableSql = (sql: string): string => {
   let out = ""

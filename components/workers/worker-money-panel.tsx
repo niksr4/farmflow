@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Check, Loader2, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -100,7 +100,11 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
     description: "",
   })
 
+  // Latest-request-wins: switching worker (or a save's reload) must not let a slower older
+  // response overwrite the newer one with another worker's ledger.
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     setLoading(true)
     try {
       const [ledgerRes, rulesRes] = await Promise.all([
@@ -109,6 +113,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
       ])
       const ledger = await ledgerRes.json()
       const rules = await rulesRes.json()
+      if (seq !== loadSeq.current) return
       if (ledger?.success) {
         setEntries(ledger.entries || [])
         setHeld(Number(ledger.retentionHeldToDate) || 0)
@@ -123,9 +128,9 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
     } catch {
       // A panel that cannot load must say so. Rendering empty reads as "this worker has no
       // advances", which is the same shape as the bug that hid worker_ledger for six weeks.
-      toast.error("Could not load this worker's money history")
+      if (seq === loadSeq.current) toast.error("Could not load this worker's money history")
     } finally {
-      setLoading(false)
+      if (seq === loadSeq.current) setLoading(false)
     }
   }, [workerId])
 

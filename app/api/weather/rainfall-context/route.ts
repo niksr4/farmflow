@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
+import { istDateIso, todayIso as istTodayIso } from "@/lib/date-utils"
 import { requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
@@ -75,8 +76,11 @@ export async function GET(request: NextRequest) {
     const weatherResponse = await fetchWithTimeout(url, { next: { revalidate: 1800 }, timeoutMs: 8_000 })
     const weatherPayload = await weatherResponse.json().catch(() => ({}))
     if (!weatherResponse.ok) {
-      const message = weatherPayload?.error?.message || weatherResponse.statusText
-      return NextResponse.json({ success: false, error: `Failed to fetch forecast: ${message}` }, { status: weatherResponse.status, headers: rateHeaders })
+      logServerError(
+        "WeatherAPI rainfall-context error",
+        new Error(String(weatherPayload?.error?.message || weatherResponse.statusText)),
+      )
+      return NextResponse.json({ success: false, error: "Weather service unavailable" }, { status: 502, headers: rateHeaders })
     }
 
     const forecastDays: ForecastDay[] = Array.isArray(weatherPayload?.forecast?.forecastday)
@@ -89,8 +93,8 @@ export async function GET(request: NextRequest) {
       })),
     )
 
-    const todayIso = new Date().toISOString().slice(0, 10)
-    const past30Iso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const todayIso = istTodayIso()
+    const past30Iso = istDateIso(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
     const rainfallRows = await runTenantQuery(
       sql,
       tenantContext,
@@ -108,7 +112,7 @@ export async function GET(request: NextRequest) {
       `,
     )
 
-    const last7Cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const last7Cutoff = istDateIso(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
     const last7Rows = (rainfallRows || []).filter((row: any) => String(row.record_date).slice(0, 10) >= last7Cutoff)
     const previousRows = (rainfallRows || []).filter((row: any) => String(row.record_date).slice(0, 10) < last7Cutoff)
 

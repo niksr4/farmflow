@@ -129,7 +129,6 @@ const getDueContext = (record: ReceivableRecord) => {
 
   if (deltaDays < 0) return `${Math.abs(deltaDays)}d overdue`
   if (deltaDays === 0) return "Due today"
-  if (deltaDays <= 7) return `Due in ${deltaDays}d`
   return `Due in ${deltaDays}d`
 }
 
@@ -325,7 +324,9 @@ export default function ReceivablesTab() {
       invoice_date: record.invoice_date?.slice(0, 10) || todayIso(),
       due_date: record.due_date?.slice(0, 10) || "",
       amount: String(record.amount ?? ""),
-      status: getEffectiveStatus(record),
+      // Stored status, not the derived one: effective_status folds "partial" (and any stale due date) into
+      // "overdue", and saving that back would permanently overwrite the real state.
+      status: STATUS_OPTIONS.some((option) => option.value === record.status) ? record.status : "unpaid",
       notes: record.notes || "",
       location_id: record.location_id || "",
     })

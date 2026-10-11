@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/use-toast"
 import { numericInputValue } from "@/lib/number-input"
 
 type LineItem = {
+  id: string
   description: string
   hsn: string
   quantity: number
@@ -54,7 +55,9 @@ type InvoiceRow = {
   irn_ack_date: string | null
 }
 
+let lineItemSeq = 0
 const defaultLineItem = (): LineItem => ({
+  id: `line-${Date.now()}-${++lineItemSeq}`,
   description: "",
   hsn: "",
   quantity: 1,
@@ -356,7 +359,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
                 </TableHeader>
                 <TableBody>
                   {items.map((item, index) => (
-                    <TableRow key={`${item.description}-${index}`}>
+                    <TableRow key={item.id}>
                       <TableCell>
                         <Input
                           value={item.description}

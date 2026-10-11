@@ -73,6 +73,13 @@ export const TENANT_DELETION_DEPENDENCIES: TenantDeletionDependencySpec[] = [
   withRequiredTables("attendance_records", "Attendance records", "blocking"),
   withRequiredTables("picking_records", "Picking records", "blocking"),
   withRequiredTables("worker_ledger", "Worker ledger entries", "blocking"),
+  // Tables added after the original list. Every one cascades on tenant delete (ON DELETE CASCADE),
+  // so leaving them out means a tenant whose only data is muster allocations, pay rules or punches
+  // passes the "no operational data" check and has its wage records destroyed silently.
+  withRequiredTables("labour_assignments", "Muster work allocations", "blocking"),
+  withRequiredTables("worker_pay_rules", "Worker pay rules", "blocking"),
+  withRequiredTables("biometric_punches", "Biometric punches", "blocking"),
+  withRequiredTables("soil_tests", "Soil tests", "blocking"),
   withRequiredTables("transaction_history", "Inventory transactions", "blocking"),
   withRequiredTables("document_records", "Documents", "blocking"),
   withRequiredTables("signup_tokens", "Signup tokens", "cleanup", "signup_tokens", ["signup_tokens", "signup_requests"]),
