@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { todayIso } from "@/lib/date-utils"
 import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
@@ -158,11 +159,11 @@ export async function GET(request: Request) {
 
     // Cap both seasons at the same elapsed point so the comparison is fair.
     // e.g. if today is May 28, compare Apr 1–May 28 this year vs Apr 1–May 28 last year.
-    const today = new Date()
-    const todayStr = today.toISOString().split("T")[0]
-    const prevYearEquivalent = new Date(today)
-    prevYearEquivalent.setFullYear(prevYearEquivalent.getFullYear() - 1)
-    const prevYearEquivalentStr = prevYearEquivalent.toISOString().split("T")[0]
+    // IST calendar date (not UTC): getCurrentFiscalYear() above is IST, and between 00:00 and
+    // 05:30 IST the UTC date is still yesterday, which on 1 April falls before the FY start.
+    const todayStr = todayIso()
+    const [todayYear, todayMonth, todayDay] = todayStr.split("-").map(Number)
+    const prevYearEquivalentStr = new Date(Date.UTC(todayYear - 1, todayMonth - 1, todayDay)).toISOString().slice(0, 10)
     // Clamp prev-year equivalent to within the previous FY bounds
     const prevEndDate = prevYearEquivalentStr > prevFY.endDate ? prevFY.endDate : prevYearEquivalentStr
 

@@ -34,6 +34,15 @@ describe("tenant deletion helpers", () => {
     expect(TENANT_DELETION_DEPENDENCIES.some((entry) => entry.category === "blocking")).toBe(true)
   })
 
+  it("treats cascade-deleted wage and attendance tables as blocking, not silently deletable", () => {
+    const blocking = new Set(
+      TENANT_DELETION_DEPENDENCIES.filter((entry) => entry.category === "blocking").map((entry) => entry.table),
+    )
+    for (const table of ["labour_assignments", "worker_pay_rules", "biometric_punches", "soil_tests", "worker_ledger"]) {
+      expect(blocking.has(table)).toBe(true)
+    }
+  })
+
   it("skips default tenant cleanup dependencies for views without tenant_id", () => {
     const inventorySummarySpec = TENANT_DELETION_DEPENDENCIES.find((entry) => entry.table === "inventory_summary")
     expect(inventorySummarySpec).toBeTruthy()

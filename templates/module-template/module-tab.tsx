@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
+import { istDateIso } from "@/lib/date-utils"
 
 export default function ModuleTabTemplate() {
   const { user } = useAuth()
@@ -17,20 +18,41 @@ export default function ModuleTabTemplate() {
   const [isSaving, setIsSaving] = useState(false)
   const [metricA, setMetricA] = useState("")
   const [metricB, setMetricB] = useState("")
+  /** A failed load is not an empty list -- see loadRecords below. */
+  const [loadError, setLoadError] = useState(false)
+
+  const loadRecords = useCallback(async () => {
+    setIsLoading(true)
+    setLoadError(false)
+    try {
+      const res = await fetch("/api/__MODULE_ID__")
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to load records")
+      }
+      setRecords(data.records || [])
+    } catch (error) {
+      console.error("Failed to load records", error)
+      toast({ title: "Error", description: "Failed to load records", variant: "destructive" })
+      /**
+       * NOT setRecords([]). A refused load did not establish that the tenant has nothing -- and
+       * once the toast closes, an empty table saying "No records yet" is indistinguishable from
+       * the truth. That is this codebase's house failure: not a crash, a confident wrong answer.
+       *
+       * The same shape has now been found three times in six weeks (the Workers roster, its
+       * recovery list, and here). This one is in the TEMPLATE, so every module built from it
+       * would have inherited it.
+       */
+      setLoadError(true)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [toast])
 
   useEffect(() => {
     if (!user?.tenantId) return
-    setIsLoading(true)
-    fetch("/api/__MODULE_ID__")
-      .then((res) => res.json())
-      .then((data) => setRecords(data.records || []))
-      .catch((error) => {
-        console.error("Failed to load records", error)
-        toast({ title: "Error", description: "Failed to load records", variant: "destructive" })
-        setRecords([])
-      })
-      .finally(() => setIsLoading(false))
-  }, [user?.tenantId, toast])
+    void loadRecords()
+  }, [user?.tenantId, loadRecords])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -39,7 +61,8 @@ export default function ModuleTabTemplate() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          record_date: new Date().toISOString().slice(0, 10),
+          // The estate day (IST), not the UTC date: before 05:30 IST the UTC date is still yesterday.
+          record_date: istDateIso(new Date()),
           metric_a: metricA,
           metric_b: metricB,
         }),
@@ -50,6 +73,8 @@ export default function ModuleTabTemplate() {
       }
       setMetricA("")
       setMetricB("")
+      toast({ title: "Saved", description: "Record saved." })
+      await loadRecords()
     } catch (error: any) {
       console.error("Failed to save record", error)
       toast({ title: "Error", description: error.message || "Failed to save record", variant: "destructive" })
@@ -95,6 +120,18 @@ export default function ModuleTabTemplate() {
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
                     Loading records...
+                  </TableCell>
+                </TableRow>
+              ) : loadError ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center">
+                    <p className="text-sm font-medium">Could not load records</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      This is a loading problem, not an empty list. Nothing has been lost.
+                    </p>
+                    <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => void loadRecords()}>
+                      Try again
+                    </Button>
                   </TableCell>
                 </TableRow>
               ) : records.length === 0 ? (
