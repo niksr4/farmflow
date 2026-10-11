@@ -1,6 +1,7 @@
 import { createHash } from "crypto"
 
 import { normalizeCsvHeader } from "../csv"
+import { parseCoffeeForm, parseCoffeeVariety } from "../crop-config"
 
 export const MAX_ROWS = 5000
 export const CHUNK_SIZE = 100
@@ -110,20 +111,37 @@ export const parseDate = (value: string | null | undefined) => {
   return `${yyyy}-${mm}-${dd}`
 }
 
+/**
+ * ⚠ BEHAVIOUR CHANGE, DELIBERATE. This used to title-case anything it did not recognise and pass it
+ * through, so a spreadsheet saying "Arabika" imported as a brand new variety called Arabika and then
+ * appeared as its own line in every report that groups by coffee_type. That is the mechanism by
+ * which "Dry P" became a third bag type, applied to the other axis.
+ *
+ * An unrecognised variety is now blank, which the caller already reports as a missing column -- so
+ * the row is refused with a readable message during the dry run instead of quietly inventing a
+ * category. Blank in, blank out, unchanged.
+ */
 export const normalizeCoffeeType = (value: string | null | undefined) => {
-  const raw = String(value || "").trim()
+  const raw = String(value ?? "").trim()
   if (!raw) return ""
-  const lower = raw.toLowerCase()
-  if (lower.includes("arabica")) return "Arabica"
-  if (lower.includes("robusta")) return "Robusta"
-  return raw.charAt(0).toUpperCase() + raw.slice(1)
+  return parseCoffeeVariety(raw) ?? ""
 }
 
+/**
+ * ⚠ BEHAVIOUR CHANGE, DELIBERATE, and the same reasoning as the variety above.
+ *
+ * This called anything that was not cherry "Dry Parchment". A spreadsheet column holding something
+ * it did not understand therefore imported as parchment, which in a money table is not a tidier
+ * label -- it is cherry weight and cherry revenue filed under parchment, with nothing on screen to
+ * say so. Unrecognised is now blank and the row is refused during the dry run.
+ *
+ * "Dry P" and "DP" are understood now rather than reaching parchment via the default, so the
+ * spellings an estate actually types still import; only genuinely unknown ones stop.
+ */
 export const normalizeBagType = (value: string | null | undefined) => {
-  const raw = String(value || "").trim().toLowerCase()
+  const raw = String(value ?? "").trim()
   if (!raw) return ""
-  if (raw.includes("cherry")) return "Dry Cherry"
-  return "Dry Parchment"
+  return parseCoffeeForm(raw) ?? ""
 }
 
 /**

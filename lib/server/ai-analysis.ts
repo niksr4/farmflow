@@ -4,6 +4,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { CROP_LABEL, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { displayCoffeeForm } from "@/lib/crop-config"
 import { EXCLUDE_REVALUATION_SQL } from "@/lib/revaluation-notes"
 import { istDate, istTodayParts } from "@/lib/date-utils"
 
@@ -589,14 +590,10 @@ function buildDataSummary(data: DataSummaryInput): string {
     const totalDispatches = data.dispatchData.length
     const totalBagsDispatched = data.dispatchData.reduce((sum, dispatch) => sum + (Number(dispatch.bags_dispatched) || 0), 0)
     const byCoffeeType: Record<string, number> = {}
-    const normalizeBagTypeLabel = (value: string | null | undefined) => {
-      if (!value) return "Unknown"
-      const normalized = value.toLowerCase()
-      if (normalized.includes("cherry")) return "Dry Cherry"
-      if (normalized.includes("parch")) return "Dry Parchment"
-      if (normalized.includes("dry p")) return "Dry Parchment"
-      return "Dry Parchment"
-    }
+    // This was the ONLY one of the twelve that knew about "Dry P", which is why the digest read
+    // correctly while the sales and dispatch tabs showed a third bag type. The knowledge is in
+    // lib/crop-config now, so every reader has it.
+    const normalizeBagTypeLabel = displayCoffeeForm
     data.dispatchData.forEach((dispatch) => {
       const coffeeType = dispatch.coffee_type || "Unknown"
       if (!byCoffeeType[coffeeType]) byCoffeeType[coffeeType] = 0

@@ -1,5 +1,6 @@
 import { format } from "date-fns"
 
+import { displayCoffeeForm, parseCoffeeForm, parseCoffeeVariety } from "./crop-config"
 import { resolveSalesKgs } from "./sales-math"
 
 type NumberLike = number | string | null | undefined
@@ -55,17 +56,23 @@ const toNumber = (value: NumberLike) => {
 const normalizeToken = (value: string | null | undefined) => String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
 
 const normalizeCoffeeType = (value: string | null | undefined) => {
-  const normalized = String(value || "").toLowerCase()
-  if (normalized.includes("arabica")) return "arabica"
-  if (normalized.includes("robusta")) return "robusta"
-  return "other"
+  const variety = parseCoffeeVariety(value)
+  if (!variety) return "other"
+  return variety === "Arabica" ? "arabica" : "robusta"
 }
 
-const normalizeBagType = (value: string | null | undefined) =>
-  String(value || "").toLowerCase().includes("cherry") ? "cherry" : "parchment"
+/**
+ * The export's own short keys, now derived from the shared recogniser rather than a second copy of
+ * the cherry-or-else rule. `null` for unrecognised, so resolveSalesCoffeeCode below declines to
+ * invent an AP/AC/RP/RC code for a row whose form nobody knows -- it already handles a null code.
+ */
+const normalizeBagType = (value: string | null | undefined): "cherry" | "parchment" | null => {
+  const form = parseCoffeeForm(value)
+  if (!form) return null
+  return form === "Dry Cherry" ? "cherry" : "parchment"
+}
 
-const formatBagTypeLabel = (value: string | null | undefined) =>
-  normalizeBagType(value) === "cherry" ? "Dry Cherry" : "Dry Parchment"
+const formatBagTypeLabel = (value: string | null | undefined) => displayCoffeeForm(value)
 
 /**
  * A sale_date as the CSV should print it. A calendar date (`2026-09-24`) or a Postgres `date`
