@@ -45,25 +45,29 @@ export default function UniversalSearch({ open, onOpenChange, onNavigate }: Prop
   const abortRef = useRef<AbortController | null>(null)
 
   const search = useCallback(async (q: string) => {
+    abortRef.current?.abort()
     if (q.length < 2) {
+      abortRef.current = null
       setResults([])
       setLoading(false)
       return
     }
-    abortRef.current?.abort()
-    abortRef.current = new AbortController()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
-        signal: abortRef.current.signal,
+        signal: controller.signal,
       })
       if (!res.ok) throw new Error("Search failed")
       const data = await res.json()
+      if (controller.signal.aborted) return
       setResults(data.results ?? [])
     } catch (err: any) {
-      if (err.name !== "AbortError") setResults([])
+      if (err.name !== "AbortError" && !controller.signal.aborted) setResults([])
     } finally {
-      setLoading(false)
+      // An aborted request must not clear the spinner of the request that replaced it.
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [])
 
@@ -75,6 +79,7 @@ export default function UniversalSearch({ open, onOpenChange, onNavigate }: Prop
 
   useEffect(() => {
     if (!open) {
+      abortRef.current?.abort()
       setQuery("")
       setResults([])
       setLoading(false)

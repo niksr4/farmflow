@@ -128,7 +128,11 @@ export function summariseAttendanceReport(rows: AttendanceReportRow[]): Attendan
 
 /** CSV for the estate office, column order matching the on-screen table. */
 export function attendanceReportToCsv(rows: AttendanceReportRow[], reportDate: string): string {
-  const escape = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value)
+  // Worker names are user-entered: neutralise spreadsheet formula prefixes, and quote CR as well as LF.
+  const escape = (raw: string) => {
+    const value = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
+    return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+  }
   const header = ["S.No", "EmployeeCode", "EmployeeName", "InTime", "OutTime", "WorkDuration", "Status"]
   const lines = [
     `Daily Attendance Report,${escape(reportDate)}`,

@@ -171,7 +171,7 @@ export const PROCESSING_BENCHMARKS = {
   moisture: {
     targetAfterDrying: "10–11% moisture content for parchment before dispatch to curing works",
     tooWet: "Above 12%: mold risk in storage, rejected by exporters",
-    tooDay: "Below 9%: bean becomes brittle, excessive breakage in hulling",
+    tooDry: "Below 9%: bean becomes brittle, excessive breakage in hulling",
     method: "Bite test (should feel firm, not soft or crumbly) and hand moisture meter",
   },
   dryingTime: {
