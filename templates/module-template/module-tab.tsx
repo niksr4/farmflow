@@ -18,9 +18,12 @@ export default function ModuleTabTemplate() {
   const [isSaving, setIsSaving] = useState(false)
   const [metricA, setMetricA] = useState("")
   const [metricB, setMetricB] = useState("")
+  /** A failed load is not an empty list -- see loadRecords below. */
+  const [loadError, setLoadError] = useState(false)
 
   const loadRecords = useCallback(async () => {
     setIsLoading(true)
+    setLoadError(false)
     try {
       const res = await fetch("/api/__MODULE_ID__")
       const data = await res.json()
@@ -31,7 +34,16 @@ export default function ModuleTabTemplate() {
     } catch (error) {
       console.error("Failed to load records", error)
       toast({ title: "Error", description: "Failed to load records", variant: "destructive" })
-      setRecords([])
+      /**
+       * NOT setRecords([]). A refused load did not establish that the tenant has nothing -- and
+       * once the toast closes, an empty table saying "No records yet" is indistinguishable from
+       * the truth. That is this codebase's house failure: not a crash, a confident wrong answer.
+       *
+       * The same shape has now been found three times in six weeks (the Workers roster, its
+       * recovery list, and here). This one is in the TEMPLATE, so every module built from it
+       * would have inherited it.
+       */
+      setLoadError(true)
     } finally {
       setIsLoading(false)
     }
@@ -108,6 +120,18 @@ export default function ModuleTabTemplate() {
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
                     Loading records...
+                  </TableCell>
+                </TableRow>
+              ) : loadError ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center">
+                    <p className="text-sm font-medium">Could not load records</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      This is a loading problem, not an empty list. Nothing has been lost.
+                    </p>
+                    <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => void loadRecords()}>
+                      Try again
+                    </Button>
                   </TableCell>
                 </TableRow>
               ) : records.length === 0 ? (
