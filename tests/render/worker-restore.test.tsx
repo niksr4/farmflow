@@ -313,6 +313,22 @@ describe("a roster that failed to load is not an empty roster", () => {
     expect(screen.queryByText(/0 active worker/i)).not.toBeInTheDocument()
   })
 
+  it("will not let anyone be added while it cannot say who is already there", async () => {
+    /**
+     * The warning text alone is advice, not a guard. The database blocks an exact duplicate name,
+     * so this is not about that -- it is about a VARIANT: an estate that cannot see Chitra adds
+     * "Chitra K", the unique index has no objection, and they now have two people and a split
+     * history. Exactly what #70 closed, reopened by a screen that admits it does not know the
+     * roster and offers the button anyway.
+     */
+    failing(500, { success: false, error: "boom" })
+    render(<WorkerProfilesTab />)
+
+    await screen.findByText(/could not load the roster/i)
+    const add = screen.getByRole("button", { name: /add worker/i })
+    expect(add).toBeDisabled()
+  })
+
   it("still shows the real empty state for an estate that genuinely has nobody", async () => {
     // The guard must not swallow the legitimate case: a new tenant SHOULD be told to add someone.
     failing(200, { success: true, workers: [] })

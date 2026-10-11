@@ -388,6 +388,16 @@ export default function WorkerProfilesTab() {
 
   const handleAddUnguarded = async () => {
     if (!form.name.trim()) return
+    /**
+     * Also refused here, not only on the button. A form already open when the load failed keeps
+     * its submit path, and gating the control alone would leave the one route in that still
+     * reaches a POST. An in-flight save is unaffected -- this only turns away a NEW submission
+     * while the screen cannot say who is already on the roster.
+     */
+    if (rosterError) {
+      toast.error("The roster could not be loaded, so there is no way to tell who is already on it. Reload before adding anyone.")
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch("/api/attendance/workers", {
@@ -636,7 +646,22 @@ export default function WorkerProfilesTab() {
                   Edit all
                 </Button>
               )}
-              <Button size="sm" onClick={() => setIsAdding(true)}>
+              {/*
+                UNAVAILABLE WHILE THE ROSTER IS UNVERIFIED. Telling somebody "do not add them
+                again" and leaving the button live is advice, not a guard -- and the screen has
+                already admitted it does not know who is on the roster.
+
+                The database stops an exact duplicate name, so this is not about that. It is about
+                a VARIANT: an estate that cannot see Chitra adds "Chitra K", the unique index has
+                no objection, and they now have two people and a split history. That is the
+                failure this whole tab spent #70 closing.
+              */}
+              <Button
+                size="sm"
+                onClick={() => setIsAdding(true)}
+                disabled={rosterError}
+                title={rosterError ? "Reload the roster first — it could not be loaded, so there is no way to tell who is already on it" : undefined}
+              >
                 <Plus className="mr-1.5 h-4 w-4" />
                 Add Worker
               </Button>
