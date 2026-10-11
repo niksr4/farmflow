@@ -514,12 +514,15 @@ export async function GET(request: Request) {
         advanceRecovered: acc.advanceRecovered + w.advanceRecovered,
         advanceShortfall: acc.advanceShortfall + w.advanceShortfall,
         deductionShortfall: acc.deductionShortfall + w.deductionShortfall,
+        // The third shortfall. Sent per worker since retention landed, but never totalled, so the
+        // footer could not itemise what the rows above it did.
+        retentionShortfall: acc.retentionShortfall + w.retentionShortfall,
         netPayable: acc.netPayable + w.netPayable,
       }),
       {
         daysPresent: 0, attendanceEarnings: 0, pickingEarnings: 0, pickingKg: 0,
         deductions: 0, adjustments: 0, overtime: 0, retention: 0,
-        advanceRecovered: 0, advanceShortfall: 0, deductionShortfall: 0, netPayable: 0,
+        advanceRecovered: 0, advanceShortfall: 0, deductionShortfall: 0, retentionShortfall: 0, netPayable: 0,
       },
     )
 

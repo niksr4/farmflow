@@ -53,7 +53,19 @@ export type LocationScope = "all" | "location" | "legacy_pool"
 export type SalesTotals = { totalBagsSold: number; totalKgsSold: number; totalRevenue: number }
 
 export type InventoryTotals = { bags: number; kgs: number }
-export type InventoryBreakdown = { cherry: InventoryTotals; parchment: InventoryTotals; total: InventoryTotals }
+/**
+ * `unspecified` holds kilos whose form nobody could read.
+ *
+ * It exists so an unrecognised bag_type is SHOWN rather than quietly counted as parchment, which is
+ * what the old cherry-or-else rule did. It is rendered only when it is non-zero, so for canonical
+ * data -- every real tenant, every row -- the screen is unchanged.
+ */
+export type InventoryBreakdown = {
+  cherry: InventoryTotals
+  parchment: InventoryTotals
+  unspecified: InventoryTotals
+  total: InventoryTotals
+}
 
 export type SalesWorkspaceView = "coffee" | "other-sales"
 

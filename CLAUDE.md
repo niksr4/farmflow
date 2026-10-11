@@ -320,6 +320,31 @@ Three failure modes, each of which has actually happened here:
 above were caught that way and not by review — including one replacement that was *weaker* than the
 scan it replaced.
 
+⚠ **AND VERIFY THE TAMPER ACTUALLY APPLIED.** On 2026-10-08 four tamper attempts were silent
+no-ops: the `perl -0pi -e 's/…/'` patterns did not match (escaping, or the string spanned lines),
+the file was untouched, the test passed, and a passing test after a tamper reads exactly like
+"the guard is fine". **An unverified tamper is indistinguishable from a vacuous guard.** Assert the
+mutation landed before trusting the result:
+
+```python
+s = open(path).read(); assert NEEDLE in s          # fail loudly if the pattern is wrong
+open(path, "w").write(s.replace(NEEDLE, BROKEN))
+```
+
+Two further traps from the same session, both of which produced a green test over broken code:
+
+- **Tampering a thing the test does not actually reach.** A test that re-implements the logic it is
+  checking — rather than importing it — stays green when the real implementation is mutated. One
+  guard inlined its own copy of a scan's exemption rules; breaking the scan changed nothing. If a
+  helper reads a file by path, split it so the pure part takes *source text* and point the test at
+  that.
+- **A query broad enough to match the wrong element.** `within(phone).getAllByText("Could not hold")`
+  passed with the worker row deleted, because the totals card carries the same label. Scope to the
+  row/card under test.
+
+Also: `cp` your backup **before** tampering and restore from that. `git checkout <file>` discards
+*all* uncommitted work in the file, which silently threw away a whole batch of fixes once.
+
 CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 
 ---
@@ -327,19 +352,42 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of **2026-09-30** the highest file on `main` is `151-update-inventory-onconflict-partial-index.sql`;
-prod has **149** rows in `schema_migrations`, dev has **151**. This line said `130-*` and "as of
-2026-08-20" for four weeks after that stopped being true — **count it, do not read it here**:
+As of **2026-10-09**: highest file on `main` is `153-one-crop-taxonomy.sql`; **prod** has 150 rows
+and tops out at `152-picking-shares-the-day-budget.sql`; **dev** has 152 rows and tops out at 153.
+This line said `130-*` and "as of 2026-08-20" for four weeks after that stopped being true, then
+`151` for another nine days — **count it, do not read it here**:
 
 ```bash
 ls scripts/*.sql | sed 's#scripts/##' | sort -t- -k1 -n | tail -1   # highest file
 ```
 
+⚠ **PROD IS AT 152 AND `main` HAS NO 152 FILE.** Read that twice, because it is not a mistake.
+`ls scripts/` on `main` jumps 151 → 153, while prod's ledger reads …151, **152**…. 152 lives on PR
+#55's branch and was applied to prod on 2026-10-09 out of order, because the day-cap it installs is
+only a schema change while `picking_records` has zero rows; after the first real pick it becomes a
+wage reconciliation. So **neither "highest file on main" nor "highest row in prod" is a reliable
+statement about the other.** Query the ledger, and sort numerically.
+
+⚠ **THE RUNNER HAS NO SINGLE-FILE OPTION.** `pnpm migrate:prod` applies *everything* pending in
+whatever `scripts/` the working tree currently holds — there is no `--only`. So running it from
+`main` right now applies **153**, not 152. Applying one specific migration means checking out a
+branch whose `scripts/` contains it and nothing later; 152 was applied from
+`feat/picking-shares-the-day-budget`, which carries 148–152 and no 153. **Check which branch you are
+on before pointing the runner at prod.**
+
 ⚠ **DEV CAN BE AHEAD OF `main`, AND IS.** Applying a migration to dev is how you test it, so a
 migration on an unmerged branch is already in dev's ledger while its file does not exist on `main`.
-Right now dev's highest row is `152-picking-shares-the-day-budget.sql`, from an open PR. So
-"dev minus prod" is not a list of what is waiting to ship — it can include work that may never ship
-in that form. Compare against the *files on the branch you are on*, not against dev.
+So "dev minus prod" is not a list of what is waiting to ship — it can include work that may never
+ship in that form. Compare against the *files on the branch you are on*, not against dev.
+
+⚠ **`CREATE OR REPLACE FUNCTION` IN A MIGRATION CAN REWRITE A LIVE WRITE PATH.** 152 looks like it
+only touches the empty `picking_records` table, and it also replaces the body of
+`labour_assignments_day_cap()` — which the trigger from 116 still points at, on a table holding
+every tenant's muster. It was safe because the shared budget sums to the same figure while picking
+is empty *and* because 0 worker-days were over the 2-job limit, both measured first. Before applying
+anything with `CREATE OR REPLACE`, find out which triggers point at the names it replaces, and
+verify afterwards that the behaviour you depended on survived — in that case the
+downward-correction exemption, without which 16 over-a-day worker-days become unfixable.
 
 ⚠ **A fresh database does NOT run migrations 1–87.** `migrate.mjs` has
 `BOOTSTRAP_CUTOFF = "87-default-activity-codes.sql"`: when `schema_migrations` is *empty*,
@@ -482,6 +530,59 @@ runner's accident.
 
 ---
 
+## Colour: the app opens in LIGHT, and the safety net faces the other way
+
+**`app/layout.tsx` sets `defaultTheme="light"`.** So an unprefixed Tailwind colour is what nearly
+every estate actually sees, and a bare `text-emerald-400` is a *light-mode* value no matter what it
+was written for. Measured against the real `--card` token (`0 0% 99%`):
+
+| class | contrast | |
+|---|---|---|
+| `text-amber-300` | **1.44:1** | the "N workers have no daily rate" banner |
+| `text-violet-300` | **1.85:1** | worker-type badges |
+| `text-emerald-400` | **1.92:1** | NET PAYABLE, the one figure payroll exists to show |
+| `text-sky-400` / `text-rose-400` | 2.14 / 2.69:1 | bonus, deductions |
+| `text-stone-400` | **2.46:1** | the app-wide muted label, 383 uses |
+
+AA wants 4.5:1. Payroll and the Workers roster were written dark-first and carried 42 of these.
+
+⚠ **`app/globals.css` LOOKS LIKE THEME COVERAGE AND IS ONE-WAY.** Its long block of
+`.dark .text-*` / `.dark .bg-*` rules repairs hardcoded *light* classes for dark mode — the
+opposite problem. Nothing repaired dark-first classes for light mode, and because the block exists,
+the whole area reads as managed. `.dark .text-stone-400` had been there for months with no light
+counterpart.
+
+**Fixes, in the order to reach for them:**
+
+1. An app-wide convention belongs in `globals.css` once, not in 49 files. `text-stone-400` is now
+   `hsl(var(--muted-foreground) / 0.8)` = 4.58:1. Note **0.8, not the full token** — full is 7.65:1,
+   which is body-text weight, and mapping 383 secondary labels onto it flattens the hierarchy
+   instead of fixing contrast. 0.75 measures 4.06 and fails.
+2. A semantic colour in a component gets paired: `text-emerald-700 dark:text-emerald-400`,
+   `text-rose-700 dark:text-rose-400`, `text-sky-700 dark:text-sky-400`,
+   `text-amber-700 dark:text-amber-500`. `attendance-report-tab.tsx` is the model.
+3. A badge gets the `<hue>-50` ground + `<hue>-800` text shape from `attendance-scanner-tab.tsx`,
+   inverted to a tint + `-300` for dark.
+
+**Shades 200–400 are the dangerous band.** 50/100 are only legible on a saturated ground, so a bare
+one is self-evidently deliberate; 500+ already pass on white. `stone-500` passes at 4.68:1.
+
+⚠ **Do NOT sweep `text-stone-300` into a global rule.** Its ~78 uses are mostly light text on the
+dark marketing pages (`journey-page.tsx`, `capabilities-page.tsx`) plus correctly-paired
+`text-stone-700 dark:text-stone-300`. Darkening it breaks exactly what the stone-400 fix repairs.
+
+**Verify in the compiled bundle, not the source.** cssnano merges adjacent rules, so the three
+stone-400 rules come out as one selector group and a per-rule grep finds nothing — which looks
+identical to the fix being absent. Find the newest file under `.next` and read it; `find … | head -1`
+picks an arbitrary stale chunk.
+
+`tests/muster-colours-work-in-light-mode.test.ts` guards the muster subtabs, derives its file list
+from the workspace's own imports, and asserts the `globals.css` rule exists. **No lint rule reads
+colour and render tests assert text *content*, which is identical whether or not anybody can read
+it** — so a guard is the only thing that can see this class of bug.
+
+---
+
 ## Client Reliability
 
 ### CSP is testable — keep it that way
@@ -563,6 +664,35 @@ and 15 hours.
 - Two sites intentionally still use a stale flag: `verify-email-page.tsx` (a POST — must not be
   aborted) and the workspace-bootstrap effect in `inventory-system.tsx` (fires on tenant change,
   not on interaction; cancelling it means threading signals through three separate useCallbacks).
+
+### Forms: Enter, and the untyped-button trap
+
+⚠ **`components/ui/button.tsx` SETS NO DEFAULT `type`.** It spreads props onto a bare `<button>`,
+and HTML's default inside a form is `type="submit"`. So the moment you wrap something in a
+`<form>`, every untyped `<Button>` in it becomes a submit — a Cancel button starts writing records.
+Tamper-confirmed: untyping one Cancel made dismissing the pay-rule form save a rule. **Give every
+button inside a form an explicit `type`.**
+
+**Most of this app's forms are `<div>` + `onClick`, so Enter does nothing.** Roughly 20 components
+use `useSingleFlight` on a button; only a handful use `useSingleFlightSubmit` with a real
+`<form onSubmit>`. On a phone that means the keyboard's action key is inert too. It is worth fixing
+where somebody types a number and expects to commit it — the muster's money forms were converted
+for exactly that reason.
+
+**Use `useSingleFlightSubmit`, never `useSingleFlight`, for a form.** `hooks/use-single-flight.ts`
+documents why at length: the guard *drops* the second call, so if that call has not yet reached
+`event.preventDefault()` the browser performs a native submit and reloads the page mid-POST. The
+helper calls `preventDefault` unconditionally and first, which is why the guarded action takes no
+event at all.
+
+**A `<form>` tag in the source proves nothing** — the submit still has to reach the handler through
+a correctly-typed button. Grepping for the tag passes on every broken intermediate state. Mount it
+and press Enter: `tests/render/muster-forms-submit-on-enter.test.tsx`.
+
+Also: a placeholder is not a label. It disappears the moment somebody types, so a form with two
+placeholder-"labelled" fields cannot be checked once filled. Use `FieldLabel`
+(`components/ui/field-label.tsx`) — a bound `<Label htmlFor>` plus an optional focusable tooltip
+trigger — and mark required fields `*`.
 
 ## Cron Jobs
 
@@ -646,6 +776,28 @@ Key env vars:
 **Current state:** merging to `main` auto-deploys straight to production — no staging environment,
 no manual promotion gate. **`main` itself is gated** (below), so nothing arrives unreviewed or
 untested, but the moment it arrives it is live for every tenant.
+
+⚠ **A GREEN `CodeRabbit` CHECK DOES NOT MEAN IT REVIEWED ANYTHING.** On PR #68 the check read
+`pass` while its own detail said *"Review skipped: manual review required for this OSS repository"*
+— and a hand-triggered review then produced **5 findings**, one of which was a real hole in a guard
+written and tamper-tested four ways in that same PR. The check reports that the integration ran,
+not that a review happened or that it was clean. **Read the findings, on all three surfaces**
+(inline comments, the walkthrough, and the review `body` — the `body` is the one that has hidden
+findings before):
+
+```bash
+gh api repos/niksr4/farmflow/pulls/<N>/reviews  --jq '.[] | "[\(.user.login)] \(.state) bodylen=\(.body|length)"'
+gh api repos/niksr4/farmflow/pulls/<N>/comments --jq '.[] | "\(.path):\(.line)  \(.body|split("\n")[0])"'
+gh api repos/niksr4/farmflow/issues/<N>/comments --jq '.[] | select(.user.login=="coderabbitai[bot]") | .body'
+```
+
+Reviews are **rate-limited to roughly one an hour** on this tier, so a request can come back refused
+rather than reviewed — and a refusal is not a pass. **Never push to the branch while a review is
+running**: it aborts with "base or head changed", which has happened twice.
+
+⚠ **`.github/workflows/coderabbit-trigger.yml` cannot fire for its own PR.** GitHub takes
+`pull_request` workflows from the **base** branch, so until that file is on `main` it does nothing,
+and the trigger has to be typed by hand.
 
 **A gate AT VERCEL is not available on this plan. A gate AT GITHUB is — see
 [docs/RELEASE-FLOW.md](docs/RELEASE-FLOW.md).**

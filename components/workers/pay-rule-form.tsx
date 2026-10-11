@@ -11,7 +11,7 @@ import { toast } from "sonner"
 import { formatCurrency } from "@/lib/format"
 import { todayIso } from "@/lib/date-utils"
 import type { PayRule } from "@/lib/pay-rules"
-import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useSingleFlight, useSingleFlightSubmit } from "@/hooks/use-single-flight"
 
 /**
  * Setting what an estate holds back, and what it pays for overtime.
@@ -192,12 +192,21 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
     }
   }
 
-  // Saving twice writes two dated rules, or corrects the same row twice — see the money panel.
-  const save = useSingleFlight(saveUnguarded)
+  /*
+   * A REAL <form>, so Enter submits — this was a div with an onClick button.
+   *
+   * Two or three fields and a date is exactly the shape somebody fills in and presses Enter on,
+   * and nothing happened; on a phone the keyboard offers its action key and it did nothing either.
+   * useSingleFlightSubmit is the project's own helper for this and documents the trap it avoids
+   * (guarding the handler drops the second call BEFORE preventDefault, so a double-tap triggers a
+   * native submit and reloads the page mid-POST). Saving twice would otherwise write two dated
+   * rules, or correct the same row twice.
+   */
+  const submit = useSingleFlightSubmit(saveUnguarded)
   const remove = useSingleFlight(removeUnguarded)
 
   return (
-    <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+    <form onSubmit={submit} className="space-y-4 rounded-lg border bg-muted/30 p-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor={`${instanceId}-retention`} className="text-xs">Retention</Label>
@@ -290,12 +299,26 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
         date it should stop — what has already been held stays held.
       </p>
 
+      {/*
+        MOVED ABOVE THE BUTTONS. This warning used to render after them, so switching to Correct
+        put the caution about rewriting already-printed wage sheets BELOW the button that does it —
+        off the bottom on a phone. A warning the reader meets after the control it is about is
+        decoration.
+      */}
+      {mode === "correct" && editableRow && (
+        <p className="rounded border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          Correcting changes the rule <strong>for every week it already covers</strong>, so wage sheets already
+          printed for those weeks will no longer match. Use it to fix a mistake, not to change policy — for a
+          change, add a new rule from the date it starts.
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={save} disabled={saving}>
+        <Button type="submit" size="sm" disabled={saving}>
           {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
           {mode === "correct" && editableRow ? "Correct this rule" : workerId ? "Save rule for this worker" : "Save estate rule"}
         </Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
 
         {editableRow && (
           <>
@@ -317,14 +340,6 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
           </>
         )}
       </div>
-
-      {mode === "correct" && editableRow && (
-        <p className="rounded border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          Correcting changes the rule <strong>for every week it already covers</strong>, so wage sheets already
-          printed for those weeks will no longer match. Use it to fix a mistake, not to change policy — for a
-          change, add a new rule from the date it starts.
-        </p>
-      )}
-    </div>
+    </form>
   )
 }
