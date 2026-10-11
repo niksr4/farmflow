@@ -14,11 +14,18 @@ import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 // This agent runs from cron across every tenant, not inside a per-request handler, so it uses
 // the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
 // app.tenant_id session context this code never has.
-import { adminSql as sql } from "@/lib/server/db"
+import { adminSql as sql, isDbConfigured } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 import { escapeHtml } from "@/lib/html-escape"
 import { istDate } from "@/lib/date-utils"
+
+/**
+ * Recorded in agent_runs so the three-day cadence below has something to read. This agent used
+ * to leave no trace at all -- it was the only scheduled agent absent from the table -- which is
+ * why the gate had to be built alongside the recording rather than on top of it.
+ */
+const ENGAGEMENT_AGENT_NAME = "tenant-engagement"
 
 type YesterdayActivity = {
   tenantId: string
@@ -346,6 +353,8 @@ export async function runTenantEngagementAgent(input?: {
   empty: number
   needsAttention: number
   emailSent: boolean
+  /** True when an all-healthy report was held back because one went out inside the last 3 days. */
+  suppressedAsQuiet: boolean
   dryRun: boolean
 }> {
   const dryRun = Boolean(input?.dryRun)
@@ -373,11 +382,51 @@ export async function runTenantEngagementAgent(input?: {
   const empty = summaries.filter((s) => s.status === "empty").length
   const needsAttention = summaries.filter((s) => s.flags.length > 0 || s.status === "stuck" || s.status === "quiet").length
 
+  /**
+   * THE ALL-HEALTHY REPORT GOES OUT EVERY THREE DAYS; A PROBLEM STILL GOES OUT THE NEXT MORNING.
+   *
+   * This agent ran nightly and mailed every single time, so the owner got
+   * "✅ All tenants healthy" 29 days out of 30 and learned to skim past the subject line. The
+   * thirtieth is the one that matters, and it arrives looking identical in the inbox list.
+   *
+   * Dropping the cadence outright would have delayed a real alert by up to three days, so the
+   * gate is on the QUIET case only. `needsAttention` covers every stuck, quiet or flagged tenant,
+   * which is the whole reason this report exists.
+   *
+   * The agent still RUNS nightly -- the scan is cheap and the classification stays current. Only
+   * the uneventful email is suppressed.
+   */
+  const emailCadenceDays = 3
+  let suppressedAsQuiet = false
+  if (needsAttention === 0 && isDbConfigured) {
+    try {
+      // Gated on the last run that actually SENT, not the last run. Recording a row nightly and
+      // gating on "last run" would keep the window permanently one day wide and never open.
+      const lastSend = await sql`
+        SELECT completed_at FROM agent_runs
+        WHERE agent_name = ${ENGAGEMENT_AGENT_NAME}
+          AND status = 'success'
+          AND summary->>'emailSent' = 'true'
+          AND completed_at >= NOW() - (${emailCadenceDays} || ' days')::interval
+        LIMIT 1
+      `
+      const rows = Array.isArray(lastSend) ? lastSend : (lastSend as any)?.rows ?? []
+      suppressedAsQuiet = rows.length > 0
+    } catch {
+      /**
+       * Fails OPEN, the same way the digest gates do. If the guard query errors the mail goes out
+       * as before: an extra healthy report is a minor annoyance, and silently standing down
+       * because a guard broke is how an estate stops being watched without anyone noticing.
+       */
+      suppressedAsQuiet = false
+    }
+  }
+
   const generatedAt = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full", timeStyle: "short" })
   const estatePhase = getCurrentEstatePhase()
   const subject = needsAttention > 0
     ? `⚠️ FarmFlow: ${needsAttention} tenant${needsAttention === 1 ? "" : "s"} need attention`
-    : `✅ FarmFlow: All tenants healthy — daily engagement report`
+    : `✅ FarmFlow: All tenants healthy — ${emailCadenceDays}-day engagement report`
 
   const html = buildAlertHtml(summaries, generatedAt, yesterdayActivity, estatePhase.label)
   const text = summaries.map((s) => {
@@ -386,7 +435,7 @@ export async function runTenantEngagementAgent(input?: {
   }).join("\n")
 
   let emailSent = false
-  if (!dryRun) {
+  if (!dryRun && !suppressedAsQuiet) {
     const resendKey = String(process.env.RESEND_API_KEY || "").trim()
     const from = String(process.env.ALERT_EMAIL_FROM || DEFAULT_ALERT_EMAIL_FROM).trim()
     const toRaw = String(process.env.ALERT_EMAIL_TO || process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL)
@@ -414,6 +463,38 @@ export async function runTenantEngagementAgent(input?: {
     }
   }
 
+  /**
+   * `emailSent` is the field the cadence gate above reads. Recording it on a DRY RUN would let a
+   * manual test suppress a real report for three days, so a dry run leaves no row at all.
+   */
+  if (!dryRun && isDbConfigured) {
+    try {
+      await sql.query(
+        `INSERT INTO agent_runs (agent_name, trigger_source, status, tenant_scope, completed_at, summary)
+         VALUES ($1, $2, 'success', 'all', NOW(), $3::jsonb)`,
+        [
+          ENGAGEMENT_AGENT_NAME,
+          input?.triggerSource || "manual",
+          JSON.stringify({
+            emailSent,
+            suppressedAsQuiet,
+            needsAttention,
+            tenantsScanned: summaries.length,
+            stuck,
+            quiet,
+            empty,
+          }),
+        ],
+      )
+    } catch {
+      /**
+       * Non-critical, and deliberately NOT fatal. If this insert fails the next run simply finds
+       * no recent send and mails again -- the cadence degrades back to daily, which is the state
+       * this change started from, rather than to silence.
+       */
+    }
+  }
+
   return {
     tenantsScanned: summaries.length,
     stuck,
@@ -421,6 +502,7 @@ export async function runTenantEngagementAgent(input?: {
     empty,
     needsAttention,
     emailSent,
+    suppressedAsQuiet,
     dryRun,
   }
 }
