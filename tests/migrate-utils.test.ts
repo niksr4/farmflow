@@ -125,3 +125,64 @@ describe("isAtOrBeforeMigration", () => {
     expect(isAtOrBeforeMigration("87-default-activity-codes.sql", "87-default-activity-codes.sql")).toBe(true)
   })
 })
+
+describe("a /* … */ comment is opaque, like every other quoted thing", () => {
+  /**
+   * The splitter tracked "--" comments, '...' literals and dollar-quotes, and NOT block comments.
+   * So an apostrophe inside one opened a phantom string literal, every ";" after it was read as
+   * data, and the whole file collapsed into one statement. Postgres then reported
+   * "unterminated /* comment" against a comment several statements further down, saying nothing
+   * about the apostrophe that caused it.
+   *
+   * Nothing had tripped it because every migration to date comments with "--". scripts/152 was the
+   * first to write a block docstring and hit it on the first run.
+   */
+  it("does not let an apostrophe in a block comment swallow the file", () => {
+    const sql = [
+      "/* A worker's day is one day. */",
+      "ALTER TABLE a ADD COLUMN x int;",
+      "ALTER TABLE b ADD COLUMN y int;",
+    ].join("\n")
+    const out = splitSqlStatements(sql)
+    expect(out).toHaveLength(2)
+    expect(out[1]).toContain("ALTER TABLE b")
+  })
+
+  it("keeps a semicolon inside a block comment out of the split", () => {
+    const sql = "/* first; second; third */\nSELECT 1;"
+    expect(splitSqlStatements(sql)).toHaveLength(1)
+  })
+
+  it("handles nested block comments, which Postgres allows", () => {
+    // A boolean flag would end the comment at the first */ and treat " tail */" as SQL.
+    const sql = "/* outer /* inner */ still comment; */\nSELECT 1;\nSELECT 2;"
+    const out = splitSqlStatements(sql)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toContain("SELECT 1")
+    expect(out[1]).toBe("SELECT 2")
+  })
+
+  it("does not treat /* inside a string literal as a comment", () => {
+    // The mirror image: a literal containing /* must stay a literal.
+    const sql = "INSERT INTO t VALUES ('/* not a comment');\nSELECT 1;"
+    const out = splitSqlStatements(sql)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toContain("/* not a comment")
+  })
+
+  it("leaves a block comment inside a function body alone", () => {
+    const sql = [
+      "CREATE FUNCTION f() RETURNS void AS $$",
+      "BEGIN",
+      "  /* it's fine; really */",
+      "  PERFORM 1;",
+      "END;",
+      "$$ LANGUAGE plpgsql;",
+      "SELECT 2;",
+    ].join("\n")
+    const out = splitSqlStatements(sql)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toContain("LANGUAGE plpgsql")
+    expect(out[1]).toBe("SELECT 2")
+  })
+})

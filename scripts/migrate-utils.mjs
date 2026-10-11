@@ -8,6 +8,7 @@ export const splitSqlStatements = (content) => {
   let buffer = ""
   let dollarTag = null // e.g. "$$" or "$body$" while inside a dollar-quoted block
   let inLineComment = false
+  let blockCommentDepth = 0 // inside /* … */, which NESTS in Postgres
   let inString = false // inside a '...' literal
 
   for (let i = 0; i < content.length; i += 1) {
@@ -17,6 +18,41 @@ export const splitSqlStatements = (content) => {
     if (inLineComment) {
       buffer += ch
       if (ch === "\n") inLineComment = false
+      continue
+    }
+
+    // A /* … */ comment is opaque too, and for a sharper reason than the others: an APOSTROPHE
+    // inside one used to open a phantom string literal, after which every ";" for the rest of the
+    // file was read as data and the statements were glued together. The symptom was
+    // "unterminated /* comment", pointing at a comment several statements further down and saying
+    // nothing about the apostrophe that caused it.
+    //
+    // Nothing tripped it because every migration to date comments with "--". The first file to
+    // write a docstring found it instantly, and would have found it just as instantly in a year.
+    //
+    // Depth-counted, not a boolean: Postgres block comments nest, so /* a /* b */ c */ is one
+    // comment and a boolean would end it at the first "*/" and treat " c */" as SQL.
+    if (blockCommentDepth > 0) {
+      if (rest.startsWith("/*")) {
+        blockCommentDepth += 1
+        buffer += "/*"
+        i += 1
+        continue
+      }
+      if (rest.startsWith("*/")) {
+        blockCommentDepth -= 1
+        buffer += "*/"
+        i += 1
+        continue
+      }
+      buffer += ch
+      continue
+    }
+
+    if (!dollarTag && !inString && rest.startsWith("/*")) {
+      blockCommentDepth = 1
+      buffer += "/*"
+      i += 1
       continue
     }
 

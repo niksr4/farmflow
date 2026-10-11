@@ -22,7 +22,69 @@ import { describe, expect, it } from "vitest"
  * deliberately, so a block is not shown twice the labour it received -- so the client has never
  * once sent day_fraction > 1. The ceiling permitted nothing legitimate and exactly one mistake.
  */
-const cap = readFileSync("scripts/145-labour-day-cap-one-day.sql", "utf8")
+/**
+ * ⚠ 145 IS HISTORY; 152 IS WHAT RUNS.
+ *
+ * scripts/152 replaces labour_assignments_day_cap()'s body so picking and day-work share one day
+ * budget. These assertions used to read 145 and would have kept passing after that -- green against
+ * a file whose contents no longer execute, which is the most comfortable kind of dead guard. The
+ * ceiling, the job limit and the self-exclusion are therefore checked against 152, and 145 is read
+ * only to prove its no-rewrite promise still holds.
+ */
+const legacyCap = readFileSync("scripts/145-labour-day-cap-one-day.sql", "utf8")
+
+/**
+ * COMMENTS REMOVED, THE WAY PLPGSQL READS THEM.
+ *
+ * Every assertion below is about what the database EXECUTES. Reading the raw file means a control
+ * that has been commented out still satisfies its own test -- and commenting out is how a control
+ * actually gets disabled, far more often than deleting it. My tamper tests only ever DELETED the
+ * lock and the move conditions, which is the easier half, so the guard was verified against the
+ * tamper it could survive. Raised by CodeRabbit on PR #55.
+ *
+ * Dollar-quoted bodies are deliberately NOT treated as opaque. SQL sees `$$ … $$` as one string,
+ * but plpgsql then parses what is inside it, and that is where every rule in this file lives -- so
+ * `--` and nested `/* … *\/` are stripped in there too. Single-quoted literals ARE preserved,
+ * because the RAISE EXCEPTION messages are data and contain apostrophes and punctuation that would
+ * otherwise be read as syntax.
+ */
+const executableSql = (sql: string): string => {
+  let out = ""
+  let i = 0
+  let inString = false
+  let blockDepth = 0
+  while (i < sql.length) {
+    const two = sql.slice(i, i + 2)
+    if (inString) {
+      out += sql[i]
+      if (sql[i] === "'") {
+        if (sql[i + 1] === "'") { out += "'"; i += 2; continue }
+        inString = false
+      }
+      i += 1
+      continue
+    }
+    if (blockDepth > 0) {
+      if (two === "/*") { blockDepth += 1; i += 2; continue }
+      if (two === "*/") { blockDepth -= 1; i += 2; continue }
+      // Newlines kept so reported positions and ordering checks stay meaningful.
+      out += sql[i] === "\n" ? "\n" : " "
+      i += 1
+      continue
+    }
+    if (two === "/*") { blockDepth = 1; i += 2; continue }
+    if (two === "--") {
+      while (i < sql.length && sql[i] !== "\n") i += 1
+      continue
+    }
+    if (sql[i] === "'") { inString = true; out += sql[i]; i += 1; continue }
+    out += sql[i]
+    i += 1
+  }
+  return out
+}
+
+const cap = executableSql(readFileSync("scripts/152-picking-shares-the-day-budget.sql", "utf8"))
 const route = readFileSync("app/api/attendance/assignments/route.ts", "utf8")
 const panel = readFileSync("components/attendance/worker-allocation.tsx", "utf8")
 const muster = readFileSync("components/attendance-tab.tsx", "utf8")
@@ -38,14 +100,133 @@ describe("the database will not store more than a day", () => {
     expect(cap).toContain("jobs + 1 > max_jobs")
   })
 
-  it("checks siblings, excluding the row being updated", () => {
-    // Without `id <> NEW.id` an ordinary edit counts itself and every correction fails.
-    expect(cap).toContain("AND id <> NEW.id")
+  it("checks siblings, excluding the row being updated -- from its OWN table only", () => {
+    /**
+     * Without excluding the row being written, an ordinary edit counts itself and every correction
+     * fails. But the exclusion has to be PER TABLE now that two tables share the budget: a bare
+     * `id <> p_row_id` applied to both would drop a picking row whose uuid happened to equal a
+     * labour row's, silently raising the ceiling for that worker on that day.
+     */
+    expect(cap).toContain("p_source = 'labour_assignments' AND id = p_row_id")
+    expect(cap).toContain("p_source = 'picking_records' AND id = p_row_id")
+  })
+
+  it("counts BOTH arms of the day, not each table on its own", () => {
+    // Per-table sums would make the real ceiling two days and the real job limit four.
+    expect(cap).toMatch(/FROM labour_assignments/)
+    expect(cap).toMatch(/FROM picking_records/)
+    expect(cap).toContain("used := labour_used + picking_used")
+    expect(cap).toContain("jobs := labour_jobs + picking_jobs")
+  })
+
+  it("puts the same wall in front of picking, not only day-work", () => {
+    // A cap on one table is not a shared budget; it is the same hole with a longer name.
+    expect(cap).toMatch(/CREATE TRIGGER trg_picking_records_day_cap[\s\S]*?ON picking_records/)
+    expect(cap).toMatch(/BEFORE INSERT OR UPDATE ON picking_records/)
+  })
+
+  it("lets a correction go DOWN on both tables", () => {
+    // 145 had to invent this for labour because HoneyFarm already had 81 over-booked days. Picking
+    // needs it for the same reason the day it has rows: halving one of two jobs must not be refused.
+    const downward = cap.match(/NEW\.day_fraction <= OLD\.day_fraction/g) ?? []
+    expect(downward.length, "both wrappers need the downward-edit exemption").toBe(2)
+  })
+
+  it("locks the worker-day before summing, so two writers cannot both find room", () => {
+    /**
+     * Without a lock the guard is a read-then-write race: two transactions -- one filing picking,
+     * one filing day-work -- read the same pre-write totals under READ COMMITTED, both find room,
+     * both commit, and the stored day is over one with no error raised anywhere.
+     *
+     * Raised by CodeRabbit on PR #55 as Major, and correct: scripts/145 has had this hole for
+     * labour-against-labour since it shipped, and sharing the budget widens it to two tabs that
+     * different people use simultaneously during harvest.
+     *
+     * Verified on dev that the lock is genuinely taken -- pg_locks reports one advisory lock held by
+     * the backend during the write.
+     */
+    expect(cap).toContain("pg_advisory_xact_lock")
+    // Keyed on the worker-DAY, not the worker: locking per worker would serialise a whole harvest.
+    expect(cap).toMatch(/hashtextextended\([\s\S]{0,120}p_worker_id[\s\S]{0,60}p_day/)
+    // Before either sum, or it serialises nothing that matters.
+    expect(
+      cap.indexOf("pg_advisory_xact_lock"),
+      "the lock must be taken before the totals are read",
+    ).toBeLessThan(cap.indexOf("INTO labour_used"))
+  })
+
+  it("treats a re-dated or reassigned row as new to its destination day", () => {
+    /**
+     * `TG_OP = 'INSERT'` alone skipped the job-count check on every UPDATE. So an edit that moved a
+     * half-day entry onto a day already holding two jobs passed -- the fractions fit, the count was
+     * never consulted, and the day quietly became three jobs. Both wrappers had it; 145 had it
+     * first. Proven on dev: the move is now refused with "already has 2 jobs".
+     */
+    const moved = cap.match(/IS DISTINCT FROM OLD\.(worker_id|work_date|pick_date)/g) ?? []
+    // worker_id + work_date on the labour wrapper, worker_id + pick_date on the picking one.
+    expect(moved.length, "both wrappers must check a move, on worker AND date").toBe(4)
+  })
+
+  it("says WHERE the rest of the day went, so the writer knows which tab to open", () => {
+    // "already has a day booked" sends somebody hunting across two tabs. Naming the split is the
+    // same lesson as the muster's remove-work message.
+    expect(cap).toContain("from picking")
+    expect(cap).toContain("from day-work on the muster")
   })
 
   it("leaves the already-over-booked rows alone rather than rewriting a wage ledger", () => {
-    expect(cap).not.toMatch(/\bDELETE FROM labour_assignments\b/)
-    expect(cap).not.toMatch(/\bUPDATE labour_assignments\b/)
+    for (const [name, sql] of [["152", cap], ["145", legacyCap]] as const) {
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bDELETE FROM labour_assignments\b/)
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bUPDATE labour_assignments\b/)
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bDELETE FROM picking_records\b/)
+      expect(sql, `${name} must not rewrite wage rows`).not.toMatch(/\bUPDATE picking_records\b/)
+    }
+  })
+})
+
+describe("the guard reads what the database executes, not what the file says", () => {
+  /**
+   * The assertions above are only worth anything if a DISABLED control fails them. Deleting a line
+   * is the tamper I originally tested; commenting one out is the tamper that actually happens, and
+   * against the raw file text every one of those assertions survived it.
+   *
+   * These cases comment the controls out rather than removing them. Raised by CodeRabbit on PR #55.
+   */
+  const raw = readFileSync("scripts/152-picking-shares-the-day-budget.sql", "utf8")
+
+  it("a commented-out advisory lock does not count as a lock", () => {
+    const disabled = raw.replace(
+      /^(\s*)PERFORM pg_advisory_xact_lock\(/m,
+      "$1-- PERFORM pg_advisory_xact_lock(",
+    )
+    expect(disabled, "the tamper must actually change the file").not.toBe(raw)
+    // Still present in the text -- which is exactly why reading the raw file was not enough.
+    expect(disabled).toContain("pg_advisory_xact_lock")
+    expect(executableSql(disabled), "but gone from what runs").not.toContain("pg_advisory_xact_lock")
+  })
+
+  it("a commented-out move condition does not count as a check", () => {
+    const disabled = raw.replace(/^(\s*)OR NEW\.worker_id IS DISTINCT FROM OLD\.worker_id/gm, "$1-- $&")
+    expect(disabled).not.toBe(raw)
+    const stillThere = (disabled.match(/IS DISTINCT FROM OLD\.(worker_id|work_date|pick_date)/g) ?? []).length
+    const executing = (executableSql(disabled).match(/IS DISTINCT FROM OLD\.(worker_id|work_date|pick_date)/g) ?? []).length
+    expect(stillThere, "the raw file still shows all four").toBe(4)
+    expect(executing, "only the two date conditions still run").toBe(2)
+  })
+
+  it("keeps the RAISE messages intact, because they are data not syntax", () => {
+    // The stripper must not eat single-quoted literals: the exception text is what a writer reads,
+    // and it contains apostrophes ("A worker''s day") that a naive stripper would mangle.
+    expect(cap).toContain("from day-work on the muster")
+    expect(cap).toMatch(/A worker''s day is one day/)
+  })
+
+  it("strips a block comment even inside a dollar-quoted function body", () => {
+    // SQL sees $$ … $$ as one opaque string; plpgsql parses what is inside it, and every rule in
+    // this file lives in there. Treating the body as opaque would strip nothing that matters.
+    const sample = "CREATE FUNCTION f() RETURNS void AS $$\nBEGIN\n  /* PERFORM banned(); */\n  PERFORM ok();\nEND;\n$$ LANGUAGE plpgsql;"
+    expect(executableSql(sample)).not.toContain("banned")
+    expect(executableSql(sample)).toContain("PERFORM ok()")
   })
 })
 

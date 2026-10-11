@@ -13,6 +13,10 @@ const updateSchema = z.object({
   ratePerKg: z.number().min(0).max(99999).optional(),
   locationId: z.string().uuid().nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
+  // Editable so a split day can be corrected DOWN. scripts/152's day cap exempts a reduction from
+  // the ceiling check for exactly that reason, and the exemption is useless if the field is
+  // read-only -- the only route left would be delete-and-retype.
+  dayFraction: z.number().positive().max(1).optional(),
 })
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -37,7 +41,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
     }
 
-    const { pickDate, kgPicked, ratePerKg, locationId, notes } = parsed.data
+    const { pickDate, kgPicked, ratePerKg, locationId, notes, dayFraction } = parsed.data
     await runTenantQuery(
       accountsSql, tenantContext,
       accountsSql`
@@ -47,7 +51,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           kg_picked   = COALESCE(${kgPicked ?? null}, kg_picked),
           rate_per_kg = COALESCE(${ratePerKg ?? null}, rate_per_kg),
           location_id = CASE WHEN ${locationId !== undefined} THEN ${locationId ?? null}::uuid ELSE location_id END,
-          notes       = CASE WHEN ${notes !== undefined} THEN ${notes ?? null} ELSE notes END
+          notes       = CASE WHEN ${notes !== undefined} THEN ${notes ?? null} ELSE notes END,
+          day_fraction = COALESCE(${dayFraction ?? null}, day_fraction)
         WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
       `,
     )

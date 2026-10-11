@@ -71,6 +71,8 @@ type Snapshot = {
   presentWorkerIds?: string[]
   assignments?: unknown[]
   presentRecords?: unknown[]
+  /** Who has a picking_records row for the date — drives the split-day line and the amber count. */
+  pickingWorkerIds?: string[]
 }
 
 /**
@@ -91,7 +93,7 @@ function mockMuster(snapshot: Snapshot) {
         weeklySummary: [],
         presentRecords: snapshot.presentRecords ?? [],
         assignments: snapshot.assignments ?? [],
-        pickingWorkerIds: [],
+        pickingWorkerIds: snapshot.pickingWorkerIds ?? [],
         hasBiometricDevices: false,
         assignmentsFrom: null,
       })
@@ -518,6 +520,87 @@ describe("a biometric punch shows its times, a manual mark shows the rate", () =
     const overtimeInput = container.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
     expect(overtimeInput, "the overtime field must be visible without being asked for").not.toBeNull()
     expect(overtimeInput?.value).toBe("2")
+  })
+})
+
+describe("a picker's work is set, just not on this tab", () => {
+  /**
+   * PICKING AND DAY-WORK SHARE ONE DAY (scripts/152), and that changes what the muster should say
+   * about a picker. Two false alarms fall out of it, both the pattern this file keeps undoing:
+   *
+   *  - "No work set" counted pickers, because it only looks at labour_assignments. A person paid by
+   *    weight has no assignment BY DESIGN, so the amber would fire on every picker on every day of
+   *    harvest -- the busiest fortnight of the year, and the worst time to teach somebody that an
+   *    amber number means nothing. Exactly why monthly staff were excluded from it already.
+   *
+   *  - "Also picked today -- paid by weight and by day" was amber because it meant double pay.
+   *    The database now refuses that, so the line can only appear on a split day the writer chose
+   *    and the DB approved. Amber for an approved action is an accusation.
+   */
+  it("does not count a picker among the workers with no work set", async () => {
+    const workers = [
+      worker({ id: "a", name: "Chitra" }),
+      worker({ id: "b", name: "Ravi" }),
+    ]
+    mockMuster({
+      workers,
+      presentWorkerIds: ["a", "b"],
+      // Ravi has a day-rate job. Chitra picked -- no assignment, and that is correct.
+      assignments: [
+        {
+          id: "j1", workerId: "b", activityName: "Weeding", activityCode: "105",
+          locationId: null, locationName: null, dayFraction: 1, rate: 450,
+          headcount: 1, lumpSum: null, totalCost: 450,
+        },
+      ],
+      pickingWorkerIds: ["a"],
+    })
+    await openMuster({ workers })
+
+    // Both are present and both have work. Nobody is missing anything.
+    const tile = screen.getByText("No work set").closest("div")
+    expect(within(tile as HTMLElement).getByText("0")).toBeInTheDocument()
+  })
+
+  it("still counts a present day-worker who genuinely has nothing booked", async () => {
+    // The other half: excluding pickers must not blunt the warning where it is real.
+    const workers = [worker({ id: "a", name: "Chitra" }), worker({ id: "b", name: "Ravi" })]
+    mockMuster({
+      workers,
+      presentWorkerIds: ["a", "b"],
+      assignments: [
+        {
+          id: "j1", workerId: "a", activityName: "Weeding", activityCode: "105",
+          locationId: null, locationName: null, dayFraction: 1, rate: 450,
+          headcount: 1, lumpSum: null, totalCost: 450,
+        },
+      ],
+      pickingWorkerIds: [],
+    })
+    await openMuster({ workers })
+    const tile = screen.getByText("No work set").closest("div")
+    expect(within(tile as HTMLElement).getByText("1"), "Ravi really has nothing").toBeInTheDocument()
+  })
+
+  it("reports a split day as a fact rather than a warning", async () => {
+    const workers = [worker({ id: "a", name: "Chitra" })]
+    mockMuster({
+      workers,
+      presentWorkerIds: ["a"],
+      assignments: [
+        {
+          id: "j1", workerId: "a", activityName: "Weeding", activityCode: "105",
+          locationId: null, locationName: "PG", dayFraction: 0.5, rate: 450,
+          headcount: 1, lumpSum: null, totalCost: 225,
+        },
+      ],
+      pickingWorkerIds: ["a"],
+    })
+    const { container } = await openMuster({ workers })
+
+    expect(container.textContent).toContain("Split day")
+    // The old wording read as an accusation for something now deliberate and DB-approved.
+    expect(container.textContent).not.toContain("paid by weight and by day")
   })
 })
 
