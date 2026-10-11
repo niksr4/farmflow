@@ -301,7 +301,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
   const balanceSheetStats: HeroStat[] = [
     { label: "Booked inflow", value: totalBookedRevenueLoading ? "Loading..." : totalBookedRevenueError ? "Unavailable" : formatCurrency(totalBookedRevenue, 0), metricValue: (totalBookedRevenueLoading || totalBookedRevenueError) ? null : totalBookedRevenue },
     { label: "Booked outflow", value: totalCostLoading ? "Loading..." : formatCurrency(totalCostValue, 0), metricValue: totalCostLoading ? null : totalCostValue },
-    { label: "Live position", value: (totalCostLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading) ? "Loading..." : totalBookedRevenueError ? "Unavailable" : formatCurrency(balanceLivePosition, 0), metricValue: (totalCostLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading || !!totalBookedRevenueError) ? null : balanceLivePosition },
+    { label: "Live position", value: (totalCostLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading) ? "Loading..." : (totalBookedRevenueError || receivablesHeroTotals.error) ? "Unavailable" : formatCurrency(balanceLivePosition, 0), metricValue: (totalCostLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading || !!totalBookedRevenueError || !!receivablesHeroTotals.error) ? null : balanceLivePosition },
   ]
 
   // ── Receivables stats ─────────────────────────────────────────────────────
@@ -359,8 +359,27 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
     { icon: Receipt, label: `Tracking ${currentFiscalYearLabel}`, metricValue: null },
   ]
   const chipsBalanceSheet: HeroChip[] = [
-    { icon: TrendingUp, label: (salesHeroTotals.loading || accountsTotalsLoading) ? "Booked net loading..." : `Booked net: ${formatCurrency(balanceNetBooked, 0)}`, metricValue: (salesHeroTotals.loading || accountsTotalsLoading) ? null : balanceNetBooked },
-    { icon: Receipt, label: receivablesHeroTotals.loading ? "Live receivables loading..." : `Live receivables: ${formatCurrency(receivablesHeroTotals.totalOutstanding, 0)}`, metricValue: receivablesHeroTotals.loading ? null : receivablesHeroTotals.totalOutstanding },
+    // Same loading/error rules as the stat tiles above. This chip used to check only the sales
+    // call's loading flag, so when sales or other-sales failed it showed "Booked net: -₹<costs>"
+    // (revenue silently counted as zero) right beside a tile saying "Unavailable".
+    {
+      icon: TrendingUp,
+      label: (totalBookedRevenueLoading || accountsTotalsLoading)
+        ? "Booked net loading..."
+        : totalBookedRevenueError
+          ? "Booked net unavailable"
+          : `Booked net: ${formatCurrency(balanceNetBooked, 0)}`,
+      metricValue: (totalBookedRevenueLoading || accountsTotalsLoading || totalBookedRevenueError) ? null : balanceNetBooked,
+    },
+    {
+      icon: Receipt,
+      label: receivablesHeroTotals.loading
+        ? "Live receivables loading..."
+        : receivablesHeroTotals.error
+          ? "Live receivables unavailable"
+          : `Live receivables: ${formatCurrency(receivablesHeroTotals.totalOutstanding, 0)}`,
+      metricValue: (receivablesHeroTotals.loading || receivablesHeroTotals.error) ? null : receivablesHeroTotals.totalOutstanding,
+    },
   ]
   const chipsReceivables: HeroChip[] = [
     { icon: Receipt, label: recErr ? (receivablesHeroTotals.loading ? "Receivables totals loading..." : "Receivables totals unavailable") : `Open invoices: ${fmtCount(receivablesHeroTotals.totalCount)}`, metricValue: recErr ? null : receivablesHeroTotals.totalCount },
