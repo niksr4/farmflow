@@ -77,13 +77,13 @@ export async function GET(request: NextRequest) {
           detail: `Sales kg (${salesKg.toFixed(0)}) exceed dispatch kgs received (${dispatchKg.toFixed(0)}) by ${Math.abs(diff).toFixed(0)} kg — more coffee sold than was received from dispatch.`,
           value: `−${Math.abs(diff).toFixed(0)} kg`,
         })
-      } else if (diff >= 0) {
+      } else if (diff >= -1) {
         checks.push({
           id: "dispatch_vs_sales",
           label: "Dispatch ↔ Sales balance",
           status: "ok",
-          detail: `${dispatchKg.toFixed(0)} kg dispatched · ${salesKg.toFixed(0)} kg sold · ${diff.toFixed(0)} kg unsold.`,
-          value: `${diff.toFixed(0)} kg unsold`,
+          detail: `${dispatchKg.toFixed(0)} kg dispatched · ${salesKg.toFixed(0)} kg sold · ${Math.max(diff, 0).toFixed(0)} kg unsold.`,
+          value: `${Math.max(diff, 0).toFixed(0)} kg unsold`,
         })
       }
     } catch {
