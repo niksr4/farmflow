@@ -61,7 +61,7 @@ export function FiscalYearSelect({
 
   return (
     <Select value={value.label} onValueChange={handleChange}>
-      <SelectTrigger className={cn("h-9 w-auto rounded-xl border-stone-200 bg-stone-50 text-xs font-semibold", className)}>
+      <SelectTrigger aria-label={label} className={cn("h-9 w-auto rounded-xl border-stone-200 bg-stone-50 text-xs font-semibold", className)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

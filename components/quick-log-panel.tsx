@@ -341,6 +341,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                 <button
                   type="button"
                   onClick={() => setActiveCode(null)}
+                  aria-label="Close"
                   className="flex h-8 w-8 items-center justify-center rounded-xl bg-stone-100 text-stone-400 touch-manipulation"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -358,6 +359,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                     <button
                       type="button"
                       onClick={() => setWorkers((w) => Math.max(0, w - 1))}
+                      aria-label="Fewer workers"
                       className="flex h-14 w-14 items-center justify-center rounded-2xl bg-stone-100 text-stone-600 active:scale-95 transition-transform touch-manipulation"
                     >
                       <Minus className="h-5 w-5 stroke-[2.5]" />
@@ -373,6 +375,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                           setWorkers(v === "" ? 0 : Math.max(0, Number(v)))
                         }}
                         placeholder="0"
+                        aria-label="Number of workers"
                         className="text-5xl font-black text-stone-900 tabular-nums text-center leading-none w-full bg-transparent border-none outline-none focus:ring-0"
                       />
                       <span className="text-xs font-semibold text-stone-400 mt-1.5 uppercase tracking-wide">
@@ -382,6 +385,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                     <button
                       type="button"
                       onClick={() => setWorkers((w) => w + 1)}
+                      aria-label="More workers"
                       className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-md active:scale-95 transition-transform touch-manipulation"
                     >
                       <Plus className="h-5 w-5 stroke-[2.5]" />

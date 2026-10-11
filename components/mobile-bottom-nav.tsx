@@ -59,6 +59,7 @@ export default function MobileBottomNav({
 
   return (
     <nav
+      aria-label="Primary"
       className={cn(
         "fixed bottom-0 inset-x-0 z-40",
         "bg-white border-t-2 border-stone-300",
@@ -80,6 +81,7 @@ export default function MobileBottomNav({
               key={tabId}
               type="button"
               onClick={() => onTabChange(tabId)}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center gap-1 min-w-0 px-1",
                 "touch-manipulation active:scale-95 transition-transform",

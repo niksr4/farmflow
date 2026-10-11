@@ -112,7 +112,8 @@ export default function PayrollSummaryTab() {
    * not in a constant here.
    */
   const shiftWeek = (by: number) => {
-    const anchor = new Date(`${endDate || today()}T00:00:00Z`)
+    // "This week" (by === 0) must anchor on today, not on whatever end date is currently typed in.
+    const anchor = new Date(`${(by === 0 ? today() : endDate) || today()}T00:00:00Z`)
     anchor.setUTCDate(anchor.getUTCDate() + by * 7)
     const { start, end } = weekRangeFor(anchor.toISOString().slice(0, 10))
     setStartDate(start)
@@ -130,6 +131,8 @@ export default function PayrollSummaryTab() {
   const [showRuleColumns, setShowRuleColumns] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hasGenerated, setHasGenerated] = useState(false)
+  // The range the table was actually generated for; the date inputs can be edited afterwards.
+  const [generatedRange, setGeneratedRange] = useState<{ start: string; end: string } | null>(null)
 
   const handleGenerate = useCallback(async () => {
     if (!startDate || !endDate) return
@@ -142,6 +145,7 @@ export default function PayrollSummaryTab() {
       setTotals(data.totals || null)
       setShowRuleColumns(Boolean(data.usesRules))
       setHasGenerated(true)
+      setGeneratedRange({ start: startDate, end: endDate })
     } catch (err: any) {
       toast.error(err?.message || "Failed to generate payroll summary")
     } finally {
@@ -224,7 +228,7 @@ export default function PayrollSummaryTab() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `payroll-${startDate}-to-${endDate}.csv`
+    a.download = `payroll-${generatedRange?.start ?? startDate}-to-${generatedRange?.end ?? endDate}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -233,13 +237,13 @@ export default function PayrollSummaryTab() {
     if (!workers.length) return
     const workbookBytes = await buildXlsxArrayBufferFromCsv(buildPayrollExportCsv(), "Payroll Summary", {
       title: tenantSettings.estateName ? `${tenantSettings.estateName} — Payroll Summary` : "Payroll Summary",
-      subtitle: `${startDate} to ${endDate}`,
+      subtitle: `${generatedRange?.start ?? startDate} to ${generatedRange?.end ?? endDate}`,
     })
     const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `payroll-${startDate}-to-${endDate}.xlsx`
+    a.download = `payroll-${generatedRange?.start ?? startDate}-to-${generatedRange?.end ?? endDate}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }

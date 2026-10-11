@@ -72,6 +72,21 @@ const normalizeSetLabel = (name: string) =>
 
 const setLabelKey = (label: string) => label.trim().toLowerCase()
 
+// Stored entry -> form row. A contract entry is saved as { laborCount: 0, costPerLabor: 0,
+// contractTotal }, so mapping only count x rate loaded it as an empty non-contract group and the
+// next Update silently dropped the contract amount from the entry's total.
+const laborEntryToSet = (e: any): LaborSet => {
+  const contractTotal = Number(e?.contractTotal) || 0
+  if (contractTotal > 0) {
+    return { label: normalizeSetLabel(e.name), laborers: 1, costPerLaborer: contractTotal, isContract: true }
+  }
+  return {
+    label: normalizeSetLabel(e.name),
+    laborers: Number(e.laborCount) || 0,
+    costPerLaborer: Number(e.costPerLabor) || 0,
+  }
+}
+
 function makeDefaultSets(
   inHouseWage: number,
   outsideWage: number,
@@ -256,11 +271,7 @@ export default function LaborDeploymentTab({
     }
     const last = deployments[0]
     if (last && last.laborEntries?.length > 0) {
-      const sets: LaborSet[] = last.laborEntries.map((e: any) => ({
-        label: normalizeSetLabel(e.name),
-        laborers: Number(e.laborCount) || 0,
-        costPerLaborer: Number(e.costPerLabor) || 0,
-      }))
+      const sets: LaborSet[] = last.laborEntries.map(laborEntryToSet)
       setFormData({
         date: todayIso(),
         code: last.code || "",
@@ -425,11 +436,7 @@ export default function LaborDeploymentTab({
   const startEdit = (deployment: any) => {
     trackClick("labor_edit", { id: deployment.id })
     // No section switch: the record opens over the list, so the writer keeps their place.
-    const sets: LaborSet[] = (deployment.laborEntries || []).map((e: any) => ({
-      label: normalizeSetLabel(e.name),
-      laborers: Number(e.laborCount) || 0,
-      costPerLaborer: Number(e.costPerLabor) || 0,
-    }))
+    const sets: LaborSet[] = (deployment.laborEntries || []).map(laborEntryToSet)
     if (sets.length === 0) {
       sets.push(...makeDefaultSets(inHouseWage, outsideWage, lastWageByLabel))
     }
