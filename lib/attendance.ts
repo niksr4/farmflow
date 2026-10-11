@@ -15,7 +15,11 @@ export const getTodayAttendanceDate = () => formatUtcDate(new Date())
 export const normalizeAttendanceDate = (value: unknown, fallback = getTodayAttendanceDate()) => {
   const normalized = String(value || "").trim()
   if (!normalized) return fallback
-  if (ATTENDANCE_DATE_PATTERN.test(normalized)) return normalized
+  if (ATTENDANCE_DATE_PATTERN.test(normalized)) {
+    // Reject impossible calendar dates ("2026-02-31", "2026-13-01") that match the shape.
+    const check = new Date(`${normalized}T00:00:00.000Z`)
+    return !Number.isNaN(check.getTime()) && formatUtcDate(check) === normalized ? normalized : fallback
+  }
 
   const parsed = new Date(normalized)
   if (Number.isNaN(parsed.getTime())) return fallback

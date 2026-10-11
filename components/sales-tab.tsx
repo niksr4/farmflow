@@ -819,6 +819,7 @@ export default function SalesTab({
         }
         fetchDispatchSummary()
         fetchSalesSummary()
+        fetchOverviewSalesSummary()
       } else {
         reportActionFailure(editingRecord ? "sales_update" : "sales_save", data.error || `HTTP ${response.status}`)
         setSaveFeedback({
@@ -909,6 +910,10 @@ export default function SalesTab({
         })
         posthog.capture("sale_deleted", { sale_id: id })
         fetchSalesRecords(0, false)
+        // Availability is derived from these summaries; without a refresh the deleted sale's kilos
+        // stay deducted and a legitimate re-sale is rejected as "Insufficient Inventory".
+        fetchSalesSummary()
+        fetchOverviewSalesSummary()
       } else {
         reportActionFailure("sales_delete", data.error || "non-ok response", { id })
         toast({

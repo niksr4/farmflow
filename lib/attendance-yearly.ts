@@ -236,8 +236,10 @@ export function summariseYearlyAttendance(rows: readonly YearlyAttendanceRow[]) 
 }
 
 const csvCell = (value: unknown) => {
-  const text = String(value ?? "")
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  const raw = String(value ?? "")
+  // Worker names are user-entered: neutralise spreadsheet formula prefixes, and quote CR as well as LF.
+  const text = /^[=+@\t\r]/.test(raw) ? `'${raw}` : raw
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
 /** One row per worker per month — the layout that opens correctly in Excel and prints. */

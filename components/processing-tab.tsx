@@ -909,6 +909,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   const handleExportCSV = async () => {

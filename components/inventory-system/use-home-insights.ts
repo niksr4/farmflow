@@ -128,12 +128,14 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
   useEffect(() => {
     if (!tenantId || !shouldLoadHomeMetrics) return
     if (activityStreakLoadedRef.current === tenantId) return
-    activityStreakLoadedRef.current = tenantId
     const controller = new AbortController()
     fetch("/api/activity-streak", { cache: "no-store", signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
         if (controller.signal.aborted) return
+        // Marked loaded only on completion: setting it up front meant an aborted request (effect
+        // cleanup / remount) was never retried.
+        activityStreakLoadedRef.current = tenantId
         if (d.success && d.streak > 0) setActivityStreak(d.streak)
       })
       .catch(() => {})

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { AlertTriangle, CloudRain, Loader2, TrendingUp } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -89,8 +89,12 @@ export default function YieldForecastTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Latest-request-wins: a slow response for a previous season/scope must not overwrite the current one.
+  const requestSeq = useRef(0)
+
   const loadForecast = useCallback(async () => {
     if (!selectedFiscalYear) return
+    const seq = ++requestSeq.current
     setLoading(true)
     setError(null)
     try {
@@ -100,21 +104,27 @@ export default function YieldForecastTab() {
         coffeeType: coffeeScope,
       })
       const response = await fetch(`/api/yield-forecast?${params.toString()}`, { cache: "no-store" })
-      const data = (await response.json()) as YieldForecastResponse
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to load yield forecast")
+      const data = (await response.json().catch(() => null)) as YieldForecastResponse | null
+      if (seq !== requestSeq.current) return
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to load yield forecast")
       }
       setForecast(data)
     } catch (loadError: any) {
+      if (seq !== requestSeq.current) return
       setForecast(null)
-      setError(loadError.message || "Failed to load yield forecast")
+      setError(loadError?.message || "Failed to load yield forecast")
     } finally {
-      setLoading(false)
+      if (seq === requestSeq.current) setLoading(false)
     }
   }, [coffeeScope, selectedFiscalYear])
 
   useEffect(() => {
     loadForecast()
+    // Invalidate on unmount so a late response does not set state on a dead component.
+    return () => {
+      requestSeq.current++
+    }
   }, [loadForecast])
 
   const summary = forecast?.summary

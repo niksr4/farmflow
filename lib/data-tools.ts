@@ -239,12 +239,12 @@ export const TAB_DEFAULT_EXPORT_DATASET: Partial<Record<string, ExportDatasetId>
 
 export const isImportDatasetId = (value: string | null | undefined): value is ImportDatasetId => {
   if (!value) return false
-  return value in IMPORT_DATASET_MAP
+  return Object.prototype.hasOwnProperty.call(IMPORT_DATASET_MAP, value)
 }
 
 export const isExportDatasetId = (value: string | null | undefined): value is ExportDatasetId => {
   if (!value) return false
-  return value in EXPORT_DATASET_MAP
+  return Object.prototype.hasOwnProperty.call(EXPORT_DATASET_MAP, value)
 }
 
 export const datasetTemplateCsv = (datasetId: ImportDatasetId) => {

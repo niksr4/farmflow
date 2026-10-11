@@ -179,6 +179,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-black/[0.02] transition-colors"
       >
         <div>
@@ -224,6 +225,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                             value={row.notes}
                             onChange={e => updateNotes(rowIdx, e.target.value)}
                             placeholder="Notes (optional)"
+                            aria-label={`Notes for ${row.reference}`}
                             className="mt-1 h-7 w-full min-w-[110px] text-[11px] rounded-md border-black/10 bg-white/60 px-2"
                           />
                         </td>
@@ -236,6 +238,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                             onChange={e => updateWage(rowIdx, e.target.value)}
                             className="h-9 w-16 text-sm rounded-lg border-black/10 bg-white/80 px-2 text-center"
                             placeholder="₹"
+                            aria-label={`Rupees per worker for ${row.reference}`}
                           />
                         </td>
                         {weekDays.map(d => (
@@ -251,6 +254,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                                 row.dayCounts[d.iso] > 0 && "border-emerald-300 bg-emerald-50/80 text-emerald-800 font-medium",
                               )}
                               placeholder="0"
+                              aria-label={`Workers for ${row.reference} on ${d.short}`}
                             />
                           </td>
                         ))}
@@ -279,6 +283,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                 value={codeSearch}
                 onChange={e => setCodeSearch(e.target.value)}
                 placeholder="Search activity..."
+                aria-label="Search activity"
                 className="h-8 text-sm rounded-xl border-black/10 bg-white/80"
                 autoFocus
               />

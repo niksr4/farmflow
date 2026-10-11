@@ -97,16 +97,17 @@ export default function MarketPricingTab() {
   const saveAlert = () => {
     const threshold = parseFloat(alertDraft)
     if (!Number.isFinite(threshold) || threshold <= 0) {
-      localStorage.removeItem("farmflow_price_alert")
+      try { localStorage.removeItem("farmflow_price_alert") } catch {}
       setAlertThreshold(null)
       return
     }
-    localStorage.setItem("farmflow_price_alert", JSON.stringify({ threshold, above: alertAbove }))
+    // Storage can throw (private mode / blocked site data); the alert still works for this session.
+    try { localStorage.setItem("farmflow_price_alert", JSON.stringify({ threshold, above: alertAbove })) } catch {}
     setAlertThreshold(threshold)
   }
 
   const clearAlert = () => {
-    localStorage.removeItem("farmflow_price_alert")
+    try { localStorage.removeItem("farmflow_price_alert") } catch {}
     setAlertThreshold(null)
     setAlertDraft("")
   }
@@ -170,6 +171,10 @@ export default function MarketPricingTab() {
 
   const handleAddPriceRecordUnguarded = async () => {
     if (!priceForm.price_per_kg || !priceForm.record_date) return
+    if (!(parseFloat(priceForm.price_per_kg) > 0)) {
+      setError("Enter a price per kg greater than zero.")
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch("/api/market-pricing", {

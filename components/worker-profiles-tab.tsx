@@ -249,6 +249,7 @@ export default function WorkerProfilesTab() {
   const [showInactive, setShowInactive] = useState(false)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [inactiveError, setInactiveError] = useState(false)
+  const [rosterError, setRosterError] = useState(false)
 
   const fetchInactive = useCallback(async () => {
     try {
@@ -283,6 +284,25 @@ export default function WorkerProfilesTab() {
       // pre-edit values and read as "the save silently did nothing".
       const res = await fetch("/api/attendance?date=" + todayIso() + "&scope=all", { cache: "no-store" })
       const data = await res.json()
+      /**
+       * A REFUSED LOAD IS NOT AN EMPTY ROSTER, and until now the screen could not tell them apart.
+       * Only a *thrown* error was reported; a 403 from the module gate or a 500 carries
+       * `success: false` over a perfectly good HTTP round trip, fell through this `if`, and left
+       * `workers` empty with `loading` false.
+       *
+       * The empty branch then renders "No workers yet — add your first worker", so an estate with
+       * forty-one people on the roster is invited to start adding them again. That is the precise
+       * route to duplicate workers that this tab's restore path exists to close, reached by a
+       * screen claiming something it does not know.
+       *
+       * Same defect the inactive list had and the same fix; the sweep for it should have happened
+       * when that one was written.
+       */
+      if (!res.ok || !data?.success) {
+        setRosterError(true)
+        return
+      }
+      setRosterError(false)
       if (data.success) {
         setShowFingerIds(Boolean(data.showFingerIds))
         setWorkers(
@@ -307,6 +327,7 @@ export default function WorkerProfilesTab() {
         )
       }
     } catch {
+      setRosterError(true)
       toast.error("Failed to load workers")
     } finally {
       setLoading(false)
@@ -367,6 +388,16 @@ export default function WorkerProfilesTab() {
 
   const handleAddUnguarded = async () => {
     if (!form.name.trim()) return
+    /**
+     * Also refused here, not only on the button. A form already open when the load failed keeps
+     * its submit path, and gating the control alone would leave the one route in that still
+     * reaches a POST. An in-flight save is unaffected -- this only turns away a NEW submission
+     * while the screen cannot say who is already on the roster.
+     */
+    if (rosterError) {
+      toast.error("The roster could not be loaded, so there is no way to tell who is already on it. Reload before adding anyone.")
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch("/api/attendance/workers", {
@@ -585,7 +616,7 @@ export default function WorkerProfilesTab() {
           <div>
             <CardTitle className="text-base">Worker Roster</CardTitle>
             <CardDescription>
-              This shared roster feeds Attendance, Picking, Ledger, and Payroll. Add only the workers you want tracked across those tabs. {workers.length} active worker{workers.length !== 1 ? "s" : ""}.
+              This shared roster feeds Attendance, Picking, Ledger, and Payroll. Add only the workers you want tracked across those tabs.{rosterError ? "" : ` ${workers.length} active worker${workers.length !== 1 ? "s" : ""}.`}
               {/* The estate banner promises "every tab is filtered to this estate", and this one
                   deliberately is not: it fetches with scope=all so a worker assigned to another
                   estate stays reachable and reassignable. Without saying so, the unfiltered list
@@ -615,7 +646,22 @@ export default function WorkerProfilesTab() {
                   Edit all
                 </Button>
               )}
-              <Button size="sm" onClick={() => setIsAdding(true)}>
+              {/*
+                UNAVAILABLE WHILE THE ROSTER IS UNVERIFIED. Telling somebody "do not add them
+                again" and leaving the button live is advice, not a guard -- and the screen has
+                already admitted it does not know who is on the roster.
+
+                The database stops an exact duplicate name, so this is not about that. It is about
+                a VARIANT: an estate that cannot see Chitra adds "Chitra K", the unique index has
+                no objection, and they now have two people and a split history. That is the
+                failure this whole tab spent #70 closing.
+              */}
+              <Button
+                size="sm"
+                onClick={() => setIsAdding(true)}
+                disabled={rosterError}
+                title={rosterError ? "Reload the roster first — it could not be loaded, so there is no way to tell who is already on it" : undefined}
+              >
                 <Plus className="mr-1.5 h-4 w-4" />
                 Add Worker
               </Button>
@@ -944,6 +990,20 @@ export default function WorkerProfilesTab() {
           {loading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground text-sm">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading workers…
+            </div>
+          ) : rosterError ? (
+            /* Never the "add your first worker" copy on a failed load: that sentence is an
+               instruction, and following it on an estate that already has a roster creates the
+               duplicate this tab spends the rest of its code preventing. */
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <p className="text-sm font-medium">Could not load the roster</p>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                This is a loading problem, not an empty estate. Your workers are still there. Do not
+                add them again.
+              </p>
+              <Button type="button" size="sm" variant="outline" onClick={() => { setLoading(true); fetchWorkers() }}>
+                Try again
+              </Button>
             </div>
           ) : workers.length === 0 ? (
             <EmptyStateTable title="No workers yet — add your first worker to start tracking attendance, picking, ledger, or payroll." />

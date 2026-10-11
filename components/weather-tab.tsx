@@ -213,14 +213,18 @@ export default function WeatherTab() {
         hasLoadedOnceRef.current = true
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return
-        if (err instanceof Error) {
+        if (err instanceof Error && !(err instanceof TypeError)) {
           setError(err.message)
+        } else if (err instanceof TypeError) {
+          setError("Could not reach the weather service. Check your connection and try again.")
         } else {
           setError("An unknown error occurred.")
         }
       } finally {
-        setLoading(false)
-        setIsRefreshing(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+          setIsRefreshing(false)
+        }
       }
     }
 
