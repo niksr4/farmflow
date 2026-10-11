@@ -577,6 +577,7 @@ export default function QualityGradingTab() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  aria-label="Delete record"
                                   onClick={(event) => {
                                     event.stopPropagation()
                                     handleDelete(record.id)

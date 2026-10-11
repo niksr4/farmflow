@@ -73,7 +73,7 @@ export default function ExecutionScorecardCard({ checks, onAction }: Props) {
             <div key={check.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-neutral-900">{check.title}</p>
+                  <p className="text-sm font-semibold text-neutral-900 dark:text-white">{check.title}</p>
                   <p className="text-xs text-muted-foreground">{check.goal}</p>
                 </div>
                 <Badge variant="outline" className={cn("w-fit", TONE[check.status])}>
@@ -81,7 +81,7 @@ export default function ExecutionScorecardCard({ checks, onAction }: Props) {
                 </Badge>
               </div>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-neutral-700">{check.metric}</p>
+                <p className="text-sm text-neutral-700 dark:text-stone-300">{check.metric}</p>
                 <Button
                   size="sm"
                   variant="outline"
