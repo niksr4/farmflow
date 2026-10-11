@@ -837,8 +837,11 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                       : "text-stone-500 hover:bg-stone-100 active:bg-stone-200",
                 )}
               >
+                {/* emerald-100, not -200: this is a 9px label on the emerald-700 pill, and -200
+                    measured 4.28:1 there, under AA. -100 is 4.84:1 and still reads dimmer than the
+                    white date below it, so the hierarchy survives. */}
                 <span className={cn("text-[9px] font-bold uppercase tracking-widest",
-                  isSelected ? "text-emerald-200" : "")}>
+                  isSelected ? "text-emerald-100" : "")}>
                   {format(day, "EEE").slice(0, 1)}
                 </span>
                 <span className={cn("text-base font-black leading-tight mt-0.5",
