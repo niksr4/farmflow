@@ -337,7 +337,9 @@ async function fetchSalesData(startDate: string, endDate: string, tenantContext:
           sr.sale_date,
           sr.coffee_type,
           sr.bag_type,
-          sr.kgs AS weight_kgs,
+          -- Same fallback chain as the booked-revenue view (scripts/121, 144); sr.kgs alone reads 0 for
+          -- rows that only carry weight_kgs / kgs_received / kgs_sent, understating volume.
+          COALESCE(NULLIF(sr.kgs, 0), NULLIF(sr.weight_kgs, 0), NULLIF(sr.kgs_received, 0), NULLIF(sr.kgs_sent, 0), 0) AS weight_kgs,
           sr.price_per_bag AS price_per_kg,
           sr.revenue AS total_revenue,
           sr.buyer_name,
@@ -516,6 +518,7 @@ function buildDataSummary(data: DataSummaryInput): string {
     )
     const totalCost = data.laborData.reduce((sum, labor) => sum + (Number(labor.total_cost) || 0), 0)
     sections.push(`- Total labour entries: ${data.laborData.length}`)
+    if (data.laborData.length >= 100) sections.push("- NOTE: only the 100 most recent labour entries are included; labour totals below understate the full fiscal year.")
     sections.push(`- Estate workers deployed: ${totalEstateWorkers} (Total: ₹${totalEstateAmount.toLocaleString()})`)
     sections.push(`- Outside workers deployed: ${totalOutsideWorkers} (Total: ₹${totalOutsideAmount.toLocaleString()})`)
     sections.push(`- Total labour cost: ₹${totalCost.toLocaleString()}`)
@@ -579,6 +582,7 @@ function buildDataSummary(data: DataSummaryInput): string {
     })
     sections.push(`- Total other expenses: ₹${totalExpenses.toLocaleString()}`)
     sections.push(`- Number of expense entries: ${data.expenseData.length}`)
+    if (data.expenseData.length >= 100) sections.push("- NOTE: only the 100 most recent expense entries are included; expense totals understate the full fiscal year.")
     const topExpenses = Object.entries(byActivity).sort((left, right) => right[1] - left[1]).slice(0, 5)
     if (topExpenses.length > 0) {
       sections.push(`- Top expense categories: ${topExpenses.map(([code, amount]) => `${code}: ₹${amount.toLocaleString()}`).join(", ")}`)
@@ -608,6 +612,7 @@ function buildDataSummary(data: DataSummaryInput): string {
     })
 
     sections.push(`- Total dispatch entries: ${totalDispatches}`)
+    if (totalDispatches >= 200) sections.push("- NOTE: only the 200 most recent dispatch entries are included; totals understate the full fiscal year.")
     sections.push(`- Total bags dispatched: ${totalBagsDispatched.toFixed(2)}`)
 
     const coffeeTypeSummary = Object.entries(byCoffeeType)
@@ -638,6 +643,7 @@ function buildDataSummary(data: DataSummaryInput): string {
     const totalRevenue = data.salesData.reduce((sum, sale) => sum + (Number(sale.total_revenue) || 0), 0)
     const totalKgs = data.salesData.reduce((sum, sale) => sum + (Number(sale.weight_kgs) || 0), 0)
     sections.push(`- Total sales entries: ${totalSales}`)
+    if (totalSales >= 200) sections.push("- NOTE: only the 200 most recent sales entries are included; revenue and volume totals understate the full fiscal year.")
     sections.push(`- Total volume sold: ${totalKgs.toFixed(2)} kg | Total revenue: ₹${totalRevenue.toLocaleString()}`)
 
     const byCoffeeType: Record<string, { kgs: number; revenue: number }> = {}

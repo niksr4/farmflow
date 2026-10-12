@@ -596,6 +596,10 @@ export async function anonymizeUserById(tenantId: string, userId: string) {
           consent_marketing_updated_at = NULL,
           privacy_notice_version = NULL,
           privacy_notice_accepted_at = NULL,
+          -- Erase the email too: it is PII, and while it stays, password reset can resurrect the account.
+          email = NULL,
+          normalized_email = NULL,
+          email_verified_at = NULL,
           anonymized_at = NOW()
       WHERE id = ${userId}
         AND tenant_id = ${tenantId}

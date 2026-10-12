@@ -86,7 +86,7 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
         t.id AS tenant_id,
         (SELECT COUNT(*) FROM security_events
           WHERE tenant_id = t.id AND event_type = 'auth_login_success'
-            AND actor_username NOT LIKE 'tenantsmoke_%'
+            AND COALESCE(actor_username, '') NOT LIKE 'tenantsmoke_%'
             AND source IS DISTINCT FROM 'tenant-smoke-agent'
             AND created_at >= ((NOW() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
             AND created_at <  (NOW() AT TIME ZONE 'Asia/Kolkata')::date AT TIME ZONE 'Asia/Kolkata')  AS logins_yesterday,
@@ -167,18 +167,18 @@ async function fetchTenantEngagementData(): Promise<TenantEngagementRow[]> {
 
       COUNT(DISTINCT CASE
         WHEN se.event_type = 'auth_login_success'
-          AND se.actor_username NOT LIKE 'tenantsmoke_%'
+          AND COALESCE(se.actor_username, '') NOT LIKE 'tenantsmoke_%'
           AND se.source IS DISTINCT FROM 'tenant-smoke-agent'
         THEN se.id END)                                             AS total_logins,
       COUNT(DISTINCT CASE
         WHEN se.event_type = 'auth_login_success'
-          AND se.actor_username NOT LIKE 'tenantsmoke_%'
+          AND COALESCE(se.actor_username, '') NOT LIKE 'tenantsmoke_%'
           AND se.source IS DISTINCT FROM 'tenant-smoke-agent'
           AND se.created_at > NOW() - INTERVAL '7 days'
         THEN se.id END)                                             AS logins_last_7d,
       MAX(CASE
         WHEN se.event_type = 'auth_login_success'
-          AND se.actor_username NOT LIKE 'tenantsmoke_%'
+          AND COALESCE(se.actor_username, '') NOT LIKE 'tenantsmoke_%'
           AND se.source IS DISTINCT FROM 'tenant-smoke-agent'
         THEN se.created_at END)                                     AS last_login_at,
 

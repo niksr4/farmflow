@@ -87,6 +87,9 @@ export async function repairCurrentInventoryUpsertConstraints(
             PARTITION BY item_type, tenant_id, location_id
             ORDER BY ctid
           ) AS row_number,
+          COUNT(*) OVER (
+            PARTITION BY item_type, tenant_id, location_id
+          ) AS group_size,
           SUM(COALESCE(quantity, 0)) OVER (
             PARTITION BY item_type, tenant_id, location_id
           ) AS merged_quantity,
@@ -111,6 +114,7 @@ export async function repairCurrentInventoryUpsertConstraints(
           merged_unit
         FROM ranked
         WHERE row_number = 1
+          AND group_size > 1
       ),
       updated AS (
         UPDATE current_inventory slot

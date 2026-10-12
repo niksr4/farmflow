@@ -516,4 +516,11 @@ describe("import bulk utils — field normalization", () => {
     const expenses = buildValidationErrors("expenses", [{ entry_date: "", code: "" }])
     expect(expenses.errors).toEqual([{ row: 2, message: "Missing entry_date or code" }])
   })
+
+  it("reads unpadded and dash/dot separated dates day-first, not month-first", () => {
+    expect(parseDate("5/3/2026")).toBe("2026-03-05")
+    expect(parseDate("02-03-2026")).toBe("2026-03-02")
+    expect(parseDate("2.3.2026")).toBe("2026-03-02")
+    expect(parseDate("31/2/2026")).toBeNull()
+  })
 })
