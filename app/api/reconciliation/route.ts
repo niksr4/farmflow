@@ -267,8 +267,21 @@ export async function GET(request: NextRequest) {
              WHERE tenant_id = $1 AND pick_date BETWEEN $2::date AND $3::date
              GROUP BY worker_id
            ),
-           -- Days present with nothing allocated. A day that carries an assignment is already
-           -- in labour_cost, so counting it here would invent a spend that does not exist.
+           /**
+            * Days present with nothing allocated. A day that carries an assignment is already in
+            * labour_cost, so counting it here would invent a spend that does not exist.
+            *
+            * ⚠ AND SO IS A DAY THAT CARRIES A PICKING ROW -- the same sentence, applied to the
+            * other arm of the same view. The exclusion checked labour_assignments only, while
+            * picking_cost is added to attendance_cost a few lines below, so a picker with no
+            * muster entry was counted twice: once at their day rate as an "uncosted" day, and
+            * again as picking. Measured on dev: Rs 694 where the day cost Rs 200, reported as a
+            * Rs 494 discrepancy against a bulk figure that was right all along.
+            *
+            * The day budget (scripts/152) is what makes this certain rather than likely: picking
+            * a whole day REFUSES a muster assignment for it, so every full picking day lands in
+            * exactly this branch.
+            */
            uncosted_days AS (
              SELECT ar.worker_id, COUNT(*)::int AS uncosted_days
              FROM attendance_records ar
@@ -279,6 +292,12 @@ export async function GET(request: NextRequest) {
                  WHERE la.tenant_id = ar.tenant_id
                    AND la.worker_id = ar.worker_id
                    AND la.work_date = ar.attendance_date
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM picking_records pr
+                 WHERE pr.tenant_id = ar.tenant_id
+                   AND pr.worker_id = ar.worker_id
+                   AND pr.pick_date = ar.attendance_date
                )
              GROUP BY ar.worker_id
            )

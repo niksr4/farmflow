@@ -18,14 +18,33 @@ import { toast } from "sonner"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
+import { cn } from "@/lib/utils"
 import { formatCurrency } from "@/lib/format"
+import {
+  pickingModeNeeds,
+  pickingMinimumWageShortfall,
+  pickingRowCost,
+  pickingRowProblem,
+} from "@/lib/picking-pay"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { numericInputValue } from "@/lib/number-input"
 
-type Worker = { id: string; name: string }
+/**
+ * The roster row, not just a label. The day rate and the crew size are what the form prefills and
+ * what the cost is computed from -- before this the picker kept only {id, name}, which is why a
+ * day-rate mode could not exist in the UI at all.
+ */
+type Worker = {
+  id: string
+  name: string
+  dailyRate: number | null
+  kind: "individual" | "gang"
+  headcount: number | null
+  workerType: string | null
+}
 
 type PickingRecord = {
   id: string
@@ -33,11 +52,36 @@ type PickingRecord = {
   workerName: string
   pickDate: string
   kgPicked: number
-  ratePerKg: number
+  /** NULL on a day-rate row. Not 0 -- a day-rate row has no per-kg rate, and 0 is a lie that computes. */
+  ratePerKg: number | null
   amount: number
+  payMode: PayMode
+  dayRate: number | null
+  headcount: number
+  incentiveThresholdKg: number | null
+  incentiveRatePerKg: number | null
+  kgRipe: number | null
+  kgGreen: number | null
+  crop: string
+  dayFraction: number
   locationId: string | null
   notes: string | null
 }
+
+/**
+ * HOW A PICKING ROW IS PAID. All three coexist at one estate in one season (HoneyFarm, 2026-10-11):
+ * permanent checkroll and casual workers get a day rate plus an incentive above a threshold,
+ * arabica fly picking gets minimum wage irrespective of quantity, and Assam or outside labour is
+ * straight per kilo. Everyone is weighed regardless -- the kilos are the crop figure and the block
+ * yield, whether or not they are what the person is paid.
+ */
+type PayMode = "piece" | "daily" | "daily_plus_incentive"
+
+const PAY_MODES: { value: PayMode; label: string; hint: string }[] = [
+  { value: "piece", label: "Per kilo", hint: "Paid by weight picked. Assam and outside labour, and contract crews." },
+  { value: "daily", label: "Day rate", hint: "Paid the day regardless of weight. Early fly picking on arabica." },
+  { value: "daily_plus_incentive", label: "Day rate + incentive", hint: "The day, plus a rate on kilos above a threshold. Checkroll and casual." },
+]
 
 const today = () => todayIso()
 const firstOfMonth = () => todayIso().slice(0, 7) + "-01"
@@ -45,8 +89,17 @@ const firstOfMonth = () => todayIso().slice(0, 7) + "-01"
 const EMPTY_FORM = {
   workerId: "",
   pickDate: today(),
+  payMode: "piece" as PayMode,
   kgPicked: "",
   ratePerKg: "",
+  dayRate: "",
+  incentiveThresholdKg: "",
+  incentiveRatePerKg: "",
+  /** Blank unless the estate separates them. Absent is not zero -- the dry route never measures it. */
+  kgRipe: "",
+  kgGreen: "",
+  crop: "coffee",
+  dayFraction: "1",
   locationId: "",
   notes: "",
 }
@@ -68,6 +121,7 @@ export default function PickingLogTab() {
     defaultSort: "date",
   })
   const [workers, setWorkers] = useState<Worker[]>([])
+  const [workersError, setWorkersError] = useState(false)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [loading, setLoading] = useState(true)
   const [totalKg, setTotalKg] = useState(0)
@@ -91,10 +145,29 @@ const ALL_WORKERS = "all"
 
   const fetchWorkers = useCallback(async () => {
     try {
-      const res = await fetch("/api/attendance?date=" + today())
+      const res = await fetch("/api/attendance?date=" + today() + "&scope=all")
       const data = await res.json()
-      if (data.success) setWorkers((data.workers || []).map((w: any) => ({ id: String(w.id), name: String(w.name) })))
-    } catch {}
+      if (!res.ok || !data?.success) {
+        // A refused roster is not an empty roster. Without this the worker picker is simply blank
+        // and the writer concludes there is nobody to pick for -- the same shape as the Workers
+        // tab bug fixed in #74, one screen over.
+        setWorkersError(true)
+        return
+      }
+      setWorkersError(false)
+      setWorkers(
+        (data.workers || []).map((w: any) => ({
+          id: String(w.id),
+          name: String(w.name),
+          dailyRate: w.dailyRate != null ? Number(w.dailyRate) : null,
+          kind: w.kind === "gang" ? "gang" : "individual",
+          headcount: w.headcount != null ? Number(w.headcount) : null,
+          workerType: w.workerType || null,
+        })),
+      )
+    } catch {
+      setWorkersError(true)
+    }
   }, [])
 
   const fetchLocations = useCallback(async () => {
@@ -134,9 +207,19 @@ const ALL_WORKERS = "all"
   useEffect(() => { fetchRecords() }, [fetchRecords])
 
   const handleAddUnguarded = async () => {
-    if (!form.workerId || !form.kgPicked || !form.ratePerKg) return
+    /**
+     * The guard used to require ratePerKg, which a day-rate row does not have -- so the three new
+     * modes would have been unsaveable from a form that happily offered them. pickingRowProblem
+     * asks the mode what it needs, and mirrors the CHECK constraint in scripts/154 so the answer
+     * is a sentence rather than a constraint name.
+     */
+    const problem = pickingRowProblem({ ...asPayInput(form, selectedWorker), workerId: form.workerId })
+    if (problem) {
+      toast.error(problem)
+      return
+    }
     if (locations.length > 0 && !form.locationId) {
-      toast.error("Select a location before saving.")
+      toast.error("Select a block before saving.")
       return
     }
     setSaving(true)
@@ -147,8 +230,24 @@ const ALL_WORKERS = "all"
         body: JSON.stringify({
           workerId: form.workerId,
           pickDate: form.pickDate,
+          payMode: form.payMode,
+          crop: form.crop,
           kgPicked: Number(form.kgPicked),
-          ratePerKg: Number(form.ratePerKg),
+          /**
+           * null, not 0, on every field the chosen mode does not use. A zero here is the "lie that
+           * computes" scripts/154 made unstorable: it multiplies out to a real-looking figure and
+           * the row claims a rate it never had.
+           *
+           * headcount is deliberately NOT sent -- the route reads it from the roster, because a
+           * client-supplied crew size is a cost multiplier the caller chooses.
+           */
+          ratePerKg: form.payMode === "piece" ? Number(form.ratePerKg) : null,
+          dayRate: form.payMode !== "piece" ? Number(form.dayRate) : null,
+          incentiveThresholdKg: form.payMode === "daily_plus_incentive" ? Number(form.incentiveThresholdKg) : null,
+          incentiveRatePerKg: form.payMode === "daily_plus_incentive" ? Number(form.incentiveRatePerKg) : null,
+          kgRipe: form.kgRipe === "" ? null : Number(form.kgRipe),
+          kgGreen: form.kgGreen === "" ? null : Number(form.kgGreen),
+          dayFraction: Number(form.dayFraction) || 1,
           locationId: form.locationId || null,
           notes: form.notes.trim() || null,
         }),
@@ -176,8 +275,19 @@ const ALL_WORKERS = "all"
     setEditForm({
       workerId: r.workerId,
       pickDate: r.pickDate.slice(0, 10),
+      payMode: r.payMode,
       kgPicked: String(r.kgPicked),
-      ratePerKg: String(r.ratePerKg),
+      // "" rather than String(null) -> "null" in the input. Each of these is genuinely absent on
+      // the modes that do not use it, and an edit must round-trip that absence rather than
+      // inventing a zero.
+      ratePerKg: r.ratePerKg != null ? String(r.ratePerKg) : "",
+      dayRate: r.dayRate != null ? String(r.dayRate) : "",
+      incentiveThresholdKg: r.incentiveThresholdKg != null ? String(r.incentiveThresholdKg) : "",
+      incentiveRatePerKg: r.incentiveRatePerKg != null ? String(r.incentiveRatePerKg) : "",
+      kgRipe: r.kgRipe != null ? String(r.kgRipe) : "",
+      kgGreen: r.kgGreen != null ? String(r.kgGreen) : "",
+      crop: r.crop || "coffee",
+      dayFraction: String(r.dayFraction ?? 1),
       locationId: r.locationId || "",
       notes: r.notes || "",
     })
@@ -225,11 +335,37 @@ const ALL_WORKERS = "all"
   const resolveLocationName = (locationId?: string | null) =>
     locationId ? locations.find((loc) => loc.id === locationId)?.name || null : null
 
+  const selectedWorker = workers.find((w) => w.id === form.workerId) || null
+
+  /** The numbers the form is holding, in the shape the cost helper and the route both expect. */
+  const asPayInput = (f: typeof EMPTY_FORM, worker: Worker | null) => ({
+    payMode: f.payMode,
+    kgPicked: Number(f.kgPicked) || 0,
+    ratePerKg: f.ratePerKg === "" ? null : Number(f.ratePerKg),
+    dayRate: f.dayRate === "" ? null : Number(f.dayRate),
+    // From the ROSTER, never the form. headcount multiplies a day rate, so a typed one would let
+    // whoever is filling in the sheet choose the cost -- scripts/154 and the route both read it
+    // from the worker for the same reason.
+    headcount: worker?.kind === "gang" ? Math.max(1, worker.headcount || 1) : 1,
+    dayFraction: Number(f.dayFraction) || 0,
+    incentiveThresholdKg: f.incentiveThresholdKg === "" ? null : Number(f.incentiveThresholdKg),
+    incentiveRatePerKg: f.incentiveRatePerKg === "" ? null : Number(f.incentiveRatePerKg),
+    kgRipe: f.kgRipe === "" ? null : Number(f.kgRipe),
+    kgGreen: f.kgGreen === "" ? null : Number(f.kgGreen),
+  })
+
+  const formPay = asPayInput(form, selectedWorker)
+  const formProblem = pickingRowProblem({ ...formPay, workerId: form.workerId })
+  const formCost = pickingRowCost(formPay)
+  const formShortfall = pickingMinimumWageShortfall({
+    ...formPay,
+    dayRate: selectedWorker?.dailyRate ?? null,
+    kind: selectedWorker?.kind,
+  })
+  const needs = pickingModeNeeds(form.payMode)
+
   const canSaveForm =
-    form.workerId &&
-    Number(form.kgPicked) > 0 &&
-    Number(form.ratePerKg) >= 0 &&
-    (locations.length === 0 || Boolean(form.locationId))
+    !formProblem && (locations.length === 0 || Boolean(form.locationId))
 
   return (
     <div className="space-y-4">
@@ -279,14 +415,71 @@ const ALL_WORKERS = "all"
 
           {/* Add form */}
           {isAdding && (
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
+            <form
+              className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3"
+              onSubmit={(e) => { e.preventDefault(); if (canSaveForm && !saving) void handleAdd() }}
+            >
+              {/*
+                THE MODE COMES FIRST because it decides what the rest of the form asks for. Three
+                coexist at one estate in one season, so this is a per-row decision and not a
+                setting: checkroll and casual on day rate plus incentive, arabica fly picking on a
+                flat day, Assam and outside labour per kilo.
+              */}
+              <div className="space-y-1.5">
+                <Label>How is this paid? *</Label>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {PAY_MODES.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setForm((f) => ({
+                        ...f,
+                        payMode: m.value,
+                        // Prefill the day rate from the roster the moment it becomes relevant.
+                        // Stored per row, so a later change to the worker cannot rewrite this day.
+                        dayRate: m.value !== "piece" && !f.dayRate && selectedWorker?.dailyRate != null
+                          ? String(selectedWorker.dailyRate)
+                          : f.dayRate,
+                      }))}
+                      aria-pressed={form.payMode === m.value}
+                      className={cn(
+                        "rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                        form.payMode === m.value
+                          ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10"
+                          : "border-border/60 hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="block font-medium text-foreground">{m.label}</span>
+                      <span className="mt-0.5 block text-muted-foreground">{m.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="picking-worker">Worker *</Label>
-                  <Select value={form.workerId} onValueChange={(v) => setForm((f) => ({ ...f, workerId: v }))}>
+                  <Select
+                    value={form.workerId}
+                    onValueChange={(v) => {
+                      const w = workers.find((x) => x.id === v) || null
+                      setForm((f) => ({
+                        ...f,
+                        workerId: v,
+                        dayRate: f.payMode !== "piece" && w?.dailyRate != null ? String(w.dailyRate) : f.dayRate,
+                      }))
+                    }}
+                  >
                     <SelectTrigger id="picking-worker"><SelectValue placeholder="Select worker" /></SelectTrigger>
                     <SelectContent>
-                      {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                      {workers.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}
+                          {/* A family or contract crew is one payee of several people. The size is
+                              what a day rate multiplies, so it belongs on the label. */}
+                          {w.kind === "gang" ? ` · crew of ${w.headcount ?? "?"}` : ""}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -296,9 +489,9 @@ const ALL_WORKERS = "all"
                 </div>
                 {locations.length > 0 && (
                   <div className="space-y-1.5">
-                    <Label htmlFor="picking-location">Location *</Label>
+                    <Label htmlFor="picking-location">Block *</Label>
                     <Select value={form.locationId} onValueChange={(v) => setForm((f) => ({ ...f, locationId: v }))}>
-                      <SelectTrigger id="picking-location"><SelectValue placeholder="Select location" /></SelectTrigger>
+                      <SelectTrigger id="picking-location"><SelectValue placeholder="Select block" /></SelectTrigger>
                       <SelectContent>
                         {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                       </SelectContent>
@@ -306,9 +499,22 @@ const ALL_WORKERS = "all"
                   </div>
                 )}
                 <div className="space-y-1.5">
+                  <Label htmlFor="picking-crop">Crop *</Label>
+                  <Select value={form.crop} onValueChange={(v) => setForm((f) => ({ ...f, crop: v }))}>
+                    <SelectTrigger id="picking-crop"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="coffee">Coffee</SelectItem>
+                      <SelectItem value="pepper">Pepper</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-1.5">
                   <FieldLabel
                     label="Kg picked *"
-                    tooltip="Total cherry weight this worker picked, in kilograms. Use decimals for precision — e.g. 48.5 kg."
+                    tooltip="Total weight this worker or crew picked. Asked on every mode, including a day rate: the kilos are the crop figure and the block yield whether or not they set the pay."
                   />
                   <Input
                     type="number" inputMode="decimal" min={0} step={0.1}
@@ -317,41 +523,164 @@ const ALL_WORKERS = "all"
                     placeholder="48.5"
                   />
                 </div>
+
+                {needs.ratePerKg && (
+                  <div className="space-y-1.5">
+                    <FieldLabel
+                      label="Rate / kg (₹) *"
+                      tooltip="Paid per kg picked. For a family or contract crew this is the lump sum rate for the whole crew's weight, which the head distributes."
+                    />
+                    <Input
+                      type="number" inputMode="decimal" min={0} step={0.5}
+                      value={numericInputValue(form.ratePerKg)}
+                      onChange={(e) => setForm((f) => ({ ...f, ratePerKg: e.target.value }))}
+                      placeholder="4.00"
+                    />
+                  </div>
+                )}
+
+                {needs.dayRate && (
+                  <div className="space-y-1.5">
+                    <FieldLabel
+                      label="Day rate (₹) *"
+                      tooltip="Prefilled from the worker's rate and stored on this row, so changing their rate later cannot rewrite what this day cost."
+                    />
+                    <Input
+                      type="number" inputMode="decimal" min={0} step={1}
+                      value={numericInputValue(form.dayRate)}
+                      onChange={(e) => setForm((f) => ({ ...f, dayRate: e.target.value }))}
+                      placeholder={selectedWorker?.dailyRate != null ? String(selectedWorker.dailyRate) : "494"}
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <FieldLabel
-                    label="Rate / kg (₹) *"
-                    tooltip="Piece rate paid per kg of cherry picked. Typically ₹3–₹6 per kg during harvest season. This rate is saved with the record."
+                    label="Day used"
+                    tooltip="How much of the worker's day this pick took. Picking and day-work share one day, so half a day here leaves half for watering or drying-yard work on the muster."
                   />
-                  <Input
-                    type="number" inputMode="decimal" min={0} step={0.5}
-                    value={numericInputValue(form.ratePerKg)}
-                    onChange={(e) => setForm((f) => ({ ...f, ratePerKg: e.target.value }))}
-                    placeholder="4.00"
-                  />
+                  <Select value={form.dayFraction} onValueChange={(v) => setForm((f) => ({ ...f, dayFraction: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Whole day</SelectItem>
+                      <SelectItem value="0.75">Three quarters</SelectItem>
+                      <SelectItem value="0.5">Half day</SelectItem>
+                      <SelectItem value="0.25">Quarter day</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              {form.kgPicked && form.ratePerKg && (
-                <p className="text-xs text-muted-foreground">
-                  Amount: <span className="font-semibold text-foreground">{formatCurrency(Number(form.kgPicked) * Number(form.ratePerKg))}</span>
-                </p>
+
+              {needs.incentive && (
+                <div className="grid gap-3 rounded-md border border-border/50 bg-background/40 p-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <FieldLabel
+                      label="Threshold (kg per person) *"
+                      tooltip="Kilos above this earn the incentive. PER PERSON, so a crew of six against a 40 kg threshold starts earning above 240 kg — the day rate beside it is per person too."
+                    />
+                    <Input
+                      type="number" inputMode="decimal" min={0} step={1}
+                      value={numericInputValue(form.incentiveThresholdKg)}
+                      onChange={(e) => setForm((f) => ({ ...f, incentiveThresholdKg: e.target.value }))}
+                      placeholder="40"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <FieldLabel
+                      label="Incentive / kg above it (₹) *"
+                      tooltip="Paid only on the kilos above the threshold. Below it they still receive the full day rate, never less."
+                    />
+                    <Input
+                      type="number" inputMode="decimal" min={0} step={0.5}
+                      value={numericInputValue(form.incentiveRatePerKg)}
+                      onChange={(e) => setForm((f) => ({ ...f, incentiveRatePerKg: e.target.value }))}
+                      placeholder="3.00"
+                    />
+                  </div>
+                </div>
               )}
+
+              {/*
+                RIPE AND GREEN, where the estate separates them. HoneyFarm weigh them apart on the
+                washed route; on the dry/cherry route "red and green are not segregated or weighed
+                separately, only total pick is recorded". Opt-in rather than always shown, and left
+                ABSENT rather than zeroed when unused -- a 0 would record a measurement nobody took.
+              */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  className="text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={() => setForm((f) => (f.kgRipe === "" && f.kgGreen === ""
+                    ? { ...f, kgRipe: "0", kgGreen: "0" }
+                    : { ...f, kgRipe: "", kgGreen: "" }))}
+                >
+                  {form.kgRipe === "" && form.kgGreen === "" ? "Record ripe and green separately" : "Record one total only"}
+                </button>
+                {!(form.kgRipe === "" && form.kgGreen === "") && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="picking-ripe">Ripe (kg)</Label>
+                      <Input id="picking-ripe" type="number" inputMode="decimal" min={0} step={0.1}
+                        value={numericInputValue(form.kgRipe)}
+                        onChange={(e) => setForm((f) => ({ ...f, kgRipe: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="picking-green">Green (kg)</Label>
+                      <Input id="picking-green" type="number" inputMode="decimal" min={0} step={0.1}
+                        value={numericInputValue(form.kgGreen)}
+                        onChange={(e) => setForm((f) => ({ ...f, kgGreen: e.target.value }))} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Textarea
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Notes (optional) — e.g. Block 3, Upper estate"
+                placeholder="Notes (optional) — e.g. second weighment, upper block"
                 rows={2}
                 className="resize-none text-sm"
               />
+
+              {/* The one line that tells the writer the mode is doing what they expect. */}
+              {Number(form.kgPicked) > 0 && (
+                <div className="rounded-md border border-border/50 bg-background/60 px-3 py-2 text-xs">
+                  <p>
+                    Pay for this row:{" "}
+                    <span className="font-semibold text-foreground">{formatCurrency(formCost)}</span>
+                    {selectedWorker?.kind === "gang" && (
+                      <span className="text-muted-foreground"> · crew of {selectedWorker.headcount ?? "?"}, paid as one</span>
+                    )}
+                  </p>
+                  {/*
+                    SURFACED, NEVER APPLIED. Dad: "They will be paid minimum wage nevertheless. We
+                    may move them out to do other tasks." Two remedies, and the estate picks per
+                    person per day — topping this up automatically would present a derived figure
+                    as a measured one and hide the second option entirely.
+                  */}
+                  {formShortfall > 0 && (
+                    <p className="mt-1 text-amber-700 dark:text-amber-400">
+                      {formatCurrency(formShortfall)} below this worker&apos;s day rate for the day used.
+                      Pay the day rate instead, or move them to other work for part of the day.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {formProblem && form.workerId && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">{formProblem}</p>
+              )}
+
               <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm({ ...EMPTY_FORM, locationId: form.locationId }) }}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm({ ...EMPTY_FORM, locationId: form.locationId }) }}>
                   <X className="mr-1 h-4 w-4" /> Cancel
                 </Button>
-                <Button size="sm" disabled={!canSaveForm || saving} onClick={handleAdd}>
+                <Button type="submit" size="sm" disabled={!canSaveForm || saving}>
                   {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
                   Save
                 </Button>
               </div>
-            </div>
+            </form>
           )}
 
           {/* Table */}
@@ -431,12 +760,33 @@ const ALL_WORKERS = "all"
                           {/* Location is desktop-only below md and Notes below sm, so on a phone
                               you could not tell which block was picked or read any note. Both are
                               surfaced here as sub-lines rather than as extra columns. */}
+                          {/* A crew is one payee of several people, and the headcount is what a
+                              day rate multiplied -- without it the amount looks wrong. */}
+                          {r.headcount > 1 && (
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">crew of {r.headcount}</span>
+                          )}
+                          {r.dayFraction < 1 && (
+                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">{r.dayFraction} day</span>
+                          )}
                           <span className="mt-0.5 block text-xs font-normal text-muted-foreground md:hidden">
                             {[resolveLocationName(r.locationId), r.notes].filter(Boolean).join(" · ") || null}
                           </span>
                         </TableCell>
                         <TableCell className="text-right text-sm">{r.kgPicked.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</TableCell>
-                        <TableCell className="text-right text-sm">₹{r.ratePerKg}</TableCell>
+                        {/*
+                          "₹{r.ratePerKg}" rendered "₹null" on a day-rate row -- the column means
+                          "per kilo" and a day-rate row has no per-kilo rate. It now says what the
+                          row actually is, so the amount beside it can be explained.
+                        */}
+                        <TableCell className="text-right text-sm">
+                          {r.ratePerKg != null ? (
+                            `₹${r.ratePerKg}`
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              {r.payMode === "daily_plus_incentive" ? "day + incentive" : "day rate"}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right text-sm font-medium">{formatCurrency(r.amount)}</TableCell>
                         <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{resolveLocationName(r.locationId) || "—"}</TableCell>
                         <TableCell className="hidden md:table-cell text-xs text-muted-foreground max-w-[160px] truncate">{r.notes || "—"}</TableCell>
