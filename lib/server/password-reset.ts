@@ -38,6 +38,7 @@ const findUserByIdentifier = async (identifier: string): Promise<UserLookupRow |
         SELECT id, username, tenant_id, email
         FROM users
         WHERE normalized_email = ${normalizedEmail}
+          AND anonymized_at IS NULL
         LIMIT 1
       `,
     )) as UserLookupRow[]
@@ -52,6 +53,7 @@ const findUserByIdentifier = async (identifier: string): Promise<UserLookupRow |
       SELECT id, username, tenant_id, email
       FROM users
       WHERE LOWER(BTRIM(username)) = ${normalizedUsername}
+        AND anonymized_at IS NULL
       LIMIT 1
     `,
   )) as UserLookupRow[]

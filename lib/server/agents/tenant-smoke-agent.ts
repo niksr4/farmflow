@@ -430,7 +430,10 @@ async function runTenantSmokeChecks(input: {
     if (check.status !== "failed") return
 
     const severity = check.severity || "high"
+    // Persistence is best-effort: a throw here would escape to the outer catch and be misreported
+    // as a "Sign in" failure, aborting every remaining check for this tenant.
     if (!input.dryRun) {
+      try {
       await saveAgentFinding({
         runId: input.runId,
         tenantId,
@@ -450,16 +453,23 @@ async function runTenantSmokeChecks(input: {
           modules,
         },
       })
+      } catch {
+        // finding not persisted; the failure still appears in the run summary and alert email
+      }
     }
 
-    await logSmokeFailureEvent({
-      target: input.target,
-      tenantId,
-      key: check.key,
-      path: check.path,
-      severity,
-      detail: check.detail,
-    })
+    try {
+      await logSmokeFailureEvent({
+        target: input.target,
+        tenantId,
+        key: check.key,
+        path: check.path,
+        severity,
+        detail: check.detail,
+      })
+    } catch {
+      // error-event logging is best-effort
+    }
   }
 
   try {

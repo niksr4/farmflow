@@ -1,7 +1,7 @@
 import "server-only"
 
 const INTERNAL_PATTERNS =
-  /sql|query|column|relation|constraint|connect|econnrefused|prisma|neon|postgres|pg_|syntax error|parse error|invalid input syntax|operator does not exist|function.*does not exist/i
+  /sql|query|column|relation|constraint|connect|econnrefused|prisma|neon|postgres|pg_|syntax error|parse error|invalid input syntax|operator does not exist|function.*does not exist|row-level security|permission denied|violates|deadlock|statement timeout|value too long|invalid input value|out of range for|could not serialize|node_modules/i
 
 /**
  * Returns a safe, user-facing error message.

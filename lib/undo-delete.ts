@@ -48,7 +48,15 @@ export function deleteWithUndo({
     // if the real request now fails, that's the other half of the HoneyFarm report above: a
     // failure here previously had nowhere to go (an unhandled rejection) and the row stayed
     // hidden even though nothing was ever written. Put it back and say so.
-    Promise.resolve(onDelete()).catch((err) => {
+    // Promise.resolve().then(...) would defer the call a microtask; run it synchronously but
+    // convert a synchronous throw into a rejection so the restore path still runs.
+    let pending: Promise<void>
+    try {
+      pending = Promise.resolve(onDelete())
+    } catch (err) {
+      pending = Promise.reject(err)
+    }
+    pending.catch((err) => {
       onRestore()
       toast.error(`Couldn't delete ${description}. It's been restored -- please try again.`)
       console.error(`[deleteWithUndo] onDelete failed for "${description}"`, err)

@@ -40,4 +40,12 @@ describe("sanitizeRouteError", () => {
     // future change to this behavior is a conscious decision, not a silent regression.
     expect(sanitizeRouteError({ some: "object" }, "fallback")).toBe("[object Object]")
   })
+
+  it("also blocks RLS, permission, deadlock and range errors from reaching the browser", () => {
+    expect(sanitizeRouteError(new Error('new row violates row-level security policy for table "x"'), "fallback")).toBe("fallback")
+    expect(sanitizeRouteError(new Error("permission denied for table users"), "fallback")).toBe("fallback")
+    expect(sanitizeRouteError(new Error("deadlock detected"), "fallback")).toBe("fallback")
+    expect(sanitizeRouteError(new Error("value too long for type character varying(10)"), "fallback")).toBe("fallback")
+    expect(sanitizeRouteError(new Error("Opened at 10:30"), "fallback")).toBe("Opened at 10:30")
+  })
 })
