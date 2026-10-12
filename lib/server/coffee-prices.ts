@@ -43,10 +43,13 @@ async function fetchRawPrices(): Promise<CoffeePricePoint[]> {
 
   const url = `https://www.alphavantage.co/query?function=COFFEE&interval=monthly&apikey=${apiKey}`
   const res = await fetchWithTimeout(url, { timeoutMs: 12_000 })
-  if (!res.ok) return []
+  // Throw (not return []) on a failed/rate-limited response: withResponseCache would otherwise
+  // cache the empty list for 22h and disable the advisor all day after one transient failure.
+  // getCoffeePriceAnalysis catches this and returns null without writing the cache.
+  if (!res.ok) throw new Error(`Alpha Vantage request failed (${res.status})`)
 
   const json = await res.json().catch(() => null)
-  if (!Array.isArray(json?.data)) return []
+  if (!Array.isArray(json?.data)) throw new Error("Alpha Vantage returned no price data (rate limit or error payload)")
 
   return (json.data as Array<{ date: string; value: string }>)
     // Alpha Vantage returns coffee prices in US cents per pound (standard

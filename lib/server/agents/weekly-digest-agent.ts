@@ -147,8 +147,12 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
       rainfallInches: Number(row.rainfall_inches) || 0,
       pickingEntries: Number(row.picking_entries) || 0,
     }
-  } catch {
-    return empty
+  } catch (error) {
+    // Do NOT fall back to `empty`: the caller persists these figures via upsertWeeklyMetrics and
+    // emails "No activity recorded last week". A transient DB error must fail this tenant's digest
+    // (caught in generateWeeklyDigestText) rather than write a week of zeros as if it were fact.
+    logServerError(`Weekly digest last-week query failed for tenant ${tenantId}`, error)
+    throw error
   }
 }
 

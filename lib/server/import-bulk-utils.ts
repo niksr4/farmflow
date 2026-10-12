@@ -52,11 +52,14 @@ export const parseDate = (value: string | null | undefined) => {
     return isValidCalendarDate(Number(yyyy), Number(mm), Number(dd)) ? raw : null
   }
 
-  const slashMatch = raw.match(/^(\d{2})[\/](\d{2})[\/](\d{4})$/)
+  // Day-first (en-IN). 1-2 digit parts and - or . separators are included on purpose: left to the
+  // Date() fallback below, "5/3/2026" or "02-03-2026" parse month-first (May 3 / Feb 3) while the
+  // zero-padded "05/03/2026" is read as 5 March -- a silent day/month swap.
+  const slashMatch = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/)
   if (slashMatch) {
-    const [, dd, mm, yyyy] = slashMatch
-    if (!isValidCalendarDate(Number(yyyy), Number(mm), Number(dd))) return null
-    return `${yyyy}-${mm}-${dd}`
+    const [, d, m, yyyy] = slashMatch
+    if (!isValidCalendarDate(Number(yyyy), Number(m), Number(d))) return null
+    return `${yyyy}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
   }
 
   const altMatch = raw.match(/^(\d{4})[\/](\d{2})[\/](\d{2})$/)

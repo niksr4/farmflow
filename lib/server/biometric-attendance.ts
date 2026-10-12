@@ -281,7 +281,7 @@ export async function reconcileUnmappedPunches(
       )
       SELECT
         ${tenantContext.tenantId}, ${workerId}, attendance_date, ${markedBy}, 'biometric',
-        MIN(punched_at), MAX(punched_at)
+        MIN(punched_at), NULLIF(MAX(punched_at), MIN(punched_at))
       FROM biometric_punches
       WHERE tenant_id = ${tenantContext.tenantId}
         AND worker_id = ${workerId}
@@ -289,7 +289,13 @@ export async function reconcileUnmappedPunches(
       GROUP BY attendance_date
       ON CONFLICT (tenant_id, worker_id, attendance_date) DO UPDATE
       SET check_in_time = LEAST(COALESCE(attendance_records.check_in_time, EXCLUDED.check_in_time), EXCLUDED.check_in_time),
-          check_out_time = GREATEST(COALESCE(attendance_records.check_out_time, EXCLUDED.check_out_time), EXCLUDED.check_out_time),
+          check_out_time = NULLIF(
+            GREATEST(
+              COALESCE(attendance_records.check_out_time, attendance_records.check_in_time, EXCLUDED.check_in_time),
+              COALESCE(EXCLUDED.check_out_time, EXCLUDED.check_in_time)
+            ),
+            LEAST(COALESCE(attendance_records.check_in_time, EXCLUDED.check_in_time), EXCLUDED.check_in_time)
+          ),
           source = 'biometric'
     `,
   )

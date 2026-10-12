@@ -157,7 +157,7 @@ export async function fetchTenantActivitySignals(): Promise<Map<string, TenantAc
       SELECT tenant_id, MAX(created_at) AS last_login_at
       FROM security_events
       WHERE event_type = 'auth_login_success'
-        AND actor_username NOT LIKE 'tenantsmoke_%'
+        AND COALESCE(actor_username, '') NOT LIKE 'tenantsmoke_%'
         AND source IS DISTINCT FROM 'tenant-smoke-agent'
       GROUP BY tenant_id
     ),
