@@ -30,10 +30,8 @@
 import { execFileSync, spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 
-import { pickRollbackTarget } from "./release-utils.mjs"
-
-const PROJECT = "farmflowv1"
-const DOMAINS = ["www.thefarmflow.in", "thefarmflow.in"]
+import { parseDeploymentUrl } from "./release-utils.mjs"
+import { DOMAINS, setAliases, verifyAliases } from "./vercel-alias.mjs"
 const flag = (n) => process.argv.includes(`--${n}`)
 const LIVE = flag("yes")
 
@@ -79,62 +77,111 @@ if (run("node", ["scripts/dev/preflight-prod.mjs"]).status !== 0) {
 }
 
 // ── 2. Build ──────────────────────────────────────────────────────────────────────────────────
-step(2, "Build a production deployment (domain untouched)")
+// ── 2. Record what is live, BEFORE anything is built or moved ────────────────────────────────
+// This is the rollback target and it has to be captured first: once the alias moves there is no
+// record of what it displaced.
+step(2, "Record the rollback target")
+const liveBefore = (await api(`/v4/aliases/${DOMAINS[0]}`)).deploymentId
+console.log(`  currently live: ${liveBefore}`)
+if (!liveBefore) {
+  console.error("\n⚠ STOPPED. Cannot read what is currently live, so a rollback could not be aimed.\n")
+  process.exit(1)
+}
+
+// ── 3. Build ──────────────────────────────────────────────────────────────────────────────────
+step(3, "Build a production deployment (domains untouched)")
+let newUid = null
 if (!LIVE) {
   console.log("  skipped in report mode")
 } else {
   const built = spawnSync("vercel", ["--prod", "--skip-domain", "--yes", "--token", token], { encoding: "utf8" })
   if (built.status !== 0) {
-    console.error(`\n⚠ BUILD FAILED. Nothing was deployed, the domain never moved.\n${built.stderr || ""}\n`)
+    console.error(`\n⚠ BUILD FAILED. Nothing was deployed, the domains never moved.\n${built.stderr || ""}\n`)
     process.exit(1)
   }
   console.log(built.stdout?.trim())
+
+  /**
+   * ⚠ RESOLVE THE UID FROM THE BUILD'S OWN OUTPUT, never from "the newest READY deployment".
+   * Merging to main auto-deploys, so another build can appear and go READY while this script is
+   * running -- it would be the newest non-live entry and would get aliased in place of ours, while
+   * the success message below still named this branch and commit. Shipping the wrong build and
+   * reporting the right one is the worst thing this tool could do.
+   */
+  const url = parseDeploymentUrl(`${built.stdout || ""}\n${built.stderr || ""}`)
+  if (!url) {
+    console.error("\n⚠ STOPPED. The build succeeded but printed no deployment URL, so there is no")
+    console.error("  way to know which deployment to alias. Nothing was moved.\n")
+    process.exit(1)
+  }
+  const resolved = await api(`/v13/deployments/${url.replace(/^https:\/\//, "")}`)
+  newUid = resolved.id || resolved.uid
+  if (!newUid) {
+    console.error(`\n⚠ STOPPED. Could not resolve ${url} to a deployment id. Nothing was moved.\n`)
+    process.exit(1)
+  }
+  console.log(`  built: ${newUid}  (${url})`)
 }
 
-// ── 3. Record what is live, before displacing it ─────────────────────────────────────────────
-step(3, "Record the rollback target")
-const { deployments } = await api(`/v6/deployments?projectId=${PROJECT}&target=production&limit=20`)
-const liveBefore = (await api(`/v4/aliases/${DOMAINS[0]}`)).deploymentId
-const rollbackTo = deployments.find((d) => d.uid === liveBefore) || pickRollbackTarget(deployments, null)
-console.log(`  currently live: ${liveBefore}`)
-console.log(`  rollback target if the smoke fails: ${rollbackTo?.uid || "(none found -- STOPPING)"}`)
-if (!rollbackTo) {
-  console.error("\n⚠ STOPPED. With no rollback target this would be a one-way move.\n")
-  process.exit(1)
-}
-
-const newest = deployments.find((d) => d.state === "READY" && d.uid !== liveBefore)
 if (!LIVE) {
-  console.log(`\n  would alias ${DOMAINS.join(" and ")} to the build from step 2,`)
-  console.log("  then smoke the live site and roll back automatically if it fails.\n")
+  console.log(`\n  would build, then alias ${DOMAINS.join(" and ")} to THAT build,`)
+  console.log(`  smoke the live site, and revert to ${liveBefore} if the smoke fails.\n`)
   process.exit(0)
-}
-if (!newest) {
-  console.error("\n⚠ STOPPED. No new READY deployment to alias.\n")
-  process.exit(1)
 }
 
 // ── 4. Alias ──────────────────────────────────────────────────────────────────────────────────
 step(4, "Point the domains at the new build -- THIS IS THE MOMENT IT IS LIVE")
-for (const domain of DOMAINS) {
-  await api(`/v2/deployments/${newest.uid}/aliases`, { method: "POST", body: JSON.stringify({ alias: domain }) })
-  console.log(`  ✓ ${domain} -> ${newest.uid}`)
+
+/** Put everything back on `uid` and say honestly whether it took. */
+const revertTo = async (uid, why) => {
+  const { moved, failed } = await setAliases(api, uid)
+  for (const d of moved) console.log(`  ✓ ${d} -> ${uid}`)
+  for (const f of failed) console.error(`  ⚠ ${f.domain} FAILED: ${f.error}`)
+  const wrong = await verifyAliases(api, uid)
+  if (wrong.length > 0) {
+    console.error(`\n⚠⚠ ROLLBACK DID NOT TAKE (${why}). These domains are NOT on ${uid}:`)
+    for (const w of wrong) console.error(`     ${w.domain} -> ${w.actual}`)
+    console.error(`\n   Fix by hand now: pnpm rollback -- --to ${uid} --yes\n`)
+    return false
+  }
+  console.error(`\n⚠ ROLLED BACK to ${uid} (${why}). Both domains confirmed. The failed build is`)
+  console.error("  still on Vercel for inspection.\n")
+  return true
+}
+
+const { moved, failed } = await setAliases(api, newUid)
+for (const d of moved) console.log(`  ✓ ${d} -> ${newUid}`)
+
+/**
+ * ⚠ A PARTIAL ALIAS IS ITS OWN OUTAGE. If www moved and the apex did not, half the traffic is on
+ * each build -- a state that is neither deployed nor rolled back. The previous version threw out
+ * of the loop and exited, leaving it that way with no revert.
+ */
+if (failed.length > 0) {
+  for (const f of failed) console.error(`  ⚠ ${f.domain} FAILED: ${f.error}`)
+  step(5, "ALIAS PARTIALLY APPLIED -- reverting")
+  await revertTo(liveBefore, "the domains could not all be moved")
+  process.exit(1)
+}
+
+const wrongAfterAlias = await verifyAliases(api, newUid)
+if (wrongAfterAlias.length > 0) {
+  for (const w of wrongAfterAlias) console.error(`  ⚠ ${w.domain} reports ${w.actual}, not ${newUid}`)
+  step(5, "ALIAS DID NOT TAKE -- reverting")
+  await revertTo(liveBefore, "the alias was accepted but is not being served")
+  process.exit(1)
 }
 
 // ── 5. Smoke ──────────────────────────────────────────────────────────────────────────────────
 step(5, "Smoke the live site")
 const smoke = run("node", ["scripts/dev/smoke-live.mjs"])
 
-// ── 6. Roll back on failure ───────────────────────────────────────────────────────────────────
+// ── 6. Revert on failure ──────────────────────────────────────────────────────────────────────
 if (smoke.status !== 0) {
-  step(6, "SMOKE FAILED -- rolling back")
-  for (const domain of DOMAINS) {
-    await api(`/v2/deployments/${rollbackTo.uid}/aliases`, { method: "POST", body: JSON.stringify({ alias: domain }) })
-    console.log(`  ✓ ${domain} -> ${rollbackTo.uid}`)
-  }
-  console.error(`\n⚠ ROLLED BACK to ${rollbackTo.uid}. The failed build is still on Vercel for inspection.\n`)
+  step(6, "SMOKE FAILED -- reverting")
+  await revertTo(liveBefore, "the smoke failed")
   process.exit(1)
 }
 
-console.log(`\n✓ LIVE -- ${newest.uid} (${branch} @ ${sha}) is serving thefarmflow.in, and the smoke passed.`)
-console.log(`  Revert at any time: pnpm rollback -- --to ${rollbackTo.uid} --yes\n`)
+console.log(`\n✓ LIVE -- ${newUid} (${branch} @ ${sha}) is serving thefarmflow.in, and the smoke passed.`)
+console.log(`  Revert at any time: pnpm rollback -- --to ${liveBefore} --yes\n`)

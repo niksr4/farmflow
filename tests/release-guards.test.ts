@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest"
 
+import { readFileSync } from "node:fs"
+
 import {
   pendingMigrations,
   routeIsExternallyBilled,
   smokeRoutes,
   isSmokeFailure,
   pickRollbackTarget,
+  parseDeploymentUrl,
+  collectSources,
+  exportsGet,
 } from "../scripts/dev/release-utils.mjs"
 
 /**
@@ -132,7 +137,16 @@ describe("what counts as breakage", () => {
 })
 
 describe("where a rollback goes", () => {
-  const d = (uid: string, state: string) => ({ uid, state, created: 1, meta: {} })
+  /**
+   * ⚠ EVERY ROW GETS A DISTINCT `created`, AND THAT IS THE POINT. The first version of this helper
+   * set `created: 1` on every deployment, so no assertion here could distinguish ordering from no
+   * ordering at all -- and pickRollbackTarget ignored time entirely. Six tamper tests passed
+   * against a function that could roll FORWARD into the broken build. The tests did not miss the
+   * bug by bad luck; they were built so that they could not see it.
+   *
+   * Newest-first, the way the Vercel API returns them.
+   */
+  const d = (uid: string, state: string, created: number) => ({ uid, state, created, meta: {} })
 
   it("never picks a build that is not READY", () => {
     /**
@@ -140,18 +154,172 @@ describe("where a rollback goes", () => {
      * Aliasing the domain to one points thefarmflow.in at a build that does not exist -- a worse
      * outage than the one being escaped, and produced by the rollback itself.
      */
-    const got = pickRollbackTarget([d("dpl_new", "READY"), d("dpl_bad", "CANCELED"), d("dpl_err", "ERROR"), d("dpl_good", "READY")], "dpl_new")
+    const got = pickRollbackTarget(
+      [d("dpl_live", "READY", 500), d("dpl_bad", "CANCELED", 400), d("dpl_err", "ERROR", 300), d("dpl_good", "READY", 200)],
+      "dpl_live",
+    )
     expect(got?.uid).toBe("dpl_good")
   })
 
   it("never picks the deployment that is already live", () => {
     // Rolling back onto the thing you are rolling back from is a no-op that reports success.
-    const got = pickRollbackTarget([d("dpl_live", "READY"), d("dpl_prev", "READY")], "dpl_live")
+    const got = pickRollbackTarget([d("dpl_live", "READY", 500), d("dpl_prev", "READY", 400)], "dpl_live")
     expect(got?.uid).toBe("dpl_prev")
   })
 
+  it("NEVER ROLLS FORWARD into a build newer than the one live", () => {
+    /**
+     * The scenario this exists for, and the one the old tests could not express: you have already
+     * rolled back once, so the NEWEST deployment is the broken build you escaped. Asking to roll
+     * back again must go further back, never return to it.
+     */
+    const got = pickRollbackTarget(
+      [d("dpl_broken", "READY", 900), d("dpl_live", "READY", 500), d("dpl_old", "READY", 100)],
+      "dpl_live",
+    )
+    expect(got?.uid).toBe("dpl_old")
+  })
+
+  it("picks the newest of the builds that are older, not just any older one", () => {
+    /**
+     * ⚠ DELIBERATELY OUT OF ORDER. The first version of this case listed them newest-first, which
+     * is how the API returns them -- so filtering alone produced the right answer and deleting the
+     * sort changed nothing. A tamper run caught that the assertion could not fail: the test was
+     * passing on the input's accident, not the function's behaviour. The sort exists so this does
+     * not depend on the caller's ordering, so the test must not supply the ordering.
+     */
+    const got = pickRollbackTarget(
+      [d("dpl_live", "READY", 900), d("dpl_ancient", "READY", 100), d("dpl_recent", "READY", 800)],
+      "dpl_live",
+    )
+    expect(got?.uid).toBe("dpl_recent")
+  })
+
   it("refuses rather than guessing when there is nothing safe", () => {
-    expect(pickRollbackTarget([d("dpl_live", "READY")], "dpl_live")).toBeNull()
-    expect(pickRollbackTarget([d("dpl_a", "CANCELED"), d("dpl_b", "BUILDING")], null)).toBeNull()
+    expect(pickRollbackTarget([d("dpl_live", "READY", 500)], "dpl_live")).toBeNull()
+    expect(pickRollbackTarget([d("dpl_a", "CANCELED", 400), d("dpl_b", "BUILDING", 300)], "dpl_a")).toBeNull()
+  })
+
+  it("refuses when the live deployment is not in the window, rather than comparing against nothing", () => {
+    // Without the live build's timestamp there is no "older" to compute. Guessing here is an
+    // outage; the caller is told to pass --to.
+    expect(pickRollbackTarget([d("dpl_a", "READY", 400), d("dpl_b", "READY", 300)], "dpl_not_here")).toBeNull()
+    expect(pickRollbackTarget([d("dpl_a", "READY", 400)], null)).toBeNull()
+  })
+})
+
+describe("go-live aliases the build it actually created", () => {
+  /**
+   * ⚠ NOT "the newest READY deployment". Merging to main auto-deploys, so another build can go
+   * READY while go-live is running -- it would be the newest non-live entry and would get aliased
+   * in place of ours, while the success message still named this branch and commit. Shipping one
+   * build and reporting another is the worst outcome available to this tool.
+   */
+  it("reads the deployment URL out of the CLI's own output", () => {
+    const stdout = [
+      "Vercel CLI 54.18.2",
+      "🔍  Inspect: https://vercel.com/niks-projects/farmflowv1/CHzDtLm7gpUtAFX7qU66daEDuWGV [2s]",
+      "✅  Production: https://farmflowv1-abc123xyz-niks-projects.vercel.app [41s]",
+    ].join("\n")
+    expect(parseDeploymentUrl(stdout)).toBe("https://farmflowv1-abc123xyz-niks-projects.vercel.app")
+  })
+
+  it("does not mistake the Inspect link for the deployment", () => {
+    // The Inspect URL is on vercel.com and contains the uid, so a loose match would return a
+    // dashboard link that resolves to nothing.
+    const stdout = "🔍  Inspect: https://vercel.com/niks/farmflowv1/CHzDtLm7gpUtAFX7qU66daEDuWGV"
+    expect(parseDeploymentUrl(stdout)).toBeNull()
+  })
+
+  it("prefers the production URL even when it is NOT the last one printed", () => {
+    /**
+     * ⚠ PRODUCTION FIRST, PREVIEW SECOND, ON PURPOSE. The first version of this case had them the
+     * other way round, so "last URL printed" gave the right answer too and deleting the preference
+     * changed nothing -- a tamper run showed the assertion could not fail. If the only ordering
+     * tested is the one the fallback already handles, the preference is untested.
+     */
+    const stdout = [
+      "Production: https://farmflowv1-prod-abc.vercel.app",
+      "Preview: https://farmflowv1-preview-xyz.vercel.app",
+    ].join("\n")
+    expect(parseDeploymentUrl(stdout)).toBe("https://farmflowv1-prod-abc.vercel.app")
+  })
+
+  it("falls back to the last URL when nothing is labelled production", () => {
+    const stdout = ["https://farmflowv1-one.vercel.app", "https://farmflowv1-two.vercel.app"].join("\n")
+    expect(parseDeploymentUrl(stdout)).toBe("https://farmflowv1-two.vercel.app")
+  })
+
+  it("returns null on output with no deployment URL, so the caller stops instead of guessing", () => {
+    expect(parseDeploymentUrl("")).toBeNull()
+    expect(parseDeploymentUrl("Error: build failed")).toBeNull()
+    expect(parseDeploymentUrl(null)).toBeNull()
+  })
+})
+
+describe("the paid-route scan follows imports all the way down", () => {
+  /**
+   * The original read exactly one level of `@/` imports and ignored relative imports entirely.
+   * A route importing ./helpers, where helpers reads ALPHAVANTAGE_API_KEY, was classed as free --
+   * and Alpha Vantage's free tier is 25 calls a DAY.
+   */
+  const graph: Record<string, string> = {
+    "/route.ts": 'import { a } from "./a"',
+    "/a.ts": 'import { b } from "@/lib/b"',
+    "/lib/b.ts": 'import { c } from "../deep/c"',
+    "/deep/c.ts": "const k = process.env.ALPHAVANTAGE_API_KEY",
+  }
+  const read = (f: string) => (f in graph ? graph[f] : null)
+  const resolve = (src: string): string[] => {
+    const specs = [...src.matchAll(/["']([^"']+)["']/g)].map((x) => x[1])
+    const table: Record<string, string> = { "./a": "/a.ts", "@/lib/b": "/lib/b.ts", "../deep/c": "/deep/c.ts" }
+    return specs.map((s) => table[s]).filter((x): x is string => Boolean(x))
+  }
+
+  it("reaches a key read three modules below the route", () => {
+    const sources = collectSources("/route.ts", read, resolve)
+    expect(sources).toHaveLength(4)
+    expect(routeIsExternallyBilled(sources[0], sources.slice(1))).toBe(true)
+  })
+
+  it("terminates on a cycle instead of hanging", () => {
+    const cyc: Record<string, string> = { "/x.ts": '"./y"', "/y.ts": '"./x"' }
+    const r = (f: string) => (f in cyc ? cyc[f] : null)
+    const res = (src: string) => (src.includes("./y") ? ["/y.ts"] : ["/x.ts"])
+    expect(collectSources("/x.ts", r, res)).toHaveLength(2)
+  })
+
+  it("skips a file that does not resolve rather than throwing", () => {
+    expect(collectSources("/nope.ts", () => null, () => [])).toEqual([])
+  })
+})
+
+describe("every shape of GET handler is called", () => {
+  /**
+   * ⚠ THE FILTER MATCHED ONE SPELLING AND SILENTLY DROPPED TWO REAL ROUTES -- /api/labor and
+   * /api/consumables, one a core money route. The smoke then reported "78 endpoints answered,
+   * PASSES", two short, with nothing saying so. A guard that quietly measures less is this
+   * project's signature failure, and it was inside the guard written to catch it.
+   */
+  it("matches async function, plain function, const, and a re-export", () => {
+    expect(exportsGet("export async function GET() {}")).toBe(true)
+    expect(exportsGet("export function GET() {}")).toBe(true)
+    expect(exportsGet("export const GET = handler")).toBe(true)
+    expect(exportsGet("const handler = () => {}\nexport { handler as GET }")).toBe(true)
+    expect(exportsGet("export { GET, POST }")).toBe(true)
+  })
+
+  it("is not fooled by a POST-only route or a passing mention", () => {
+    expect(exportsGet("export async function POST() {}")).toBe(false)
+    expect(exportsGet("// this route has no GET on purpose")).toBe(false)
+    expect(exportsGet('fetch(url, { method: "GET" })')).toBe(false)
+  })
+
+  it("picks up the two routes the old filter dropped, read from the real tree", () => {
+    // Pinned to the real app/api sources, not a fixture: these two are why the filter changed, and
+    // a fixture-only test would pass again the moment someone narrowed the regex.
+    for (const route of ["app/api/labor/route.ts", "app/api/consumables/route.ts"]) {
+      expect(exportsGet(readFileSync(route, "utf8")), `${route} exports a GET the smoke must call`).toBe(true)
+    }
   })
 })

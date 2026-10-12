@@ -18,9 +18,9 @@
 import { readFileSync } from "node:fs"
 
 import { pickRollbackTarget } from "./release-utils.mjs"
+import { DOMAINS, setAliases, verifyAliases } from "./vercel-alias.mjs"
 
 const PROJECT = "farmflowv1"
-const DOMAINS = ["www.thefarmflow.in", "thefarmflow.in"]
 
 const flag = (n) => process.argv.includes(`--${n}`)
 const arg = (n) => {
@@ -78,11 +78,20 @@ console.log("  " + (liveDeployment ? short(liveDeployment) : `${liveUid}  (older
 const target = arg("to") ? deployments.find((d) => d.uid === arg("to")) : pickRollbackTarget(deployments, liveUid)
 
 if (!target) {
-  console.error(
-    arg("to")
-      ? `\n⚠ ${arg("to")} is not in the last 20 production deployments. Check 'pnpm rollback -- --list'.\n`
-      : "\n⚠ No READY production deployment to roll back to. Refusing to guess.\n",
-  )
+  /**
+   * pickRollbackTarget now refuses in two cases that both used to roll FORWARD: when nothing READY
+   * is older than what is live, and when the live deployment is not in the window at all so there
+   * is no timestamp to compare against. Both are legitimate -- after a rollback the newest build is
+   * the broken one -- so this has to be a clear refusal with the way out, not an error.
+   */
+  if (arg("to")) {
+    console.error(`\n⚠ ${arg("to")} is not in the last 20 production deployments. Check 'pnpm rollback -- --list'.\n`)
+  } else {
+    console.error("\n⚠ No READY production deployment OLDER than what is live. Refusing to guess.")
+    console.error("   This is the expected answer right after a rollback: the newest build is the one")
+    console.error("   you already rolled away from, and going 'back' to it would roll forward.")
+    console.error("   Pick one explicitly:  pnpm rollback -- --list   then   --to <dpl_...> --yes\n")
+  }
   process.exit(1)
 }
 if (target.state !== "READY") {
@@ -99,19 +108,18 @@ if (!flag("yes")) {
   process.exit(0)
 }
 
-for (const domain of DOMAINS) {
-  await api(`/v2/deployments/${target.uid}/aliases`, { method: "POST", body: JSON.stringify({ alias: domain }) })
-  console.log(`  ✓ ${domain} -> ${target.uid}`)
-}
+const { moved, failed } = await setAliases(api, target.uid)
+for (const d of moved) console.log(`  ✓ ${d} -> ${target.uid}`)
+for (const f of failed) console.error(`  ⚠ ${f.domain} FAILED: ${f.error}`)
 
 // Confirm from Vercel rather than from the absence of an error. A 200 on the alias POST means the
-// request was accepted; this is what actually serves.
-for (const domain of DOMAINS) {
-  const now = await api(`/v4/aliases/${domain}`)
-  if (now.deploymentId !== target.uid) {
-    console.error(`\n⚠ ${domain} still points at ${now.deploymentId}. The rollback did NOT take.\n`)
-    process.exit(1)
-  }
+// request was accepted; this is what actually serves. Shared with go-live so the two cannot drift.
+const wrong = await verifyAliases(api, target.uid)
+if (wrong.length > 0) {
+  console.error(`\n⚠ ROLLBACK DID NOT FULLY TAKE. These domains are not on ${target.uid}:`)
+  for (const w of wrong) console.error(`     ${w.domain} -> ${w.actual}`)
+  console.error("")
+  process.exit(1)
 }
 
 console.log(`\n✓ ROLLED BACK -- both domains now serve ${target.uid}`)

@@ -43,14 +43,55 @@ export const pendingMigrations = (filesOnDisk, appliedVersions) => {
  * one smoke run would eat. Keyed on the API-key names and the paid client modules, so a route
  * added next season that reads one of them is excluded the day it is written.
  *
- * Takes the route's own source plus the sources of its local imports, because the key is usually
- * read a layer down (lib/server/coffee-prices.ts, not the route).
+ * Takes the route's own source plus the sources of everything it imports, TRANSITIVELY -- see
+ * collectSources. One level is not enough: a route can import `@/lib/server/digest`, which imports
+ * the module that reads ALPHAVANTAGE_API_KEY, and a one-level scan calls it on every run.
  */
 const PAID_SIGNALS =
   /ANTHROPIC_API_KEY|ALPHAVANTAGE_API_KEY|WEATHERAPI_API_KEY|THENEWSAPI_API_KEY|PLANTHEALTH_API_KEY|OPENAI_API_KEY|GROQ_API_KEY|RAZORPAY_KEY|ai-provider|server\/claude|coffee-prices/
 
 export const routeIsExternallyBilled = (source, depSources = []) =>
   PAID_SIGNALS.test(source) || depSources.some((s) => PAID_SIGNALS.test(s))
+
+/**
+ * Every source file reachable from an entry point, following imports.
+ *
+ * ⚠ THE FILESYSTEM IS INJECTED so this is testable against a fake module graph. The original
+ * version of the paid-route exclusion lived inline in smoke-live.mjs, read exactly one level of
+ * `@/` imports, and ignored relative imports entirely -- three route files here use them. A paid
+ * key read through either shape was classed as free and called on every deploy.
+ *
+ * `readSource` returns the file's text or null if it does not resolve. `resolveImports` turns a
+ * source string plus its own path into the paths it imports. The visited set makes a cycle
+ * terminate rather than hang, and maxDepth is a belt-and-braces stop.
+ */
+export const collectSources = (entry, readSource, resolveImports, maxDepth = 8) => {
+  const seen = new Set()
+  const out = []
+  const visit = (file, depth) => {
+    if (depth > maxDepth || seen.has(file)) return
+    seen.add(file)
+    const src = readSource(file)
+    if (src == null) return
+    out.push(src)
+    for (const dep of resolveImports(src, file)) visit(dep, depth + 1)
+  }
+  visit(entry, 0)
+  return out
+}
+
+/**
+ * Does this file export a GET handler?
+ *
+ * ⚠ MATCHES THE SHAPE, NOT ONE SPELLING. This was `/export async function GET/` and it silently
+ * dropped two real routes -- /api/labor and /api/consumables, one of them a core money route --
+ * because they declare GET differently. The smoke then reported "78 endpoints answered, PASSES",
+ * two short, with nothing anywhere saying so. A filter that quietly matches less is the exact
+ * failure mode this project calls a vacuous guard, and it was in the guard written to catch it.
+ */
+export const exportsGet = (source) =>
+  /export\s+(async\s+)?(function|const|let|var)\s+GET\b/.test(source) ||
+  /export\s*\{[^}]*\bGET\b[^}]*\}/.test(source)
 
 /**
  * Which routes a smoke run should call.
@@ -63,7 +104,7 @@ export const routeIsExternallyBilled = (source, depSources = []) =>
  */
 export const smokeRoutes = (entries, { includeBilled = false } = {}) =>
   entries
-    .filter((e) => /export async function GET/.test(e.source))
+    .filter((e) => exportsGet(e.source))
     .filter((e) => !/\[/.test(e.routePath))
     .filter((e) => !/\/(cron|webhooks|iclock)\b/.test(e.routePath))
     .filter((e) => includeBilled || !routeIsExternallyBilled(e.source, e.depSources))
@@ -102,10 +143,47 @@ export const isSmokeFailure = (status) => status < 0 || status >= 500
  * points thefarmflow.in at a build that does not exist, which is a worse outage than the one being
  * rolled back from.
  *
- * Newest-first input. Returns null rather than guessing when there is no safe target, because
- * "roll back to nothing" must be a refusal and not a surprise.
+ * ⚠ AND SO IS TIME. This used to return the newest non-live READY build, which rolls FORWARD: after
+ * one rollback the newest deployment IS the broken one you just escaped, so running `pnpm rollback`
+ * twice would put it straight back. `rollback.mjs` carries a comment warning about precisely that
+ * and reads the live alias rather than assuming the newest is live -- and then this function, one
+ * file over, made the assumption anyway.
+ *
+ * It was invisible because the tests built every row with `created: 1`, so no assertion could tell
+ * ordering from no ordering. Six tamper tests passed against a function that could not sort.
+ *
+ * So: strictly OLDER than what is live, newest of those. Returns null when the live deployment is
+ * not in the list at all, because without its timestamp there is no "older" to compute and a guess
+ * here is an outage. Caller should fall back to an explicit --to.
  */
 export const pickRollbackTarget = (deployments, liveUid) => {
-  const usable = deployments.filter((d) => d.state === "READY" && d.uid !== liveUid)
+  const live = deployments.find((d) => d.uid === liveUid)
+  if (!live) return null
+  const usable = deployments
+    .filter((d) => d.state === "READY" && d.uid !== liveUid && Number(d.created) < Number(live.created))
+    .sort((a, b) => Number(b.created) - Number(a.created))
   return usable[0] || null
+}
+
+/**
+ * The deployment URL the Vercel CLI just built, read out of its own stdout.
+ *
+ * ⚠ WHY NOT "THE NEWEST READY DEPLOYMENT". Because that is not necessarily the one we built.
+ * Merging to main auto-deploys, so a build can appear and go READY while go-live is running; it
+ * would then be the newest non-live entry and get aliased in place of ours, while the success
+ * message still named this branch and commit. Putting the wrong build in front of customers and
+ * reporting the right one is the worst single failure this tool could have.
+ *
+ * The CLI prints an Inspect URL on vercel.com and the deployment URL on *.vercel.app, so keying on
+ * the hostname suffix excludes the former. Prefers a line mentioning Production in case both a
+ * preview and a production URL appear; otherwise the last one printed.
+ */
+export const parseDeploymentUrl = (stdout) => {
+  const urls = String(stdout || "").match(/https:\/\/[A-Za-z0-9-]+\.vercel\.app/g)
+  if (!urls || urls.length === 0) return null
+  const production = String(stdout)
+    .split(/\r?\n/)
+    .filter((l) => /production/i.test(l))
+    .flatMap((l) => l.match(/https:\/\/[A-Za-z0-9-]+\.vercel\.app/g) || [])
+  return production[production.length - 1] || urls[urls.length - 1]
 }

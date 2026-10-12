@@ -26,7 +26,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs"
 import path from "node:path"
 import { chromium } from "@playwright/test"
 
-import { smokeRoutes, isSmokeFailure } from "./release-utils.mjs"
+import { smokeRoutes, isSmokeFailure, collectSources } from "./release-utils.mjs"
 
 const arg = (name, fallback = null) => {
   const i = process.argv.indexOf(`--${name}`)
@@ -56,18 +56,44 @@ const walk = (d) =>
     return statSync(f).isDirectory() ? walk(f) : e === "route.ts" ? [f] : []
   })
 
-// The paid-API key a route depends on is usually read one module down (lib/server/coffee-prices.ts
-// rather than the route), so the exclusion needs the imports' source too, not just the route's.
-const localImportSources = (src) =>
-  [...src.matchAll(/from "@\/([^"]+)"/g)]
-    .map((m) => m[1])
-    .flatMap((p) => [".ts", ".tsx"].map((e) => path.resolve(p + e)))
-    .filter(existsSync)
-    .map((f) => readFileSync(f, "utf8"))
+/**
+ * Resolve one import specifier to a file on disk, or null.
+ *
+ * ⚠ BOTH SHAPES, AND index FILES. The first version read only `@/...` and ignored `./` and `../`
+ * entirely -- three route files here use them -- so a paid key reached through a relative import
+ * was classed as free and called on every single run.
+ */
+const resolveSpecifier = (spec, fromFile) => {
+  const base = spec.startsWith("@/")
+    ? path.resolve(spec.slice(2))
+    : spec.startsWith(".")
+      ? path.resolve(path.dirname(fromFile), spec)
+      : null
+  if (!base) return null // a bare package name; node_modules is out of scope
+  for (const candidate of [`${base}.ts`, `${base}.tsx`, path.join(base, "index.ts"), path.join(base, "index.tsx")]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate
+  }
+  return null
+}
+
+const resolveImports = (src, fromFile) =>
+  [...src.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)]
+    .map((m) => resolveSpecifier(m[1], fromFile))
+    .filter(Boolean)
+
+const readSourceOrNull = (f) => {
+  try {
+    return readFileSync(f, "utf8")
+  } catch {
+    return null
+  }
+}
 
 const entries = walk(API).map((f) => {
   const source = readFileSync(f, "utf8")
-  return { routePath: "/" + path.relative(path.resolve("app"), path.dirname(f)), source, depSources: localImportSources(source) }
+  // Transitive, with a visited set -- a key read two modules down still excludes the route.
+  const depSources = collectSources(f, readSourceOrNull, resolveImports).slice(1)
+  return { routePath: "/" + path.relative(path.resolve("app"), path.dirname(f)), source, depSources }
 })
 
 const routes = smokeRoutes(entries, { includeBilled: INCLUDE_BILLED })
