@@ -381,6 +381,7 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
     email,
     maskedEmail: maskEmailAddress(email),
     verificationSent: true,
+    credentialRetained: keepExistingCredential,
   }
 }
 
