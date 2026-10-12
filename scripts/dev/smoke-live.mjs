@@ -111,7 +111,33 @@ if (password) {
     for (let i = 0; i < 40 && !/\/dashboard/.test(page.url()); i++) await page.waitForTimeout(500)
     authed = /\/dashboard/.test(page.url())
   } catch {}
-  if (!authed) failures.push({ route: "/login", status: -1, body: `could not sign in as ${username}` })
+
+  /**
+   * ⚠ A CREDENTIAL THAT DOES NOT WORK IS NOT A BROKEN DEPLOYMENT, and conflating the two is
+   * dangerous in exactly one direction: go-live.mjs rolls back when this script fails, so a
+   * rotated or stale SMOKE_PASSWORD would revert a perfectly good release and report it as a
+   * failed smoke. Found the moment the credential was first wired in -- the password committed in
+   * api-smoke.mjs is the DEV estate_mock's and prod's is different, so the very first
+   * authenticated run failed against a live site that was entirely healthy.
+   *
+   * The distinction is observable rather than assumed: ask the auth endpoint. A 5xx means the auth
+   * system itself is down, which IS breakage and must fail. Anything else means auth answered and
+   * declined us, which is a configuration problem on this machine.
+   */
+  if (!authed) {
+    let authStatus = -1
+    try {
+      authStatus = (await page.request.get(`${BASE}/api/auth/providers`, { timeout: 30000 })).status()
+    } catch {}
+    if (authStatus >= 500 || authStatus < 0) {
+      failures.push({ route: "/api/auth/providers", status: authStatus, body: "auth system is not answering" })
+      console.log(`  ⚠ could not sign in AND /api/auth/providers returned ${authStatus} -- auth is broken`)
+    } else {
+      console.log(`  ⚠ could not sign in as ${username}, but auth answered ${authStatus} -- the credential is wrong,`)
+      console.log(`    not the site. Falling back to the unauthenticated pass. Fix SMOKE_PASSWORD in .env.local;`)
+      console.log(`    note the one in scripts/dev/api-smoke.mjs is the DEV account's, not production's.`)
+    }
+  }
 }
 
 if (!password) {
