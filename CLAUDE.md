@@ -782,9 +782,26 @@ Key env vars:
 
 ### Release process
 
-**Current state:** merging to `main` auto-deploys straight to production — no staging environment,
-no manual promotion gate. **`main` itself is gated** (below), so nothing arrives unreviewed or
-untested, but the moment it arrives it is live for every tenant.
+**Current state (since 2026-10-13): MERGING IS NO LONGER DEPLOYING.** `vercel.json` sets
+`git.deploymentEnabled.main = false`, so a merge to `main` lands the code and stops. Production
+moves only when somebody runs **`pnpm go-live -- --yes`**, which preflights prod's schema, builds,
+records the outgoing deployment, aliases both domains, smokes the live site and reverts itself if
+the smoke fails. `main` is still gated by the ruleset (PR + green `quality`), so nothing arrives
+unreviewed or untested either.
+
+For most of this project's life the opposite was true — a merge was live for every tenant in about
+three minutes — and most of the warnings in this file exist because of it.
+
+⚠ **THE SETTING IS IN `vercel.json`, NOT THE PROJECT API.** `PATCH /v9/projects/:id` with
+`{"link":{"deploymentEnabled":{"main":false}}}` returns **200 and changes nothing**; it was tried
+on 2026-10-13, reported success, and read back `undefined` an hour later. Only `main` is listed, so
+preview builds and the Vercel PR check still work — a bare `false` would kill those too.
+`tests/merging-is-not-deploying.test.ts` fails if any of that is undone.
+
+⚠ **Verify both halves after changing it**, because each fails silently in the opposite direction:
+a push to `main` must NOT produce a deployment, and `pnpm go-live -- --yes` must still produce one.
+The CLI uploads source directly rather than going through the Git integration, which is why it is
+unaffected — but confirm it rather than trusting this sentence.
 
 ⚠ **A GREEN `CodeRabbit` CHECK DOES NOT MEAN IT REVIEWED ANYTHING.** On PR #68 the check read
 `pass` while its own detail said *"Review skipped: manual review required for this OSS repository"*
