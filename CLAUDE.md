@@ -883,8 +883,44 @@ classification, so it does not suffer the Preview-tier problem that caused the o
 3. `vercel alias set <deployment-id> www.thefarmflow.in` (or `vercel promote <deployment-url-or-id>`)
    — this is the moment it actually goes live *and* the first moment you can browse it.
 
-Rollback: `vercel alias set <previous-known-good-deployment-id> www.thefarmflow.in`, or
-`vercel rollback`.
+### The whole sequence is now one command, with a net under it
+
+```bash
+pnpm preflight          # read-only: can prod's schema serve this branch at all?
+pnpm go-live            # report what it would do
+pnpm go-live -- --yes   # preflight → build → record rollback target → alias → smoke → auto-revert
+pnpm smoke              # call every safe read endpoint on the live site
+pnpm rollback           # report what it would revert to
+pnpm rollback -- --yes  # move both domains back
+```
+
+⚠ **BOTH DOMAINS ARE ALIASED, and the instruction here used to move one.** Checked 2026-10-12:
+`www.thefarmflow.in` *and* the apex `thefarmflow.in` both pointed at
+`dpl_AFP8Ni2piRs45BzibFuLTj6e8PFD`. `vercel alias set <id> www.thefarmflow.in` leaves real visitors
+on the broken build at the apex — a rollback that reads as done and is not. `pnpm rollback` moves
+both and then **re-reads the alias from Vercel** to confirm, rather than trusting the POST's 200.
+
+**`pnpm preflight` is the step that was missing.** Merging is deploying here, so "does prod have
+the columns this code reads" has to be asked before the merge, and nothing was asking it. On
+2026-10-12 the answer was no — #75 and #79 read seven columns that migration 154 creates and 154
+was not on prod, so either merge would have 500'd picking, payroll and reconciliation for every
+tenant. It compares prod's `schema_migrations` against the files on the current branch, in both
+directions: a version in the ledger with no file means the *branch* is behind, which is the state
+prod sat in for three days in October when 152 was applied from a feature branch.
+
+**The smoke runs after the alias, and that is forced, not lazy.** Because of the SSO wall above
+there is nothing to smoke until the domain moves. So `go-live` captures the outgoing deployment id
+*before* aliasing and reverts automatically if the smoke fails: the live window is seconds rather
+than zero, which is the best this plan tier allows. It measures **liveness, not correctness** —
+anything under 500 counts as alive, since 401/403 is a gate working, 404 is a dormant feature, and
+400 is input validation. A route answering 200 with wrong data passes. Routes that spend money are
+excluded by **reading their source** for paid API keys, not by a hand-kept list, because Alpha
+Vantage's free tier is 25 calls a day and one unguarded run would eat it.
+
+The decisions all four scripts make live in `scripts/dev/release-utils.mjs` as pure functions and
+are tamper-tested in `tests/release-guards.test.ts` — each has a silent failure mode: a rollback
+target picked from a `CANCELED` build aliases the domain to nothing, and a string-sorted migration
+list puts `100-` before `87-`.
 
 This needs zero dashboard/plan changes and works today via the authenticated CLI (`Vercel_token` in
 `.env.local`, passed as `--token`; see `reference_vercel_cli_token` memory). The auto-deploy-per-push
