@@ -79,12 +79,39 @@ export async function GET(request: Request) {
       accountsSql,
       tenantContext,
       accountsSql`
+        /**
+         * ⚠ A DAY ALREADY PAID THROUGH PICKING IS NOT ALSO AN ATTENDANCE DAY.
+         *
+         * net_payable is picking_total + COALESCE(salary, muster_total, days_present x daily_rate).
+         * That last fallback is for estates still on the attendance-only flow, and it fires
+         * whenever a worker has NO muster assignment in the period -- which is exactly the state
+         * of somebody who spent the harvest picking. They are marked present every day, the day
+         * budget (scripts/152) REFUSES a muster assignment because picking already spent the day,
+         * so muster_total is NULL and the fallback pays the day rate on top of the picking.
+         *
+         * Measured on dev: a picker on 50 kg at Rs 4 with a Rs 494 day rate came out at Rs 694
+         * for one day instead of Rs 200.
+         *
+         * Latent until now only because picking_records held zero rows on every tenant. It
+         * becomes real money the first day the picking tab is used, which is why it is fixed
+         * alongside the form rather than after it.
+         *
+         * Excluding the whole day is deliberate. A picking row carries its own day_fraction and
+         * its own cost; if the estate wants the rest of that day paid they record it on the
+         * muster, which makes muster_total non-null and bypasses this fallback entirely.
+         */
         WITH attendance_days AS (
-          SELECT worker_id, COUNT(*)::int AS days_present
-          FROM attendance_records
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND attendance_date BETWEEN ${startDate}::date AND ${endDate}::date
-          GROUP BY worker_id
+          SELECT ar.worker_id, COUNT(*)::int AS days_present
+          FROM attendance_records ar
+          WHERE ar.tenant_id = ${tenantContext.tenantId}
+            AND ar.attendance_date BETWEEN ${startDate}::date AND ${endDate}::date
+            AND NOT EXISTS (
+              SELECT 1 FROM picking_records pr
+              WHERE pr.tenant_id = ar.tenant_id
+                AND pr.worker_id = ar.worker_id
+                AND pr.pick_date = ar.attendance_date
+            )
+          GROUP BY ar.worker_id
         ),
         -- What the muster roll says this worker earned, where it has anything to say.
         --
