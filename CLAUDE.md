@@ -795,9 +795,35 @@ Reviews are **rate-limited to roughly one an hour** on this tier, so a request c
 rather than reviewed — and a refusal is not a pass. **Never push to the branch while a review is
 running**: it aborts with "base or head changed", which has happened twice.
 
-⚠ **`.github/workflows/coderabbit-trigger.yml` cannot fire for its own PR.** GitHub takes
-`pull_request` workflows from the **base** branch, so until that file is on `main` it does nothing,
-and the trigger has to be typed by hand.
+⚠ **THIS PARAGRAPH DESCRIBED A FILE THAT DOES NOT EXIST.** It said
+`.github/workflows/coderabbit-trigger.yml` "cannot fire for its own PR" — true of any
+`pull_request` workflow, since GitHub takes those from the **base** branch, but there is no such
+file and never was one on `main`. Checked 2026-10-13: `.github/workflows/` contains `ci.yml` and
+`coderabbit-retry.yml`, nothing else. Reading this line as fact cost a turn. Run
+`ls .github/workflows/`.
+
+**The retry is automated now: `.github/workflows/coderabbit-retry.yml`.** Hourly, one request per
+run, longest-waiting pull request first.
+
+⚠ **THE REVIEW QUEUE IS FED BY FIXING FINDINGS, NOT BY NEW PULL REQUESTS.** A review produces
+findings, the fix is pushed, and the PR is back to "no review at this head" — so working through
+one review manufactures the next request, and at one an hour the backlog grows faster than it
+clears. Measured 2026-10-13: **six of seven** open PRs had no review at their current head, and
+three of them (#75, #78, #80) were there purely because their findings had just been fixed. The
+intuition that "there are only one or two outstanding" was wrong by 3x; the check is:
+
+```bash
+gh pr view <N> --json headRefOid --jq .headRefOid     # then compare that commit's date against
+gh api repos/niksr4/farmflow/pulls/<N>/reviews --jq '[.[]|select(.user.login=="coderabbitai[bot]")]|last|.submitted_at'
+```
+
+A review that predates the head commit is **not** a review of what is about to merge.
+
+⚠ **The retry workflow FAILS LOUDLY if CodeRabbit does not acknowledge within four minutes**,
+because many bots ignore other bots. If it never answers `github-actions[bot]`, the workflow would
+otherwise report success every hour while reviewing nothing — worse than asking by hand, since it
+looks handled. The fix in that case is a PAT in the `CODERABBIT_RETRY_TOKEN` secret so the comment
+comes from a human account. **Verify this on the first scheduled run.**
 
 **A gate AT VERCEL is not available on this plan. A gate AT GITHUB is — see
 [docs/RELEASE-FLOW.md](docs/RELEASE-FLOW.md).**
