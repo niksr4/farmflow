@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/server/db"
-import { requireModuleAccess } from "@/lib/server/module-access"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canWriteModule } from "@/lib/permissions"
 import { computeInvoiceTotals, formatInvoiceNumber } from "@/lib/billing"
@@ -57,6 +57,13 @@ export async function GET() {
 
     return NextResponse.json({ success: true, invoices })
   } catch (error: any) {
+    // requireModuleAccess THROWS when the tenant's plan does not include the module, so without
+    // this the generic branch below reports normal policy as a server fault. Found live on
+    // 2026-10-13: this route answered HTTP 500 with "Module access disabled" for every tenant,
+    // since billing is enterprise-only and all six are on core.
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load invoices") }, { status: 500 })
   }
 }
@@ -178,6 +185,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, invoice })
   } catch (error: any) {
+    // Same as the GET above: requireModuleAccess throws, and a plan that lacks the module is a
+    // 403. The `canWriteModule` 403 inside the try does not cover this -- that is a ROLE check on
+    // a tenant that already has the module, and mistaking one for the other is what let this
+    // handler sit here after the GET was fixed.
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     // createInvoiceSchema.parse() throws a ZodError on invalid input -- that's a client mistake
     // (400), not a server fault, and should never have fallen into the generic 500 branch below.
     if (error instanceof z.ZodError) {

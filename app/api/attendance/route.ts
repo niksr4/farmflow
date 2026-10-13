@@ -17,6 +17,7 @@ import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { cookies } from "next/headers"
 import { resolveActiveEstate } from "@/lib/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
+import { describeUndeployableWorkers } from "@/lib/attendance-roster"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -389,19 +390,39 @@ export async function PUT(request: Request) {
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     if (presentWorkerIds.length > 0) {
+      /**
+       * Same rule and same wording as the deployment path -- see lib/attendance-roster.ts. Marking
+       * somebody present is if anything MORE obviously allowed for an off-roster worker: it is the
+       * record that they turned up. Filtering on active here meant a leaver who punched could not
+       * even be recorded as having been there, and the refusal named nobody.
+       */
       const validWorkerRows = await runTenantQuery(
         accountsSql,
         tenantContext,
         accountsSql`
-          SELECT id
-          FROM attendance_workers
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND active = TRUE
-            AND id = ANY(${presentWorkerIds})
+          SELECT w.id, w.full_name, w.active,
+                 EXISTS (
+                   SELECT 1 FROM attendance_records ar
+                   WHERE ar.tenant_id = w.tenant_id
+                     AND ar.worker_id = w.id
+                     AND ar.attendance_date = ${date}
+                 ) AS present_on_date
+          FROM attendance_workers w
+          WHERE w.tenant_id = ${tenantContext.tenantId}
+            AND w.id = ANY(${presentWorkerIds})
         `,
       )
-      if (validWorkerRows.length !== presentWorkerIds.length) {
-        return NextResponse.json({ success: false, error: "One or more workers are invalid for this tenant" }, { status: 400 })
+      const problem = describeUndeployableWorkers(
+        presentWorkerIds.map(String),
+        (validWorkerRows as any[]).map((r) => ({
+          id: String(r.id),
+          fullName: String(r.full_name || ""),
+          active: Boolean(r.active),
+          presentOnDate: Boolean(r.present_on_date),
+        })),
+      )
+      if (problem) {
+        return NextResponse.json({ success: false, error: problem }, { status: 400 })
       }
     }
 
