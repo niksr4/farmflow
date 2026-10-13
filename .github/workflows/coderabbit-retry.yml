@@ -40,10 +40,47 @@ jobs:
       - name: Ask CodeRabbit to review the pull request that has waited longest
         env:
           GH_TOKEN: ${{ secrets.CODERABBIT_RETRY_TOKEN || secrets.GITHUB_TOKEN }}
+          # Read separately from GH_TOKEN so the script can tell "a PAT is configured" from
+          # "we fell back to the Actions token", which decides whether asking is worth doing.
+          RETRY_PAT: ${{ secrets.CODERABBIT_RETRY_TOKEN }}
           ONLY_PR: ${{ inputs.pr }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          # ── Is there any point asking? ────────────────────────────────────────────────────────
+          #
+          # ⚠ CODERABBIT IGNORES github-actions[bot]. Confirmed on 2026-10-13: a hand-typed
+          # `@coderabbitai review` got a reply in fifteen seconds; the bot's identical comment got
+          # silence. The loud failure that proved it was the right design -- but repeating it every
+          # hour is the wrong one. Without a PAT this workflow would post an ignored comment on a
+          # pull request and fail, hourly, for ever: an alert nobody can act on arrives often enough
+          # to be tuned out, and the pull requests fill with bot comments nothing reads.
+          #
+          # So when no PAT is configured it still REPORTS the queue -- which is genuinely useful,
+          # it is the list of what is waiting -- and then stops without asking. The loud failure is
+          # kept for the case it was built for: a PAT IS set and CodeRabbit still does not answer,
+          # which would be a real regression rather than a known missing secret.
+          if [ -z "${RETRY_PAT:-}" ]; then
+            echo "::notice::CODERABBIT_RETRY_TOKEN is not set, so no review will be requested."
+            echo
+            echo "CodeRabbit ignores comments from github-actions[bot], so this workflow cannot"
+            echo "request a review using the default Actions token. Add a personal access token"
+            echo "with 'repo' scope as the CODERABBIT_RETRY_TOKEN repository secret and this will"
+            echo "start working on the next run."
+            echo
+            echo "Waiting for a review at their current head:"
+            for n in $(gh pr list --repo "$REPO" --state open --json number,isDraft \
+                         --jq '.[] | select(.isDraft == false) | .number'); do
+              head=$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)
+              head_date=$(gh api "repos/$REPO/commits/$head" --jq '.commit.committer.date')
+              reviewed=$(gh api "repos/$REPO/pulls/$n/reviews" \
+                           --jq '[.[] | select(.user.login == "coderabbitai[bot]")] | last | .submitted_at // ""')
+              if [ -n "$reviewed" ] && [[ "$reviewed" > "$head_date" ]]; then continue; fi
+              echo "  #$n  head $head_date"
+            done
+            exit 0
+          fi
 
           # ── Which pull requests lack a review AT THEIR CURRENT HEAD ────────────────────────────
           # Not "lack a review" -- CodeRabbit does not re-review a commit it has already seen, so a
