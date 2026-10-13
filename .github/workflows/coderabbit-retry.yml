@@ -1,0 +1,137 @@
+name: CodeRabbit retry
+
+# WHY THIS EXISTS.
+#
+# Reviews here are rate limited to roughly one an hour, and a request that arrives over budget comes
+# back refused rather than queued -- "Review rate limited" reads almost exactly like a clean pass on
+# the checks list, which is how #79 sat unreviewed through two separate requests.
+#
+# ⚠ THE QUEUE IS NOT FED BY NEW PULL REQUESTS. It is fed by fixing review findings. A review
+# produces findings, the fix is pushed, and the pull request is back to "no review at this head" --
+# so working through one review manufactures the next request. Measured 2026-10-13: six of seven
+# open pull requests had no review at their current head, and three of those (#75, #78, #80) were
+# there because their findings had just been fixed. At one an hour, requesting by hand means the
+# backlog only ever grows.
+#
+# So: one request an hour, automatically, oldest wait first.
+#
+# ⚠ ONE PER RUN, DELIBERATELY. Firing at every stale pull request spends the whole hour's budget on
+# refusals and reviews nothing. The point is to spend the one request that is available.
+
+on:
+  schedule:
+    # Hourly, offset off the hour -- GitHub drops scheduled runs at :00 under load.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Request a review on this PR number only (optional)"
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask CodeRabbit to review the pull request that has waited longest
+        env:
+          GH_TOKEN: ${{ secrets.CODERABBIT_RETRY_TOKEN || secrets.GITHUB_TOKEN }}
+          ONLY_PR: ${{ inputs.pr }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # ── Which pull requests lack a review AT THEIR CURRENT HEAD ────────────────────────────
+          # Not "lack a review" -- CodeRabbit does not re-review a commit it has already seen, so a
+          # request against an already-reviewed head is a wasted hour. The comparison has to be
+          # against the head commit's date, which is what makes a fix-push re-open the need.
+          candidates=""
+          for n in $(gh pr list --repo "$REPO" --state open --json number,isDraft \
+                       --jq '.[] | select(.isDraft == false) | .number'); do
+            if [ -n "${ONLY_PR:-}" ] && [ "$n" != "$ONLY_PR" ]; then continue; fi
+
+            head=$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)
+            head_date=$(gh api "repos/$REPO/commits/$head" --jq '.commit.committer.date')
+            reviewed=$(gh api "repos/$REPO/pulls/$n/reviews" \
+                         --jq '[.[] | select(.user.login == "coderabbitai[bot]")] | last | .submitted_at // ""')
+
+            if [ -n "$reviewed" ] && [[ "$reviewed" > "$head_date" ]]; then
+              echo "#$n  reviewed at head, skipping"
+              continue
+            fi
+
+            # Do not spend the budget on a pull request we already asked about this hour. A review
+            # in flight is aborted by further activity ("base or head changed"), so re-asking is
+            # worse than waiting.
+            asked=$(gh api "repos/$REPO/issues/$n/comments" --jq \
+              '[.[] | select(.body | test("@coderabbitai review")) | .created_at] | last // ""')
+            if [ -n "$asked" ]; then
+              # ⚠ FAIL SAFE TOWARDS SKIPPING. If the timestamp cannot be parsed, treat the pull
+              # request as recently asked and leave it alone. The other direction re-requests on
+              # every run, which both burns the hour's budget and can abort a review already in
+              # flight ("base or head changed"). An unparseable date must not become a reason to act.
+              if ! asked_epoch=$(date -u -d "$asked" +%s 2>/dev/null); then
+                echo "#$n  could not parse last-asked time ($asked), skipping to be safe"
+                continue
+              fi
+              now_epoch=$(date -u +%s)
+              if [ $((now_epoch - asked_epoch)) -lt 3300 ]; then
+                echo "#$n  asked $(( (now_epoch - asked_epoch) / 60 ))m ago, letting it run"
+                continue
+              fi
+            fi
+
+            candidates="${candidates}${head_date} ${n}"$'\n'
+          done
+
+          if [ -z "${candidates//[$'\n' ]/}" ]; then
+            echo "Nothing waiting for a review. Done."
+            exit 0
+          fi
+
+          # Oldest head commit first: the pull request that has been waiting longest, not the
+          # lowest number. FIFO is the only ordering that cannot starve one of them forever.
+          target=$(printf '%s' "$candidates" | sort | head -1 | awk '{print $2}')
+          echo "Requesting a review on #$target"
+          echo "Still waiting after this one (one per hour, longest wait first):"
+          printf '%s' "$candidates" | sort | awk -v t="$target" '$2 != t {print "  #" $2 "  head " $1}'
+          echo
+
+          before=$(gh api "repos/$REPO/issues/$target/comments" --jq \
+            '[.[] | select(.user.login == "coderabbitai[bot]")] | length')
+          gh pr comment "$target" --repo "$REPO" --body "@coderabbitai review"
+
+          # ── Did it actually listen? ────────────────────────────────────────────────────────────
+          # ⚠ MANY BOTS IGNORE OTHER BOTS, to avoid comment loops. If CodeRabbit ignores
+          # github-actions[bot] then this whole workflow is a no-op that reports success every hour
+          # while nothing is ever reviewed -- a worse state than requesting by hand, because it
+          # looks handled. So the run FAILS LOUDLY when no acknowledgement arrives, and the fix is
+          # to add a personal access token as CODERABBIT_RETRY_TOKEN so the comment comes from a
+          # human account.
+          echo "Waiting up to 4 minutes for an acknowledgement..."
+          for _ in $(seq 1 16); do
+            sleep 15
+            after=$(gh api "repos/$REPO/issues/$target/comments" --jq \
+              '[.[] | select(.user.login == "coderabbitai[bot]")] | length')
+            if [ "$after" -gt "$before" ]; then
+              echo "✓ CodeRabbit acknowledged the request on #$target"
+              reply=$(gh api "repos/$REPO/issues/$target/comments" --jq \
+                '[.[] | select(.user.login == "coderabbitai[bot]")] | last | .body')
+              # A refusal is not a review. Say which one happened so the log is worth reading.
+              if printf '%s' "$reply" | grep -qi "rate limit"; then
+                echo "⚠ but it was RATE LIMITED, not reviewed. Next run will try again."
+              else
+                echo "  Review triggered."
+              fi
+              exit 0
+            fi
+          done
+
+          echo "::error::Commented on #$target but CodeRabbit never acknowledged it."
+          echo "::error::It most likely ignores comments from github-actions[bot]. Add a PAT as the"
+          echo "::error::CODERABBIT_RETRY_TOKEN secret so the request comes from a human account."
+          exit 1

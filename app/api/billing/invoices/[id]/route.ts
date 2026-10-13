@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
-import { requireModuleAccess } from "@/lib/server/module-access"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -59,6 +59,10 @@ export async function GET(_: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true, invoice: invoiceRows[0], items })
   } catch (error: any) {
+    // See the sibling route: a module denial is policy (403), not a server fault (500).
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load invoice") }, { status: 500 })
   }
 }
@@ -126,6 +130,11 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true, invoice: updatedRows?.[0] })
   } catch (error: any) {
+    // A plan without the module is a 403. The canWriteModule 403 in the try is a ROLE check and
+    // does not cover this.
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     // updateSchema.parse() throws a ZodError on invalid input -- that's a client mistake (400),
     // not a server fault, and should never have fallen into the generic 500 branch below.
     if (error instanceof z.ZodError) {
