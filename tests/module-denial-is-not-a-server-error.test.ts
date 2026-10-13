@@ -86,7 +86,20 @@ describe("a module denial is answered with 403, not 500", () => {
       if (!/status:\s*500/.test(region)) return false
       // Keyed on the CALL, not the mention -- an import line or a comment naming
       // isModuleAccessError must not satisfy this.
-      return !(/isModuleAccessError\s*\(/.test(region) || /status:\s*403/.test(region))
+      /**
+       * ⚠ ONLY THE DENIAL CALL COUNTS -- a bare `status: 403` does NOT excuse the handler.
+       *
+       * This accepted `isModuleAccessError(` OR any 403 in the catch region, and that was the
+       * THIRD way this one test found to go vacuous. `catchRegion` runs from the first `catch` to
+       * the end of the handler, so it swallows inner ones: `feedback` has both `.catch(() => {})`
+       * and an inner `catch (err)` before its outer catch. An unrelated 403 in any of those -- a
+       * rate limit, a role check -- would vouch for an outer catch that still maps a module denial
+       * to 500. The defect would remain and the guard would report it clean.
+       *
+       * Requiring the call is strictly tighter and costs nothing: all five fixed handlers make it.
+       * Keyed on the CALL, not the mention, so an import line or a comment cannot satisfy it.
+       */
+      return !/isModuleAccessError\s*\(/.test(region)
     }).map((h) => `${h.route} [${h.verb}]`)
 
     expect(
