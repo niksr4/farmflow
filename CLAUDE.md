@@ -53,7 +53,16 @@ Primary market: India (INR billing via Razorpay planned)
     said the account is gone — that is a configuration state, not a deletion.
 - Email verification via one-time tokens (signup flow)
 - MFA supported (`scripts/43-mfa.sql`, `lib/server/mfa.ts`)
-- Roles: `owner`, `manager`, `user` — owner bypasses all module checks
+- Roles: **`owner`, `admin`, `user`** — `lib/permissions.ts` is the definition
+  (`export type UserRole = "owner" | "admin" | "user"`). Owner bypasses all module checks.
+  - `owner` = the developer, one account. `admin` = the estate's own owner/manager.
+    `user` = a writer. `roleLabel()` renders them "Platform Owner" / "Estate Admin" / "Estate User".
+  - ⚠ **THIS LINE SAID `manager` UNTIL 2026-10-13, AND THERE IS NO SUCH ROLE.** Nothing in `lib/`,
+    `app/` or `components/` matches it except one comment that happens to use "manager" as an
+    example username. Six of the eleven production users are `admin`. The failure mode is quiet:
+    code written as `role === "manager"` type-errors if it is typed, and silently never fires if it
+    is not, so a permission branch simply never runs. Verify against `lib/permissions.ts`, not here.
+  - `isAdminRole()` is `role === "owner" || role === "admin"` — use it rather than comparing by hand.
 
 ### Bootstrap
 - `app/api/dashboard/bootstrap` — single endpoint the UI calls on load; blends plan, modules, commercial access, guided setup state into one response
