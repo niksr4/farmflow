@@ -49,14 +49,55 @@ if (!token) {
   process.exit(1)
 }
 
-const api = async (p, init) => {
-  const res = await fetch(`https://api.vercel.com${p}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers || {}) },
-  })
+/**
+ * A Vercel API call that survives a flaky connection.
+ *
+ * ⚠ ADDED AFTER A REAL FAILURE. On 2026-10-13 a live run built successfully and then died on the
+ * very next call -- `TypeError: fetch failed` / `EPIPE` -- dumping an undici stack trace and
+ * leaving the operator with no idea whether the domains had moved. They had not, because the
+ * sequence puts the build before the alias, but NOTHING IN THE OUTPUT SAID SO. A deploy tool that
+ * fails in a way you cannot interpret is worse than one that fails loudly, because the next move is
+ * a guess about production.
+ *
+ * Transient network errors get retried; a real HTTP error (4xx/5xx) does not, because retrying a
+ * refusal just delays the report.
+ */
+const api = async (p, init, attempt = 1) => {
+  let res
+  try {
+    res = await fetch(`https://api.vercel.com${p}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init?.headers || {}) },
+    })
+  } catch (err) {
+    if (attempt < 4) {
+      const wait = attempt * 1500
+      console.log(`  (network hiccup on ${p.split("?")[0]}, retrying in ${wait}ms -- attempt ${attempt + 1} of 4)`)
+      await new Promise((r) => setTimeout(r, wait))
+      return api(p, init, attempt + 1)
+    }
+    throw new Error(`${p} -> network failed after ${attempt} attempts: ${String(err?.cause?.code || err?.message || err)}`)
+  }
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(`${p} -> ${res.status} ${JSON.stringify(body).slice(0, 200)}`)
   return body
+}
+
+/**
+ * Stop before the domains have moved, and SAY that nothing moved.
+ *
+ * Everything up to and including the build is reversible by doing nothing -- an unaliased
+ * deployment costs nothing and serves nobody. The operator's only real question at that moment is
+ * "is production still what it was", so answer it in the first line rather than leaving it to be
+ * inferred from a stack trace.
+ */
+const stopBeforeAnythingMoved = (what, err) => {
+  console.error(`\n⚠ STOPPED during: ${what}`)
+  console.error(`  ${String(err?.message || err)}`)
+  console.error("\n  PRODUCTION WAS NOT TOUCHED. The domains still serve whatever they served before")
+  console.error("  this run; no alias was changed. Any build that completed is sitting unaliased and")
+  console.error("  costs nothing. Safe to simply run `pnpm go-live -- --yes` again.\n")
+  process.exit(1)
 }
 
 const step = (n, label) => console.log(`\n── ${n}. ${label} ${"─".repeat(Math.max(0, 74 - label.length))}`)
@@ -95,7 +136,12 @@ step(2, "Record the rollback target")
  * roll back to in that case, so this stops rather than inventing one. `pnpm rollback -- --to <id>`
  * is the deliberate way out.
  */
-const liveIds = await Promise.all(DOMAINS.map(async (d) => [d, (await api(`/v4/aliases/${d}`)).deploymentId]))
+let liveIds
+try {
+  liveIds = await Promise.all(DOMAINS.map(async (d) => [d, (await api(`/v4/aliases/${d}`)).deploymentId]))
+} catch (err) {
+  stopBeforeAnythingMoved("reading what is currently live", err)
+}
 for (const [d, id] of liveIds) console.log(`  ${d} -> ${id || "(unreadable)"}`)
 
 if (liveIds.some(([, id]) => !id)) {
@@ -137,7 +183,16 @@ if (!LIVE) {
     console.error("  way to know which deployment to alias. Nothing was moved.\n")
     process.exit(1)
   }
-  const resolved = await api(`/v13/deployments/${url.replace(/^https:\/\//, "")}`)
+  /**
+   * This exact call is what died on 2026-10-13 -- the build had succeeded, and an EPIPE here threw
+   * a raw undici trace. It is the last step before anything moves, so a failure must say so.
+   */
+  let resolved
+  try {
+    resolved = await api(`/v13/deployments/${url.replace(/^https:\/\//, "")}`)
+  } catch (err) {
+    stopBeforeAnythingMoved(`resolving the build at ${url} to a deployment id`, err)
+  }
   newUid = resolved.id || resolved.uid
   if (!newUid) {
     console.error(`\n⚠ STOPPED. Could not resolve ${url} to a deployment id. Nothing was moved.\n`)
