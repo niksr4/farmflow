@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireModuleAccess } from "@/lib/server/module-access"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { DEFAULT_SUPPORT_EMAIL, DEFAULT_ALERT_EMAIL_FROM } from "@/lib/email-addresses"
 import { escapeHtml } from "@/lib/html-escape"
@@ -82,6 +82,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true }, { headers })
   } catch (err: any) {
+    // A module denial is policy (403), not a server fault. Not reachable for the current tenants,
+    // who all have `inventory` -- but it is the same latent shape as the billing routes, where it
+    // was live, and a 500 here would also mint Sentry noise for a working access check.
+    if (isModuleAccessError(err)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     return NextResponse.json({ success: false, error: "Failed to send feedback" }, { status: 500 })
   }
 }
