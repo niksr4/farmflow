@@ -104,6 +104,36 @@ const EMPTY_FORM = {
   notes: "",
 }
 
+/**
+ * The form's fields as the API expects them.
+ *
+ * ⚠ SHARED BY ADD AND EDIT ON PURPOSE. These were two separate literals, and the edit one sent
+ * FIVE of the twelve fields -- day rate, pay mode, the incentive pair and the ripe/green split were
+ * all collected by the form, shown to the writer, and then dropped on save. It also used
+ * `Number(editForm.ratePerKg)` on a field that is empty for day-rate rows, and Number("") is 0, so
+ * an edit wrote a rate of zero; on a piece row whose rate had been cleared that made the day free
+ * labour while still showing a weight.
+ *
+ * null, not 0, on every field the chosen mode does not use -- the "lie that computes" scripts/154
+ * made unstorable. headcount is never sent: the route reads it from the roster, because a
+ * client-supplied crew size is a cost multiplier the caller would be choosing for themselves.
+ */
+const toPickingPayload = (f: typeof EMPTY_FORM) => ({
+  pickDate: f.pickDate,
+  payMode: f.payMode,
+  crop: f.crop,
+  kgPicked: Number(f.kgPicked),
+  ratePerKg: f.payMode === "piece" ? Number(f.ratePerKg) : null,
+  dayRate: f.payMode !== "piece" ? Number(f.dayRate) : null,
+  incentiveThresholdKg: f.payMode === "daily_plus_incentive" ? Number(f.incentiveThresholdKg) : null,
+  incentiveRatePerKg: f.payMode === "daily_plus_incentive" ? Number(f.incentiveRatePerKg) : null,
+  kgRipe: f.kgRipe === "" ? null : Number(f.kgRipe),
+  kgGreen: f.kgGreen === "" ? null : Number(f.kgGreen),
+  dayFraction: Number(f.dayFraction) || 1,
+  locationId: f.locationId || null,
+  notes: f.notes.trim() || null,
+})
+
 export default function PickingLogTab() {
   const { user } = useAuth()
   const canWrite = canWriteModule((user?.role ?? "user") as UserRole, "accounts")
@@ -227,30 +257,7 @@ const ALL_WORKERS = "all"
       const res = await fetch("/api/picking-records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workerId: form.workerId,
-          pickDate: form.pickDate,
-          payMode: form.payMode,
-          crop: form.crop,
-          kgPicked: Number(form.kgPicked),
-          /**
-           * null, not 0, on every field the chosen mode does not use. A zero here is the "lie that
-           * computes" scripts/154 made unstorable: it multiplies out to a real-looking figure and
-           * the row claims a rate it never had.
-           *
-           * headcount is deliberately NOT sent -- the route reads it from the roster, because a
-           * client-supplied crew size is a cost multiplier the caller chooses.
-           */
-          ratePerKg: form.payMode === "piece" ? Number(form.ratePerKg) : null,
-          dayRate: form.payMode !== "piece" ? Number(form.dayRate) : null,
-          incentiveThresholdKg: form.payMode === "daily_plus_incentive" ? Number(form.incentiveThresholdKg) : null,
-          incentiveRatePerKg: form.payMode === "daily_plus_incentive" ? Number(form.incentiveRatePerKg) : null,
-          kgRipe: form.kgRipe === "" ? null : Number(form.kgRipe),
-          kgGreen: form.kgGreen === "" ? null : Number(form.kgGreen),
-          dayFraction: Number(form.dayFraction) || 1,
-          locationId: form.locationId || null,
-          notes: form.notes.trim() || null,
-        }),
+        body: JSON.stringify({ workerId: form.workerId, ...toPickingPayload(form) }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to save")
@@ -294,18 +301,26 @@ const ALL_WORKERS = "all"
   }
 
   const handleSaveEdit = async (id: string) => {
+    /**
+     * Checked here as well as on the server, exactly as the add path is. Without it the writer
+     * waits for a round trip to be told the ripe/green split no longer adds up -- and before the
+     * server learned the pay-mode fields at all, the same mistake came back as HTTP 500 and
+     * "Failed to update picking record", which names nothing.
+     */
+    const editProblem = pickingRowProblem({
+      ...asPayInput(editForm, workers.find((w) => w.id === editForm.workerId) ?? null),
+      workerId: editForm.workerId,
+    })
+    if (editProblem) {
+      toast.error(editProblem)
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch(`/api/picking-records/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pickDate: editForm.pickDate,
-          kgPicked: Number(editForm.kgPicked),
-          ratePerKg: Number(editForm.ratePerKg),
-          locationId: editForm.locationId || null,
-          notes: editForm.notes.trim() || null,
-        }),
+        body: JSON.stringify(toPickingPayload(editForm)),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to update")
