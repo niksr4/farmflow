@@ -24,7 +24,7 @@
 import { readFileSync, readdirSync } from "node:fs"
 import { neon } from "@neondatabase/serverless"
 
-import { pendingMigrations } from "./release-utils.mjs"
+import { pendingMigrations, preflightBlocks } from "./release-utils.mjs"
 
 // Prod's connection string lives in .env.vercel.production, NOT .env.local -- which holds the dev
 // one under a similar name. Reading the wrong file here would compare this branch against dev and
@@ -73,9 +73,18 @@ if (pending.length === 0) {
   console.log("\n      set -a && source .env.vercel.production && set +a && pnpm migrate:prod\n")
 }
 
+/**
+ * ⚠ A GHOST IS A NOTE, NOT A BLOCKER. See preflightBlocks for the reasoning: older code against
+ * newer schema is the forward-compatible direction and the correct order for a staged rollout.
+ * This used to call bad() and therefore fail the run, which made the whole gate unusable the hour
+ * migration 154 reached prod -- every branch without a 154 file became undeployable, including the
+ * one carrying the code 154 was applied for.
+ */
 if (ghosts.length > 0) {
-  bad(`prod has ${ghosts.length} migration(s) with no file on this branch -- the branch is behind:`)
+  console.log(`  ℹ prod has ${ghosts.length} migration(s) with no file on this branch:`)
   for (const f of ghosts) console.log(`      ${f}`)
+  console.log("    This branch predates a schema change. Older code on newer schema is fine, so")
+  console.log("    this does not block -- but rebase before adding anything that reads those columns.")
 }
 
 // ── Feature schema specs ──────────────────────────────────────────────────────────────────────
@@ -107,9 +116,15 @@ for (const spec of specs) {
 }
 if (specProblems === 0) console.log("  ✓ every declared feature spec is satisfied on prod")
 
+// The blocking decision is a pure function so it can be tested, and so the two directions cannot
+// quietly become symmetric again.
+const blocks = preflightBlocks({ pending, ghosts, specProblems })
+
 console.log(
-  problems === 0
-    ? "\n✓ PREFLIGHT PASSES -- prod's schema can serve this branch\n"
-    : `\n⚠ ${problems} PROBLEM(S) -- do not merge or alias until these are resolved\n`,
+  blocks
+    ? `\n⚠ ${problems} PROBLEM(S) -- do not merge or alias until these are resolved\n`
+    : ghosts.length > 0
+      ? "\n✓ PREFLIGHT PASSES -- prod's schema can serve this branch (it is behind prod, which is fine)\n"
+      : "\n✓ PREFLIGHT PASSES -- prod's schema can serve this branch\n",
 )
-process.exit(problems === 0 ? 0 : 1)
+process.exit(blocks ? 1 : 0)

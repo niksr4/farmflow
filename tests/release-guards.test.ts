@@ -8,6 +8,7 @@ import {
   smokeRoutes,
   isSmokeFailure,
   pickRollbackTarget,
+  preflightBlocks,
   parseDeploymentUrl,
   collectSources,
   exportsGet,
@@ -63,6 +64,36 @@ describe("which migrations production is missing", () => {
     const { pending, ghosts } = pendingMigrations(["1-a.sql", "2-b.sql"], ["1-a.sql", "2-b.sql"])
     expect(pending).toEqual([])
     expect(ghosts).toEqual([])
+  })
+})
+
+describe("only one of the two directions may stop a deploy", () => {
+  /**
+   * ⚠ THE ASYMMETRY IS THE WHOLE POINT, and treating the two as the same broke the gate in
+   * production use on 2026-10-13 -- the day 153 and 154 were applied. Blocking on ghosts meant
+   * that the moment 154 reached prod, every branch without a 154 file (main and both tooling
+   * branches) became undeployable, including the branch carrying the code 154 was applied for.
+   * The gate refused the exact workflow it was built to protect.
+   */
+  it("BLOCKS on a pending migration, because that code 500s", () => {
+    expect(preflightBlocks({ pending: ["154-x.sql"], ghosts: [] })).toBe(true)
+  })
+
+  it("does NOT block on a ghost, because older code on newer schema works", () => {
+    expect(preflightBlocks({ pending: [], ghosts: ["154-x.sql"] })).toBe(false)
+  })
+
+  it("still blocks when a pending migration and a ghost appear together", () => {
+    expect(preflightBlocks({ pending: ["155-y.sql"], ghosts: ["154-x.sql"] })).toBe(true)
+  })
+
+  it("blocks on a missing feature-spec table regardless of migrations", () => {
+    expect(preflightBlocks({ pending: [], ghosts: [], specProblems: 1 })).toBe(true)
+  })
+
+  it("passes a fully aligned branch", () => {
+    expect(preflightBlocks({ pending: [], ghosts: [], specProblems: 0 })).toBe(false)
+    expect(preflightBlocks()).toBe(false)
   })
 })
 

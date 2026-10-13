@@ -76,17 +76,40 @@ if (run("node", ["scripts/dev/preflight-prod.mjs"]).status !== 0) {
   process.exit(1)
 }
 
-// ── 2. Build ──────────────────────────────────────────────────────────────────────────────────
 // ── 2. Record what is live, BEFORE anything is built or moved ────────────────────────────────
 // This is the rollback target and it has to be captured first: once the alias moves there is no
 // record of what it displaced.
 step(2, "Record the rollback target")
-const liveBefore = (await api(`/v4/aliases/${DOMAINS[0]}`)).deploymentId
-console.log(`  currently live: ${liveBefore}`)
-if (!liveBefore) {
+
+/**
+ * ⚠ READ EVERY DOMAIN, AND REFUSE IF THEY DISAGREE.
+ *
+ * This read `DOMAINS[0]` only, which quietly assumed the thing the rest of this script exists to
+ * handle. If an earlier failed run or a manual change had left the apex on a different deployment,
+ * "what was live" would have been www's build alone -- and the revert would then move the apex to
+ * a deployment it never served, while verifyAliases confirmed both domains matched the target and
+ * printed "Both domains confirmed". Correct by its own check, wrong about the world.
+ *
+ * A split is also exactly the state the alias fix in step 4 can leave behind, so arriving here
+ * already split is a real possibility, not a hypothetical. There is no single "what was live" to
+ * roll back to in that case, so this stops rather than inventing one. `pnpm rollback -- --to <id>`
+ * is the deliberate way out.
+ */
+const liveIds = await Promise.all(DOMAINS.map(async (d) => [d, (await api(`/v4/aliases/${d}`)).deploymentId]))
+for (const [d, id] of liveIds) console.log(`  ${d} -> ${id || "(unreadable)"}`)
+
+if (liveIds.some(([, id]) => !id)) {
   console.error("\n⚠ STOPPED. Cannot read what is currently live, so a rollback could not be aimed.\n")
   process.exit(1)
 }
+if (new Set(liveIds.map(([, id]) => id)).size !== 1) {
+  console.error("\n⚠ STOPPED. The domains are ALREADY SPLIT across different deployments, so there")
+  console.error("  is no single build to roll back to. Resolve it first:")
+  console.error(`\n    pnpm rollback -- --list`)
+  console.error(`    pnpm rollback -- --to <dpl_...> --yes\n`)
+  process.exit(1)
+}
+const liveBefore = liveIds[0][1]
 
 // ── 3. Build ──────────────────────────────────────────────────────────────────────────────────
 step(3, "Build a production deployment (domains untouched)")

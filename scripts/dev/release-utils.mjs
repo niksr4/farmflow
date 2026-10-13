@@ -36,6 +36,29 @@ export const pendingMigrations = (filesOnDisk, appliedVersions) => {
 }
 
 /**
+ * Which of the two directions is allowed to stop a deploy.
+ *
+ * ⚠ THEY ARE NOT SYMMETRIC, AND TREATING THEM AS SYMMETRIC BROKE THE GATE. Caught on 2026-10-13,
+ * the day migrations 153 and 154 went to prod, by the tool refusing to deploy anything at all:
+ *
+ *   PENDING  the branch carries a migration prod has not run. Its code reads columns that do not
+ *            exist, so the routes 500. This MUST block -- it is the whole reason preflight exists.
+ *   GHOST    prod has run a migration whose file is not on this branch. That is older code against
+ *            newer schema: the forward-compatible direction, and the correct order for a staged
+ *            rollout -- migrate first, ship the code after. It works. It is worth SAYING, because
+ *            it means the branch predates a schema change, but it must not stop the release.
+ *
+ * Blocking on ghosts meant that the moment 154 was applied to prod, every branch without a 154
+ * file -- main, and both tooling branches -- was "behind" and undeployable. The gate would have
+ * refused to ship the very picking stack whose migration had just been applied, which is the exact
+ * workflow it was built to protect.
+ *
+ * @param {{ pending?: string[], ghosts?: string[], specProblems?: number }} [report]
+ */
+export const preflightBlocks = ({ pending = [], ghosts = [], specProblems = 0 } = {}) =>
+  pending.length > 0 || specProblems > 0
+
+/**
  * Does calling this route spend money or burn a third-party quota?
  *
  * DERIVED FROM SOURCE, NOT LISTED. A hand-kept list of "do not call these" is how the next paid
