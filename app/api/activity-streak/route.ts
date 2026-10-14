@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { sql, accountsSql } from "@/lib/server/db"
-import { requireAnyModuleAccess } from "@/lib/server/module-access"
+import { isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
+import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -50,7 +51,7 @@ export async function GET() {
             `,
             [tenantId, tz],
           ),
-    ]).catch(() => [[], []])
+    ])
 
     // Merge distinct days from both DB connections
     const daySet = new Set<string>()
@@ -83,7 +84,28 @@ export async function GET() {
     const totalDaysLogged = daySet.size
 
     return NextResponse.json({ success: true, streak, totalDaysLogged })
-  } catch {
-    return NextResponse.json({ success: true, streak: 0, totalDaysLogged: 0 })
+  } catch (error) {
+    /**
+     * ⚠ THIS USED TO RETURN `{ success: true, streak: 0 }` AND SWALLOW THE ERROR ENTIRELY.
+     *
+     * Two things were wrong with that. The streak was a lie -- somebody who had logged every day for
+     * forty days got a zero because one query failed. And `success: true` meant the route reported
+     * healthy no matter what: nothing was logged, so nothing reached Sentry, so a route that had
+     * been failing for months would look exactly like a route nobody used. The release smoke would
+     * pass it too, since it only checks for a status under 500.
+     *
+     * `success: false` is safe for the caller: use-home-insights.ts only sets the streak on
+     * `d.success && d.streak > 0`, so the widget hides itself rather than showing a wrong number.
+     *
+     * ⚠ BUT NOT EVERYTHING HERE IS WORTH LOGGING. A signed-out request, or a `user` without any of
+     * the three modules, throws on the very first line -- and logging those would file an error on
+     * every such page load, which is how a real fault gets buried in noise. Only log what is
+     * actually a fault. (The crash beacon spent a month at the top of Sentry for exactly this
+     * reason: counting normal behaviour as an incident.)
+     */
+    if (!isModuleAccessError(error) && !/unauthorized/i.test(String((error as Error)?.message || ""))) {
+      logServerError("Failed to compute activity streak", error)
+    }
+    return NextResponse.json({ success: false, streak: null, totalDaysLogged: null })
   }
 }
