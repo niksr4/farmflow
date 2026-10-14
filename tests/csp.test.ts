@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 // Shared with next.config.mjs — the config is the thing under test, not a copy of it.
@@ -137,6 +138,76 @@ describe("assembled policy", () => {
     if (scriptHosts.includes("googletagmanager.com")) {
       expect(imgHosts).toContain("googletagmanager.com")
     }
+  })
+
+  /**
+   * ⚠ THE SAME MISTAKE HAS NOW SHIPPED THREE TIMES, SO STOP WRITING ONE TEST PER INCIDENT.
+   *
+   *   1. `https://o*.ingest.sentry.io` -- not valid CSP host syntax, and the wrong region host
+   *      anyway. Client-side Sentry reported nothing for months.
+   *   2. Vercel Analytics rendered on every page while `script-src` refused its host.
+   *   3. GA4 (removed 2026-10-14): `CONNECT_SRC` listed `https://www.google-analytics.com` while
+   *      the beacon goes to `region1.google-analytics.com`.
+   *
+   * Every one is the same shape -- the app references a third-party host that the policy does not
+   * permit -- and every one was invisible, because a CSP refusal is logged nowhere. So this derives
+   * the host list FROM THE SOURCE instead of naming hosts, and a fourth instance fails here.
+   *
+   * Scoped to subresource references (`<Script src>`, preconnect, dns-prefetch) because those are
+   * what CSP governs. A plain `<a href>` is a navigation and is none of CSP's business, which is
+   * why the opt-out link that used to live in the privacy notice was never a finding.
+   */
+  it("permits every third-party host the app actually loads a subresource from", () => {
+    /**
+     * ⚠ PATHSPEC IS `app`, NOT `app/**\/*.tsx`. The glob form requires at least one directory
+     * level, so it silently skips `app/layout.tsx` -- the single file that loaded all three of the
+     * blocked subresources above. The vacuity assertion below is what caught that; without it this
+     * test would have passed while scanning nothing, which is the failure mode it is guarding
+     * against in the first place.
+     */
+    const sources = execFileSync("git", ["ls-files", "app", "components"], { encoding: "utf8" })
+      .split("\n")
+      .filter((f) => f.endsWith(".tsx"))
+
+    const referenced = new Set<string>()
+    for (const file of sources) {
+      const body = readFileSync(file, "utf8")
+      // Script src="https://host/..."  and  <link rel="preconnect|dns-prefetch" href="https://host">
+      for (const m of body.matchAll(/(?:<Script[^>]*?\ssrc|rel="(?:preconnect|dns-prefetch)"\s+href)="(https:\/\/[^"/]+)/g)) {
+        referenced.add(m[1])
+      }
+    }
+
+    // Sanity: if this finds nothing the test is vacuous and must fail loudly rather than pass.
+    expect(
+      referenced.size,
+      "found no third-party subresource hosts at all -- the scan is broken, not the policy",
+    ).toBeGreaterThan(0)
+
+    const policy = CONTENT_SECURITY_POLICY
+    const permitted = (host: string) => {
+      const bare = host.replace(/^https:\/\//, "")
+      if (policy.includes(host) || policy.includes(bare)) return true
+      // A wildcard entry like https://*.ingest.de.sentry.io covers o123.ingest.de.sentry.io.
+      return [...policy.matchAll(/https:\/\/\*\.([^\s;]+)/g)].some(([, suffix]) =>
+        bare.endsWith(`.${suffix}`),
+      )
+    }
+
+    const unpermitted = [...referenced].filter((h) => !permitted(h))
+    expect(
+      unpermitted,
+      "these hosts are loaded by the app but not allowed by CSP, so the browser will drop them " +
+        "silently and nothing will be logged anywhere. Add them to lib/csp.mjs or stop loading them.",
+    ).toEqual([])
+  })
+
+  it("has no Google Analytics left anywhere in the policy", () => {
+    // Removed 2026-10-14 because its beacon had always been refused and PostHog already covers it.
+    // Pinned so a future edit cannot quietly re-add a host with no tag, or a tag with no host.
+    expect(CONTENT_SECURITY_POLICY).not.toContain("google-analytics.com")
+    expect(CONTENT_SECURITY_POLICY).not.toContain("googletagmanager.com")
+    expect(readFileSync("app/layout.tsx", "utf8")).not.toMatch(/gtag|googletagmanager/)
   })
 
   it("lets Vercel Analytics load the script the app actually renders", () => {

@@ -1,7 +1,6 @@
 import React, { Suspense } from "react"
 import type { Metadata, Viewport } from "next"
 import { cookies } from "next/headers"
-import Script from "next/script"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -96,8 +95,6 @@ export default async function RootLayout({
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         {/* Warm up connections to third-party origins used on every page */}
-        <link rel="preconnect" href="https://www.googletagmanager.com" />
-        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
         {/* Must be the DSN's real host — the region-less `ingest.sentry.io` this used to
             point at is never contacted, so the prefetch warmed the wrong connection. */}
         <link rel="dns-prefetch" href="https://o4511210874339328.ingest.de.sentry.io" />
@@ -110,17 +107,24 @@ export default async function RootLayout({
               <Suspense fallback={null}>
                 <PostHogAuthSync />
               </Suspense>
-              {/* GA4 — lazyOnload runs in the browser's idle time, after hydration and paint */}
-              <Script
-                src="https://www.googletagmanager.com/gtag/js?id=G-X0RB06WXE9"
-                strategy="lazyOnload"
-              />
-              <Script id="ga4-google-tag" strategy="lazyOnload">
-                {`window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-gtag('js', new Date());
-gtag('config', 'G-X0RB06WXE9');`}
-              </Script>
+              {/*
+                GA4 WAS REMOVED HERE ON 2026-10-14, AND IT HAD NEVER WORKED.
+                The tag loaded fine; the beacon goes to the REGIONAL host
+                `region1.google-analytics.com`, and CONNECT_SRC only ever listed
+                `https://www.google-analytics.com`. So every hit was refused by CSP, silently --
+                the browser drops the request and logs nothing anywhere. Found by the 2026-10-14 UX
+                audit as console noise on every page.
+
+                This is the third time this exact class has bitten this project, after the
+                malformed `https://o*.ingest.sentry.io` wildcard that cost months of client-side
+                Sentry, and Vercel Analytics being rendered while CSP refused its script.
+
+                Deleted rather than fixed, deliberately: PostHog already collects this (including
+                $web_vitals, see components/web-vitals.tsx), so GA added a second analytics
+                pipeline, a subprocessor, two more CSP hosts and a cookie banner obligation in
+                exchange for data nobody read. Fixing the policy would have bought all of that for
+                the first time rather than restoring something that worked.
+              */}
               {children}
               <Suspense fallback={null}>
                 <FloatingAiAssistant />
