@@ -333,6 +333,38 @@ for every possible input.
 
 ## Decided — do not re-argue without new information
 
+### Decided 2026-10-14, off the two audits
+
+- **Duplicate writes get an idempotency key, not a natural-key constraint.** A UUID per submission
+  plus `UNIQUE (tenant_id, idempotency_key)` on the seven unprotected money tables, and a retry that
+  violates it is treated as success. This is the only option that makes the automatic retry **safe**
+  rather than merely removing it: dropping the retry still leaves the case where the write committed
+  and the response was lost, so the writer sees an error, retries by hand, and gets the duplicate
+  anyway. Natural keys were rejected because two identical expenses on the same day are legitimate
+  here — `attendance_records` and `rainfall_records` only work because their natural key genuinely
+  is unique. Build the primitive plus labour and expenses first and prove it with a
+  commit-then-throw harness before touching the other five.
+  - **Protected today:** `attendance_records`, `rainfall_records`, **`processing_records`**
+    (`UNIQUE (tenant_id, location_id, coffee_type, process_date)`). **Unprotected:**
+    `labor_transactions`, `expense_transactions`, `transaction_history`, `picking_records`,
+    `labour_assignments`, `sales_records`, `dispatch_records`. Queried from `pg_index` on dev, not
+    grepped — a grep for `ALTER TABLE … UNIQUE` misses inline `CREATE TABLE` constraints and wrongly
+    reports `attendance_records` unprotected too. The audit said eight tables; it is seven.
+- **The per-user location-scoping admin UI gets withdrawn, and the table stays.** Three of 141
+  routes honour `getAccessibleLocationIds`, so restricting a writer to one block still lets them
+  read and write every other block's expenses, labour, stock, sales and rainfall. `user_locations`
+  is 0 rows, nobody has asked for it, and **an unenforced control is worse than an absent one
+  because it gets trusted.** Reversible the day a customer actually needs per-block access, and the
+  enforcement point when that happens is the estate-filter layer every route already calls, never
+  130 call sites.
+- **Reviews must be requested; CodeRabbit never auto-reviews this repo.** Confirmed from its own
+  comment: *"This repository does not receive automatic reviews because it has fewer than 10 stars."*
+  So `.github/workflows/coderabbit-retry.yml` is load-bearing, not a convenience, and a PR with no
+  review is the default state rather than an oversight. `CODERABBIT_RETRY_TOKEN` is set and proven
+  working (a run acknowledged on #65). It currently holds the `gh` CLI OAuth token, which grants
+  `repo + workflow + gist` across every repo and rotates on `gh auth login` — replace it with a
+  fine-grained token scoped to this repo with Pull requests: write.
+
 - **Coffee only.** Multi-crop config removed; pepper and arecanut are intercrops, not a second market.
 - **Blocks per estate is the standard**, for every tenant present and future.
 - **The estate's acreage is the sum of its blocks.** Not separately typed.
