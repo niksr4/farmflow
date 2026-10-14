@@ -2695,8 +2695,10 @@ export default function InventorySystem() {
     seasonCompareLoading,
     seasonCompareError,
     seasonCompareFYLabels,
+    seasonCompareUnavailable,
     recentActivity,
     recentActivityLoading,
+    recentActivityUnavailable,
     activityStreak,
   } = useHomeInsights({
     tenantId,
@@ -4305,7 +4307,7 @@ export default function InventorySystem() {
 
             {/* Recent Activity Feed — desktop only */}
             {!isMobile && (recentActivityLoading || (recentActivity && recentActivity.length > 0)) && (
-              <RecentActivityFeed loading={recentActivityLoading} activity={recentActivity} />
+              <RecentActivityFeed loading={recentActivityLoading} activity={recentActivity} unavailable={recentActivityUnavailable} />
             )}
 
             <HomeNavCard
@@ -4335,6 +4337,7 @@ export default function InventorySystem() {
                 narrative={seasonCompareNarrative}
                 error={seasonCompareError}
                 fyLabels={seasonCompareFYLabels}
+                unavailable={seasonCompareUnavailable}
               />
             )}
 

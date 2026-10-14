@@ -102,10 +102,21 @@ export async function GET() {
      * every such page load, which is how a real fault gets buried in noise. Only log what is
      * actually a fault. (The crash beacon spent a month at the top of Sentry for exactly this
      * reason: counting normal behaviour as an incident.)
+     *
+     * ⚠ AND THE STATUS CODE HAS TO SAY IT TOO. Raised by CodeRabbit on #88: returning 200 for a
+     * failure is the same mistake as `success: true`, one layer out. The release smoke counts
+     * anything under 500 as alive, so a permanently broken streak endpoint answering 200 passes the
+     * smoke for ever. 401 and 403 are not faults and stay under 500 deliberately -- a signed-out
+     * load and a tenant without the modules are both working-as-intended.
      */
-    if (!isModuleAccessError(error) && !/unauthorized/i.test(String((error as Error)?.message || ""))) {
-      logServerError("Failed to compute activity streak", error)
+    const unauthenticated = /unauthorized/i.test(String((error as Error)?.message || ""))
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, streak: null, totalDaysLogged: null }, { status: 403 })
     }
-    return NextResponse.json({ success: false, streak: null, totalDaysLogged: null })
+    if (unauthenticated) {
+      return NextResponse.json({ success: false, streak: null, totalDaysLogged: null }, { status: 401 })
+    }
+    logServerError("Failed to compute activity streak", error)
+    return NextResponse.json({ success: false, streak: null, totalDaysLogged: null }, { status: 500 })
   }
 }

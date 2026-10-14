@@ -41,10 +41,19 @@ const ROUTES = execFileSync("git", ["ls-files", "app/**/route.ts"], { encoding: 
  * explanation and reports six offenders that are all prose. That failure points the wrong way --
  * it fails loudly and looks like the guard working, so you "fix" comments until it goes quiet.
  */
+/**
+ * ⚠ ONLY COMMENT-ONLY LINES ARE STRIPPED, NOT TRAILING ONES. Raised by CodeRabbit on #88, and the
+ * narrower rule is the safer one: stripping from any `//` to end of line also blanks a `//` that is
+ * inside a string or a template literal, which could hide real code on that line from the scan
+ * below. A guard that erases what it is meant to read is worse than one that reports prose.
+ *
+ * Block comments still go wholesale -- the documentation this needs to ignore is all in `/** … *\/`
+ * blocks and full-line `//` comments, which this covers. Verified by re-running the tamper suite.
+ */
 const stripComments = (source: string) =>
   source
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1")
+    .replace(/^[ \t]*\/\/.*$/gm, "")
 
 /**
  * A catch handler that returns an array literal, or an object standing in for a result set.
@@ -161,6 +170,21 @@ describe("no route folds a failed read into an empty result", () => {
     const compare = stripComments(readFileSync("app/api/ai-season-compare/route.ts", "utf8"))
     expect(compare).toMatch(/volumeRead/)
     expect(compare).toMatch(/unavailable\.length === 0/)
+  })
+
+  it("will not publish a cost total that is missing a component", () => {
+    /**
+     * P2-6 from the 2026-10-14 audit. `tryQuery` there returns `ok: false` for an absent relation
+     * and the consumer read `|| 0` from its empty rows regardless, while `hasData` was an **or** --
+     * so a missing `labour_cost` view would have reported expenses-only as a valid cost per kg.
+     * Labour is the dominant cost on these estates, so the headline costing number would have read
+     * far too low and declared itself fine.
+     */
+    const route = stripComments(readFileSync("app/api/dashboard/cost-per-kg/route.ts", "utf8"))
+    expect(route).toMatch(/hasData = laborResult\.ok && expenseResult\.ok/)
+    expect(route).not.toMatch(/hasData = laborResult\.ok \|\| expenseResult\.ok/)
+    // And the divide is gated on completeness, not just on a non-zero denominator.
+    expect(route).toMatch(/missingComponents\.length === 0 && totalOutputKg > 0/)
   })
 
   it("stops reporting success:true from a route that failed", () => {

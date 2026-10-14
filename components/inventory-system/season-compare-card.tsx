@@ -10,9 +10,16 @@ type SeasonCompareCardProps = {
   narrative: string | null
   error: string | null
   fyLabels: { prev: string; curr: string } | null
+  /**
+   * Figures the server could not read. The route omits an unreadable metric from the prompt rather
+   * than sending it as a zero, so the narrative below is accurate about what it covers -- but it
+   * cannot mention what it was never given, and a comparison silently missing labour cost reads
+   * exactly like a complete one. Saying so is the point.
+   */
+  unavailable?: string[]
 }
 
-export default function SeasonCompareCard({ loading, narrative, error, fyLabels }: SeasonCompareCardProps) {
+export default function SeasonCompareCard({ loading, narrative, error, fyLabels, unavailable = [] }: SeasonCompareCardProps) {
   return (
     <Card className="border-black/5 bg-white/90">
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -38,7 +45,15 @@ export default function SeasonCompareCard({ loading, narrative, error, fyLabels 
             <p className="mt-1 text-muted-foreground">{error}</p>
           </div>
         ) : narrative ? (
-          <SimpleMarkdown content={narrative} className="text-neutral-700" />
+          <>
+            <SimpleMarkdown content={narrative} className="text-neutral-700" />
+            {unavailable.length > 0 && (
+              <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-900">
+                This comparison leaves out {unavailable.join(", ")}, which could not be read just
+                now. Reload to try again.
+              </p>
+            )}
+          </>
         ) : null}
       </CardContent>
     </Card>
