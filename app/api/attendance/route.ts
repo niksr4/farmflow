@@ -103,6 +103,27 @@ export async function GET(request: Request) {
       : accountsSql``
 
     /**
+     * ⚠ THE SAME RULE, KEYED ON THE JOINED WORKER. The assignments query below documents that it
+     * scopes "by the WORKER's estate, not the assignment's block" -- and it joined
+     * attendance_workers without ever filtering on it, so the intent was written and never
+     * implemented. Every other query on this route is scoped (roll, attendance, picking, weekly
+     * summary); assignments was tenant-wide, and components/attendance-tab.tsx sums the whole
+     * payload into the "Cost today" tile.
+     *
+     * Measured on prod 2026-10-15 before this fix:
+     *   HoneyFarm, Sidapur selected   tile Rs 13,884   visible rows Rs 2,964   (4.7x over)
+     *   Medappa, Citrus Grove         tile Rs 17,400   visible rows Rs 9,000   (1.9x over)
+     * 46 such tenant-days at HoneyFarm and 49 at Medappa. A reader could not arrive at the figure
+     * from the page. Single-estate tenants (Laxmi, Seshagiri) were never affected.
+     *
+     * `estate IS NULL` is kept for the same reason the roll keeps it: a worker with no estate
+     * belongs to all of them and must stay markable.
+     */
+    const workerEstateClause = activeEstate
+      ? accountsSql` AND (w.estate IS NULL OR w.estate = ${activeEstate})`
+      : accountsSql``
+
+    /**
      * The same predicate, reached through the worker, for the queries that read attendance rather
      * than the roster.
      *
@@ -213,6 +234,7 @@ export async function GET(request: Request) {
           ON aa.code = a.activity_code AND aa.tenant_id = a.tenant_id
         WHERE a.tenant_id = ${tenantContext.tenantId}
           AND a.work_date = ${date}
+          ${workerEstateClause}
         ORDER BY LOWER(w.full_name), a.created_at ASC
       `,
     ])
