@@ -89,6 +89,16 @@ export async function POST(request: Request) {
         maskedEmail: result.maskedEmail,
         signupRequestId: result.signupRequestId,
         verificationSent: result.verificationSent,
+        /**
+         * The password just typed was NOT stored, because this address already had an
+         * unprovisioned signup and its credential is not a later caller's to replace. Said out
+         * loud deliberately: silently discarding it means the person verifies, tries the password
+         * they chose, and finds themselves locked out of their own estate with no error anywhere.
+         *
+         * It leaks nothing an attacker does not already have -- they submitted this address and
+         * either controls the mailbox or does not.
+         */
+        credentialRetained: Boolean(result.credentialRetained),
       },
       { headers },
     )
