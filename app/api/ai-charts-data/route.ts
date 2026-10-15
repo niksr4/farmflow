@@ -41,9 +41,10 @@ export async function GET(request: Request) {
     const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
     const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
 
-    let laborData: unknown[] = []
-    try {
-      laborData = await runTenantQuery(
+    // No per-query try/catch: swallowing a failed read here returned success with an empty series,
+    // which the charts render as 'no labour / no processing this season' -- a false zero. A failure
+    // now propagates to the outer handler's sanitized 500.
+    const laborData = await runTenantQuery(
         sql,
         tenantContext,
         sql`
@@ -63,13 +64,8 @@ export async function GET(request: Request) {
           ORDER BY lt.work_date DESC
         `,
       )
-    } catch (error) {
-      console.error("Error fetching labour data:", error)
-    }
 
-    let processingRows: any[] = []
-    try {
-      processingRows = await runTenantQuery(
+    const processingRows: any[] = await runTenantQuery(
         sql,
         tenantContext,
         sql`
@@ -93,9 +89,6 @@ export async function GET(request: Request) {
           ORDER BY pr.process_date DESC
         `,
       )
-    } catch (error) {
-      console.error("Error fetching processing data:", error)
-    }
 
     const processingData: Record<string, unknown[]> = {}
     for (const row of processingRows) {

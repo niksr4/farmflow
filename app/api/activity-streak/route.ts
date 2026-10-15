@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, accountsSql } from "@/lib/server/db"
 import { requireAnyModuleAccess } from "@/lib/server/module-access"
+import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 
 export const dynamic = "force-dynamic"
@@ -50,7 +51,11 @@ export async function GET() {
             `,
             [tenantId, tz],
           ),
-    ]).catch(() => [[], []])
+    ]).catch((error) => {
+      // A cosmetic streak may degrade to 0, but a failing DB must still leave a trace.
+      logServerError("Activity streak query failed", error)
+      return [[], []]
+    })
 
     // Merge distinct days from both DB connections
     const daySet = new Set<string>()

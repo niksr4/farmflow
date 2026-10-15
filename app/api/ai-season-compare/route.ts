@@ -56,6 +56,9 @@ async function fetchSeasonAggregates(
   const laborEstateClause = laborSupportsLocation ? estateClause : sql``
   const expenseEstateClause = expenseSupportsLocation ? estateClause : sql``
 
+  // No empty-array fallback on these reads: an empty result is indistinguishable from a season with no
+  // activity, so a failed query would be narrated by the AI (and cached for 4h) as a true zero.
+  // A rejection propagates to the route's outer handler, which returns a sanitized 500 uncached.
   const [processing, dispatch, sales, labor, expenses] = await Promise.all([
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(crop_today), 0) AS total_kg
@@ -63,14 +66,14 @@ async function fetchSeasonAggregates(
       WHERE process_date >= ${startDate}::date AND process_date <= ${endDate}::date
         AND tenant_id = ${tenantContext.tenantId}
         ${estateClause}
-    `).catch(() => []),
+    `),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(bags_dispatched), 0) AS total_bags
       FROM dispatch_records
       WHERE dispatch_date >= ${startDate} AND dispatch_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${estateClause}
-    `).catch(() => []),
+    `),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(kgs), 0) AS total_kgs, COALESCE(SUM(revenue), 0) AS total_revenue
       -- booked_revenue: see scripts/121. A year-on-year comparison built on sales_records
@@ -79,21 +82,21 @@ async function fetchSeasonAggregates(
       WHERE sale_date >= ${startDate} AND sale_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${estateClause}
-    `).catch(() => []),
+    `),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(total_cost), 0) AS total_cost
       FROM labour_cost
       WHERE work_date >= ${startDate} AND work_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${laborEstateClause}
-    `).catch(() => []),
+    `),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(total_amount), 0) AS total_amount
       FROM expense_transactions
       WHERE entry_date >= ${startDate} AND entry_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${expenseEstateClause}
-    `).catch(() => []),
+    `),
   ])
 
   const firstRow = <T>(rows: unknown): T =>
