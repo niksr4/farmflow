@@ -103,7 +103,10 @@ describe("an edit the database would refuse comes back as a sentence, not a 500"
   it("treats the day cap as a refusal (409), not a fault", () => {
     // scripts/152 raises from a trigger when an edit would push a worker past a full day across
     // picking and day-work. That is something the writer can act on.
-    expect(ROUTE).toMatch(/status:\s*409/)
+    // DAY_CAP_STATUS is 409. The literal moved into lib/server/day-cap-refusal.ts when the create
+    // and muster routes were found to have NO mapping at all -- see
+    // tests/day-cap-is-a-refusal-not-a-fault.test.ts, which now checks all three writers.
+    expect(ROUTE).toMatch(/DAY_CAP_STATUS|status:\s*409/)
   })
 
   it("distinguishes 'not sent' from 'cleared', so an edit cannot silently drop a field", () => {
