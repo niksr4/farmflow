@@ -156,6 +156,18 @@ export default function PickingLogTab() {
   const [loading, setLoading] = useState(true)
   const [totalKg, setTotalKg] = useState(0)
   const [totalAmount, setTotalAmount] = useState(0)
+  /**
+   * ⚠ THE HEADER TOTAL COVERS THE WHOLE PERIOD; THE TABLE SHOWS AT MOST 200 ROWS.
+   * The route's summary query runs over the entire filter with no LIMIT while the rows query is
+   * capped at 200, and this component used to read totalKg/totalAmount and DISCARD totalCount --
+   * so Estate Mock's November rendered "28,671.7 kg / Rs 1,95,531" above 200 rows summing to
+   * 13,878 kg / Rs 92,882, with no pagination and nothing saying so. At 40 pickers filing one row
+   * a day, HoneyFarm crosses 200 on day 5 of the month.
+   *
+   * The total is the honest figure and stays. What was missing is the disclosure, which
+   * labor-deployment-tab and journal-tab already render for exactly this shape.
+   */
+  const [totalCount, setTotalCount] = useState(0)
   const [startDate, setStartDate] = useState(firstOfMonth())
   const [endDate, setEndDate] = useState(today())
 // Radix throws on <SelectItem value="">, which takes the whole tab down via the error boundary.
@@ -224,6 +236,7 @@ const ALL_WORKERS = "all"
         setRecords(data.records || [])
         setTotalKg(data.totalKg || 0)
         setTotalAmount(data.totalAmount || 0)
+        setTotalCount(Number(data.totalCount) || (data.records || []).length)
       }
     } catch {
       toast.error("Failed to load picking records")
@@ -392,10 +405,19 @@ const ALL_WORKERS = "all"
               Picking Log
             </CardTitle>
             <CardDescription>
-              Piece-rate cherry picking using the shared worker roster. Use this only when you pay pickers per kg.
+              {/* Was "Use this only when you pay pickers per kg" -- written before scripts/154 added the
+                  two day-rate modes, whose own migration notes call day-rate-plus-incentive "MOST OF THE
+                  ROSTER" at HoneyFarm. A writer following that sentence would not use this tab for the
+                  majority of their pickers. */}
+              Cherry and pepper picking against the shared worker roster. Per kilo, a day rate, or a day rate plus incentive.
               {!loading && (
                 <span className="ml-2 font-medium text-foreground">
                   {totalKg.toLocaleString("en-IN", { maximumFractionDigits: 1 })} kg · {formatCurrency(totalAmount)}
+                  {totalCount > records.length && (
+                    <span className="ml-1 font-normal text-muted-foreground">
+                      (for the whole period — showing the latest {records.length} of {totalCount} entries)
+                    </span>
+                  )}
                 </span>
               )}
             </CardDescription>
@@ -747,8 +769,27 @@ const ALL_WORKERS = "all"
                         <TableCell><Input type="date" value={editForm.pickDate} onChange={(e) => setEditForm((f) => ({ ...f, pickDate: e.target.value }))} className="h-8 w-36" /></TableCell>
                         <TableCell className="text-sm text-muted-foreground">{r.workerName}</TableCell>
                         <TableCell><Input type="number" inputMode="decimal" min={0} step={0.1} value={numericInputValue(editForm.kgPicked)} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
-                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.5} value={numericInputValue(editForm.ratePerKg)} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
-                        <TableCell className="text-right text-sm">{editForm.kgPicked && editForm.ratePerKg ? formatCurrency(Number(editForm.kgPicked) * Number(editForm.ratePerKg)) : "—"}</TableCell>
+                        {/* ⚠ RATE PER KG ONLY APPLIES TO A PIECE ROW. This input used to render for every
+                            mode while toPickingPayload nulls ratePerKg unless payMode is "piece" -- so on a
+                            day-rate row you could type 5, watch the Amount cell say Rs 243, save, and get
+                            Rs 494 back. The typed rate was discarded and the figure shown was never real. */}
+                        <TableCell>
+                          {editForm.payMode === "piece" ? (
+                            <Input type="number" inputMode="decimal" min={0} step={0.5} value={numericInputValue(editForm.ratePerKg)} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              {editForm.payMode === "daily" ? "day rate" : "day + incentive"}
+                            </span>
+                          )}
+                        </TableCell>
+                        {/* The row's OWN pay mode decides the money, via the same helper the add form and
+                            the generated column use -- not the piece formula applied to everything. */}
+                        <TableCell className="text-right text-sm">
+                          {(() => {
+                            const preview = pickingRowCost(asPayInput(editForm, workers.find((w) => w.id === editForm.workerId) ?? null))
+                            return preview === null ? "—" : formatCurrency(preview)
+                          })()}
+                        </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <Select value={editForm.locationId} onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}>
                             <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Location" /></SelectTrigger>
