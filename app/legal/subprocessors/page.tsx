@@ -28,11 +28,6 @@ const SUBPROCESSORS = [
     location: "EU (routed via our own domain, /ingest/)",
   },
   {
-    name: "Google Analytics (GA4)",
-    purpose: "Website traffic and acquisition analytics",
-    location: "United States",
-  },
-  {
     name: "Sentry",
     purpose: "Error and performance monitoring",
     location: "EU (de.sentry.io)",
