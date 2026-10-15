@@ -156,11 +156,32 @@ jobs:
               '[.[] | select(.user.login == "coderabbitai[bot]")] | length')
             if [ "$after" -gt "$before" ]; then
               echo "✓ CodeRabbit acknowledged the request on #$target"
-              reply=$(gh api "repos/$REPO/issues/$target/comments" --jq \
-                '[.[] | select(.user.login == "coderabbitai[bot]")] | last | .body')
+              # ⚠ WAIT BEFORE READING THE BODY. CodeRabbit posts a bare acknowledgement and then
+              # EDITS THAT SAME COMMENT seconds later to add the outcome. Measured on #65,
+              # 2026-10-14: comment created 12:17:17, edited 12:17:31 to add "Review rate
+              # limited." This step read it at 12:17:22 -- in the gap -- found no "rate limit",
+              # and logged "Review triggered." for a review that never happened.
+              #
+              # That is the one thing this workflow exists to detect, so a false negative here is
+              # worse than the silence it replaced: it reports success hourly while the backlog
+              # grows. Polling the edited body is what closes it.
+              reply=""
+              for _ in $(seq 1 8); do
+                sleep 5
+                reply=$(gh api "repos/$REPO/issues/$target/comments" --jq \
+                  '[.[] | select(.user.login == "coderabbitai[bot]")] | last | .body')
+                # Stop as soon as the comment says something conclusive either way.
+                if printf '%s' "$reply" | grep -qiE "rate limit|review (skipped|in progress)|actionable comments"; then
+                  break
+                fi
+              done
               # A refusal is not a review. Say which one happened so the log is worth reading.
               if printf '%s' "$reply" | grep -qi "rate limit"; then
-                echo "⚠ but it was RATE LIMITED, not reviewed. Next run will try again."
+                echo "::warning title=Not reviewed::CodeRabbit RATE LIMITED the request on #$target. Next run will try again."
+                echo "⚠ RATE LIMITED, not reviewed. Next run will try again."
+              elif printf '%s' "$reply" | grep -qi "review skipped"; then
+                echo "::warning title=Not reviewed::CodeRabbit SKIPPED the review on #$target."
+                echo "⚠ SKIPPED, not reviewed."
               else
                 echo "  Review triggered."
               fi

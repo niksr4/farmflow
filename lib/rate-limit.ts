@@ -7,6 +7,7 @@ type RateLimitKey =
   | "aiAssistant"
   | "aiProactiveInsights"
   | "aiSeasonCompare"
+  | "aiValidate"
   | "news"
   | "weather"
   | "authLogin"
@@ -75,6 +76,10 @@ const LIMITS: Record<RateLimitKey, { limit: number; windowMs: number }> = {
   aiAssistant:           { limit: 12, windowMs: 5 * 60_000 },
   aiProactiveInsights:   { limit: 4,  windowMs: 30 * 60_000 },
   aiSeasonCompare:       { limit: 3,  windowMs: 60 * 60_000 },
+  // ai-validate was the ONE ai route with a model call and no limit -- every other one pairs a
+  // model call with both a module gate and a limit. Any authenticated user in any tenant could
+  // invoke paid model calls in a loop. Raised as P2-2 by the 2026-10-14 production audit.
+  aiValidate:            { limit: 6,  windowMs: 60_000 },
   news:                  { limit: 30, windowMs: 60_000 },
   weather:               { limit: 30, windowMs: 60_000 },
   authLogin:             { limit: 10, windowMs: 10 * 60_000 },
