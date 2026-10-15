@@ -9,6 +9,7 @@ import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { aggregate, attemptRead, failedReads } from "@/lib/server/incomplete-read"
 import { CLAUDE_HAIKU } from "@/lib/server/claude"
 import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
@@ -17,22 +18,40 @@ import { readResponseCache, writeResponseCache } from "@/lib/server/response-cac
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+/**
+ * ⚠ EVERY FIGURE IS NULLABLE, AND null IS NOT 0.
+ *
+ * These aggregates each used to end in `.catch(() => [])`, so a failed query arrived as
+ * `Number(undefined) || 0`. The zero then went into the prompt as "Labour cost: ₹0" and Haiku wrote,
+ * accurately quoting what it was given, that costs had collapsed year on year -- and the narrative
+ * was cached for four hours. A language model cannot tell a measured zero from a missing one, so it
+ * must never be handed one. See lib/server/incomplete-read.ts.
+ */
 type SeasonMetrics = {
-  pulpingKg: number
-  dispatchBags: number
-  salesKg: number
-  salesRevenue: number
-  laborCost: number
-  expenseCost: number
+  pulpingKg: number | null
+  dispatchBags: number | null
+  salesKg: number | null
+  salesRevenue: number | null
+  laborCost: number | null
+  expenseCost: number | null
 }
+
+/** The metrics, plus the names of whichever reads did not come back. */
+type SeasonReading = { metrics: SeasonMetrics; unavailable: string[] }
 
 async function fetchSeasonAggregates(
   tenantContext: ReturnType<typeof normalizeTenantContext>,
   startDate: string,
   endDate: string,
   activeEstate: string | null,
-): Promise<SeasonMetrics> {
-  if (!sql) return { pulpingKg: 0, dispatchBags: 0, salesKg: 0, salesRevenue: 0, laborCost: 0, expenseCost: 0 }
+  window: string,
+): Promise<SeasonReading> {
+  if (!sql) {
+    return {
+      metrics: { pulpingKg: null, dispatchBags: null, salesKg: null, salesRevenue: null, laborCost: null, expenseCost: null },
+      unavailable: ["everything (no database configured)"],
+    }
+  }
 
   const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
     sql`
@@ -57,21 +76,21 @@ async function fetchSeasonAggregates(
   const expenseEstateClause = expenseSupportsLocation ? estateClause : sql``
 
   const [processing, dispatch, sales, labor, expenses] = await Promise.all([
-    runTenantQuery(sql, tenantContext, sql`
+    attemptRead(`${window} pulping`, runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(crop_today), 0) AS total_kg
       FROM processing_records
       WHERE process_date >= ${startDate}::date AND process_date <= ${endDate}::date
         AND tenant_id = ${tenantContext.tenantId}
         ${estateClause}
-    `).catch(() => []),
-    runTenantQuery(sql, tenantContext, sql`
+    `)),
+    attemptRead(`${window} dispatch`, runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(bags_dispatched), 0) AS total_bags
       FROM dispatch_records
       WHERE dispatch_date >= ${startDate} AND dispatch_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${estateClause}
-    `).catch(() => []),
-    runTenantQuery(sql, tenantContext, sql`
+    `)),
+    attemptRead(`${window} sales`, runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(kgs), 0) AS total_kgs, COALESCE(SUM(revenue), 0) AS total_revenue
       -- booked_revenue: see scripts/121. A year-on-year comparison built on sales_records
       -- alone silently drops whichever years had pepper sales.
@@ -79,37 +98,48 @@ async function fetchSeasonAggregates(
       WHERE sale_date >= ${startDate} AND sale_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${estateClause}
-    `).catch(() => []),
-    runTenantQuery(sql, tenantContext, sql`
+    `)),
+    attemptRead(`${window} labour`, runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(total_cost), 0) AS total_cost
       FROM labour_cost
       WHERE work_date >= ${startDate} AND work_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${laborEstateClause}
-    `).catch(() => []),
-    runTenantQuery(sql, tenantContext, sql`
+    `)),
+    attemptRead(`${window} expenses`, runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(total_amount), 0) AS total_amount
       FROM expense_transactions
       WHERE entry_date >= ${startDate} AND entry_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${expenseEstateClause}
-    `).catch(() => []),
+    `)),
   ])
 
-  const firstRow = <T>(rows: unknown): T =>
-    (Array.isArray(rows) ? rows[0] : (rows as any)?.rows?.[0]) as T
-
   return {
-    pulpingKg: Number(firstRow<any>(processing)?.total_kg) || 0,
-    dispatchBags: Number(firstRow<any>(dispatch)?.total_bags) || 0,
-    salesKg: Number(firstRow<any>(sales)?.total_kgs) || 0,
-    salesRevenue: Number(firstRow<any>(sales)?.total_revenue) || 0,
-    laborCost: Number(firstRow<any>(labor)?.total_cost) || 0,
-    expenseCost: Number(firstRow<any>(expenses)?.total_amount) || 0,
+    metrics: {
+      pulpingKg: aggregate(processing, "total_kg"),
+      dispatchBags: aggregate(dispatch, "total_bags"),
+      salesKg: aggregate(sales, "total_kgs"),
+      salesRevenue: aggregate(sales, "total_revenue"),
+      laborCost: aggregate(labor, "total_cost"),
+      expenseCost: aggregate(expenses, "total_amount"),
+    },
+    unavailable: failedReads({
+      "pulping output": processing,
+      "dispatch": dispatch,
+      "sales": sales,
+      "labour cost": labor,
+      "other expenses": expenses,
+    }),
   }
 }
 
-function pctChange(curr: number, prev: number): string {
+/**
+ * Unknown in, unknown out. Returning "—" for a null is what keeps an unreadable figure from being
+ * described as a change of some definite size.
+ */
+function pctChange(curr: number | null, prev: number | null): string {
+  if (curr === null || prev === null) return "not comparable"
   if (prev === 0) return curr > 0 ? "+∞%" : "—"
   const pct = ((curr - prev) / prev) * 100
   return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`
@@ -169,16 +199,37 @@ export async function GET(request: Request) {
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
-    const [curr, prev] = await Promise.all([
-      fetchSeasonAggregates(tenantContext, currentFY.startDate, todayStr, activeEstate),
-      fetchSeasonAggregates(tenantContext, prevFY.startDate, prevEndDate, activeEstate),
+    const [currReading, prevReading] = await Promise.all([
+      fetchSeasonAggregates(tenantContext, currentFY.startDate, todayStr, activeEstate, currentFY.label),
+      fetchSeasonAggregates(tenantContext, prevFY.startDate, prevEndDate, activeEstate, prevFY.label),
     ])
+    const curr = currReading.metrics
+    const prev = prevReading.metrics
+    const unavailable = [...new Set([...currReading.unavailable, ...prevReading.unavailable])].sort()
 
-    // Check if there's enough data to compare
-    const hasCurrentData = curr.pulpingKg > 0 || curr.salesKg > 0 || curr.dispatchBags > 0
-    const hasPrevData = prev.pulpingKg > 0 || prev.salesKg > 0 || prev.dispatchBags > 0
+    /**
+     * ⚠ "NOTHING TO COMPARE" AND "COULD NOT READ IT" ARE DIFFERENT ANSWERS.
+     *
+     * This check used to be `curr.pulpingKg > 0 || ...` over figures that were 0 on failure, so a
+     * database problem reported itself as `insufficient_data` -- telling an estate with ten years of
+     * records that it had none yet. Volume now counts only where it was actually read.
+     */
+    const volumeRead = (m: SeasonMetrics) =>
+      m.pulpingKg !== null || m.salesKg !== null || m.dispatchBags !== null
+    const hasData = (m: SeasonMetrics) =>
+      (m.pulpingKg ?? 0) > 0 || (m.salesKg ?? 0) > 0 || (m.dispatchBags ?? 0) > 0
 
-    if (!hasCurrentData && !hasPrevData) {
+    if (!volumeRead(curr) && !volumeRead(prev)) {
+      // Not one volume figure came back from either window. That is a fault, and saying "no data"
+      // would be a guess dressed as a finding.
+      logServerError("Season compare could not read any volume figure", new Error(unavailable.join(", ")))
+      return Response.json(
+        { success: false, error: "Could not read this season's figures. Try again in a moment." },
+        { status: 503, headers: rateHeaders },
+      )
+    }
+
+    if (!hasData(curr) && !hasData(prev) && unavailable.length === 0) {
       return Response.json(
         { success: true, narrative: null, reason: "insufficient_data" },
         { headers: rateHeaders },
@@ -188,20 +239,54 @@ export async function GET(request: Request) {
     const periodLabel = `${currentFY.startDate} to ${todayStr}`
     const prevPeriodLabel = `${prevFY.startDate} to ${prevEndDate}`
 
+    /**
+     * A METRIC GOES IN THE PROMPT ONLY IF BOTH WINDOWS WERE READ.
+     *
+     * A comparison needs two figures. The old prompt printed one real number against a fabricated
+     * zero and asked for a year-on-year reading, which is how "labour cost down 100%" got written
+     * about an estate whose labour query had simply timed out.
+     */
+    const COMPARABLE = [
+      { key: "pulpingKg", label: "Pulping output", unit: "kg" },
+      { key: "dispatchBags", label: "Dispatch received", unit: "bags" },
+      { key: "salesKg", label: "Sales volume", unit: "kg" },
+      { key: "salesRevenue", label: "Revenue", unit: "inr" },
+      { key: "laborCost", label: "Labour cost", unit: "inr" },
+      { key: "expenseCost", label: "Other expenses", unit: "inr" },
+    ] as const
+
+    const shown = COMPARABLE.filter((m) => curr[m.key] !== null && prev[m.key] !== null)
+    const omitted = COMPARABLE.filter((m) => curr[m.key] === null || prev[m.key] === null)
+
+    if (!shown.length) {
+      logServerError("Season compare had no metric readable in both windows", new Error(unavailable.join(", ")))
+      return Response.json(
+        { success: false, error: "Could not read this season's figures. Try again in a moment." },
+        { status: 503, headers: rateHeaders },
+      )
+    }
+
+    const value = (n: number, unit: string) =>
+      unit === "inr" ? `₹${n.toLocaleString()}` : `${n.toLocaleString()} ${unit === "kg" ? "KG" : unit}`
+
     const dataSummary = `
 Same-period season comparison (both windows cover the same elapsed days into the fiscal year):
 
 ${prevFY.label} — ${prevPeriodLabel}:
-- Pulping output: ${prev.pulpingKg.toLocaleString()} KG
-- Dispatch received: ${prev.dispatchBags.toLocaleString()} bags
-- Sales volume: ${prev.salesKg.toLocaleString()} KG | Revenue: ₹${prev.salesRevenue.toLocaleString()}
-- Labour cost: ₹${prev.laborCost.toLocaleString()} | Other expenses: ₹${prev.expenseCost.toLocaleString()}
+${shown.map((m) => `- ${m.label}: ${value(prev[m.key] as number, m.unit)}`).join("\n")}
 
 ${currentFY.label} — ${periodLabel} (in progress, same point in season):
-- Pulping output: ${curr.pulpingKg.toLocaleString()} KG  (${pctChange(curr.pulpingKg, prev.pulpingKg)} vs same point last season)
-- Dispatch received: ${curr.dispatchBags.toLocaleString()} bags  (${pctChange(curr.dispatchBags, prev.dispatchBags)} vs same point last season)
-- Sales volume: ${curr.salesKg.toLocaleString()} KG | Revenue: ₹${curr.salesRevenue.toLocaleString()}  (${pctChange(curr.salesRevenue, prev.salesRevenue)} vs same point last season)
-- Labour cost: ₹${curr.laborCost.toLocaleString()} | Other expenses: ₹${curr.expenseCost.toLocaleString()}
+${shown
+  .map(
+    (m) =>
+      `- ${m.label}: ${value(curr[m.key] as number, m.unit)}  (${pctChange(curr[m.key], prev[m.key])} vs same point last season)`,
+  )
+  .join("\n")}
+${
+  omitted.length
+    ? `\nNOT MEASURED for this comparison: ${omitted.map((m) => m.label).join(", ")}. These figures could not be read. Do not mention them, do not treat them as zero, and do not estimate them.`
+    : ""
+}
     `.trim()
 
     const narrative =
@@ -228,8 +313,20 @@ ${currentFY.label} — ${periodLabel} (in progress, same point in season):
       currentPeriod: periodLabel,
       prevPeriod: prevPeriodLabel,
       metrics: { curr, prev },
+      // So the caller can say the comparison is incomplete rather than presenting it as whole.
+      partial: unavailable.length > 0,
+      unavailable,
     }
-    await writeResponseCache(cacheKey, comparePayload)
+
+    /**
+     * ⚠ A PARTIAL ANSWER IS NEVER CACHED. The cache holds for four hours, so caching one would turn
+     * a few seconds of database trouble into four hours of an estate reading a comparison with a
+     * metric silently missing from it -- long after the fault had cleared. A transient failure
+     * should cost a retry, not a shelf life.
+     */
+    if (!comparePayload.partial) {
+      await writeResponseCache(cacheKey, comparePayload)
+    }
     return Response.json({ success: true, ...comparePayload }, { headers: rateHeaders })
   } catch (error) {
     if (isModuleAccessError(error)) {

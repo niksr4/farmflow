@@ -6,6 +6,7 @@ import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { attemptRead, failedReads, rowsOrNone } from "@/lib/server/incomplete-read"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import type { ActivityModule } from "@/lib/activity-contracts"
 
@@ -56,50 +57,56 @@ export async function GET(request: Request) {
     const expenseEstateFilter = expenseSupportsLocation ? estateFilter : sql``
 
     const [processing, dispatch, sales, labor, expenses] = await Promise.all([
-      runTenantQuery(sql, tenantContext, sql`
+      attemptRead("recent processing", runTenantQuery(sql, tenantContext, sql`
         SELECT process_date::text AS date, coffee_type, crop_today, dry_parch
         FROM processing_records
         WHERE tenant_id = ${tenantId}
           ${estateFilter}
         ORDER BY process_date DESC, id DESC
         LIMIT 3
-      `).catch(() => []),
-      runTenantQuery(sql, tenantContext, sql`
+      `)),
+      attemptRead("recent dispatch", runTenantQuery(sql, tenantContext, sql`
         SELECT dispatch_date::text AS date, coffee_type, bags_dispatched
         FROM dispatch_records
         WHERE tenant_id = ${tenantId}
           ${estateFilter}
         ORDER BY dispatch_date DESC, id DESC
         LIMIT 3
-      `).catch(() => []),
-      runTenantQuery(sql, tenantContext, sql`
+      `)),
+      attemptRead("recent sales", runTenantQuery(sql, tenantContext, sql`
         SELECT sale_date::text AS date, coffee_type, kgs, revenue
         FROM sales_records
         WHERE tenant_id = ${tenantId}
           ${estateFilter}
         ORDER BY sale_date DESC, id DESC
         LIMIT 3
-      `).catch(() => []),
-      runTenantQuery(sql, tenantContext, sql`
+      `)),
+      attemptRead("recent labour", runTenantQuery(sql, tenantContext, sql`
         SELECT (work_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, activity_code AS code, total_cost
         FROM labour_cost
         WHERE tenant_id = ${tenantId}
           ${laborEstateFilter}
         ORDER BY work_date DESC, source_id DESC
         LIMIT 2
-      `).catch(() => []),
-      runTenantQuery(sql, tenantContext, sql`
+      `)),
+      attemptRead("recent expenses", runTenantQuery(sql, tenantContext, sql`
         SELECT (entry_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, code, total_amount
         FROM expense_transactions
         WHERE tenant_id = ${tenantId}
           ${expenseEstateFilter}
         ORDER BY entry_date DESC, id DESC
         LIMIT 2
-      `).catch(() => []),
+      `)),
     ])
 
-    const toArray = (rows: unknown) =>
-      Array.isArray(rows) ? rows : ((rows as any)?.rows ?? [])
+    /**
+     * This is a feed, so an absent module is honest in a way an absent total never is -- a shorter
+     * list makes no numeric claim. What was NOT honest was the silence: each read ended in
+     * `.catch(() => [])`, so a module whose query had been failing for weeks simply never appeared
+     * and nothing anywhere said so. attemptRead logs it, and `partial` lets the caller say the feed
+     * is incomplete instead of implying nothing happened. See lib/server/incomplete-read.ts.
+     */
+    const toArray = rowsOrNone
 
     const entries: ActivityEntry[] = []
 
@@ -152,7 +159,20 @@ export async function GET(request: Request) {
     entries.sort((a, b) => (b.date > a.date ? 1 : -1))
     const recent = entries.slice(0, 8)
 
-    return Response.json({ success: true, entries: recent })
+    const unavailable = failedReads({
+      processing,
+      dispatch,
+      sales,
+      labour: labor,
+      expenses,
+    })
+
+    return Response.json({
+      success: true,
+      entries: recent,
+      partial: unavailable.length > 0,
+      unavailable,
+    })
   } catch (error) {
     logServerError("Recent activity error", error)
     return Response.json(

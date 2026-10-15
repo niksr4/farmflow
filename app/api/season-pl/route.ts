@@ -4,7 +4,8 @@ import { sql, accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
-import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { aggregate, attemptRead } from "@/lib/server/incomplete-read"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -41,14 +42,21 @@ export type SeasonPLResponse = {
     processingDays: number
   }
   // Reconciliation: dispatch received vs sold, and unsold inventory position
+  //
+  // ⚠ NULL MEANS "COULD NOT BE READ", AND IS NOT INTERCHANGEABLE WITH 0. These two reads used to
+  // fall back to a fabricated `{ total_kg_received: 0 }` on any failure, which made unsoldKg
+  // negative, flipped balanceOk false, and rendered "Data integrity issue: sales kg exceed dispatch
+  // kgs received" — accusing the estate's own correct records of being wrong because of a network
+  // blip. A figure nobody measured must not be printed as a figure. See lib/server/incomplete-read.
   reconciliation: {
-    dispatchKgReceived: number
+    dispatchKgReceived: number | null
     salesKgSold: number
-    unsoldKg: number
-    unsoldPct: number
-    // If negative: more kg sold than received from dispatch — data integrity issue
-    balanceOk: boolean
-    closingInventoryValue: number // current_inventory total_cost at time of query
+    unsoldKg: number | null
+    unsoldPct: number | null
+    // true = balances, false = more kg sold than received (a real integrity issue to chase),
+    // null = unknown, because the dispatch figure could not be read. Only `false` may accuse.
+    balanceOk: boolean | null
+    closingInventoryValue: number | null // current_inventory total_cost at time of query
   }
   error?: string
 }
@@ -213,27 +221,50 @@ export async function GET(request: NextRequest) {
     // Reconciliation — tenant-scoped like every other query here. Running these outside
     // runTenantQueries left app.tenant_id unset, so under RLS both came back empty and
     // balanceOk always read false.
-    const [dispatchRows, inventoryValueRows] = await runTenantQueries(sql, tenantContext, [
-      sql.query(
-        `SELECT COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS total_kg_received
-         FROM dispatch_records
-         WHERE tenant_id = $1 AND dispatch_date >= $2::date AND dispatch_date <= $3::date
-           ${estateFilter(4)}`,
-        estate ? [tenantId, start, end, estate] : [tenantId, start, end],
+    //
+    // ⚠ AND THAT IS EXACTLY WHY THE OLD `.catch(() => [[{ total_kg_received: 0 }], ...])` HAD TO GO.
+    // The RLS cause above was fixed; the catch that disguised it as a real zero was not. It kept
+    // turning any failure into a negative unsold balance and a "data integrity issue" banner
+    // blaming the estate's own dispatch and sales records. Unknown is now reported as unknown.
+    const reconciliation = {
+      dispatchReceived: await attemptRead<{ total_kg_received: string }>(
+        "season-pl dispatch received",
+        runTenantQuery(
+          sql,
+          tenantContext,
+          sql.query(
+            `SELECT COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS total_kg_received
+             FROM dispatch_records
+             WHERE tenant_id = $1 AND dispatch_date >= $2::date AND dispatch_date <= $3::date
+               ${estateFilter(4)}`,
+            estate ? [tenantId, start, end, estate] : [tenantId, start, end],
+          ),
+        ),
       ),
-      sql.query(
-        `SELECT COALESCE(SUM(total_cost), 0) AS total_inventory_value
-         FROM current_inventory WHERE tenant_id = $1
-           ${estateFilter(2)}`,
-        estate ? [tenantId, estate] : [tenantId],
+      closingInventory: await attemptRead<{ total_inventory_value: string }>(
+        "season-pl closing inventory value",
+        runTenantQuery(
+          sql,
+          tenantContext,
+          sql.query(
+            `SELECT COALESCE(SUM(total_cost), 0) AS total_inventory_value
+             FROM current_inventory WHERE tenant_id = $1
+               ${estateFilter(2)}`,
+            estate ? [tenantId, estate] : [tenantId],
+          ),
+        ),
       ),
-    ]).catch(() => [[{ total_kg_received: 0 }], [{ total_inventory_value: 0 }]])
-    const dispatchData = toRows(dispatchRows)[0] ?? {}
-    const inventoryValueData = toRows(inventoryValueRows)[0] ?? {}
-    const dispatchKgReceived = Number(dispatchData.total_kg_received ?? 0)
-    const closingInventoryValue = Number(inventoryValueData.total_inventory_value ?? 0)
-    const unsoldKg = dispatchKgReceived - totalKgSold
-    const unsoldPct = dispatchKgReceived > 0 ? (unsoldKg / dispatchKgReceived) * 100 : 0
+    }
+
+    const dispatchKgReceived = aggregate(reconciliation.dispatchReceived, "total_kg_received")
+    const closingInventoryValue = aggregate(reconciliation.closingInventory, "total_inventory_value")
+    // Every figure derived from an unknown is itself unknown. Writing `?? 0` on any of these lines
+    // is how the original bug worked.
+    const unsoldKg = dispatchKgReceived === null ? null : dispatchKgReceived - totalKgSold
+    const unsoldPct =
+      dispatchKgReceived !== null && dispatchKgReceived > 0 && unsoldKg !== null
+        ? (unsoldKg / dispatchKgReceived) * 100
+        : null
 
     // Profitability
     const grossProfitInr = totalSalesInr - totalCostsInr
@@ -276,7 +307,10 @@ export async function GET(request: NextRequest) {
         salesKgSold: totalKgSold,
         unsoldKg,
         unsoldPct,
-        balanceOk: unsoldKg >= 0,
+        // ⚠ WRITTEN OUT LONGHAND ON PURPOSE. `unsoldKg >= 0` was the old line, and with a nullable
+        // unsoldKg it is a trap: `null >= 0` coerces to TRUE in JavaScript, so a read that failed
+        // would report as "balances fine" -- the same lie as before, wearing the fix as a disguise.
+        balanceOk: unsoldKg === null ? null : unsoldKg >= 0,
         closingInventoryValue,
       },
     }

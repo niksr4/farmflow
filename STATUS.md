@@ -3,22 +3,34 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-10-09.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-10-14.** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
 
 ---
 
-## Right now (2026-10-09)
+## Right now (2026-10-14)
 
-**Production is `main@10dd9bb`** — #68, the muster UI pass. Verified live: the domain serves that
-sha and `/`, `/login`, `/signup` all return 200. Rollback target is `farmflowv1-nohxvzjva`
-(`0cdc78d`, #62).
+**Production is `dpl_TnqfwgEeQxCM9kLZtfDsPFdpGU4Z`, built from `7386242`** (#87). Verified live:
+both `www.thefarmflow.in` **and** the apex `thefarmflow.in` resolve to that deployment id, and the
+release smoke passed 80 endpoints signed in as `estate_mock`. Rollback target is
+`dpl_GPqEdCbp5o5uBxcu2RW6xdtXnx8n`.
 
-⚠ **On this project, merging IS deploying.** Verified rather than assumed: every production
-deployment in the Vercel API corresponds to a `main` commit. There is no staging gate and no manual
-promotion — a merge is live in about three minutes. So "merge now, deploy later" is not a thing
-here, and the code word applies to the *merge*.
+⚠ **MERGING IS NO LONGER DEPLOYING — this changed on 2026-10-13 and this file said the opposite
+until 2026-10-14.** `vercel.json` sets `git.deploymentEnabled.main = false`, so a merge to `main`
+lands the code and stops. Production moves only when somebody runs **`pnpm go-live -- --yes`**.
+
+**Read that as a correction to how you plan, not a detail.** The 2026-10-14 audit read the old
+sentence here and concluded that merging PR #78 would close a live P0 on the public signup
+endpoint. It will not: merging lands it on `main`, and production keeps serving whatever was last
+aliased. **Closing anything in production now takes a merge AND a go-live.** The code word applies
+to the *go-live*, not the merge.
+
+⚠ **A manual go-live carries NO GIT METADATA.** The CLI uploads source directly, so
+`meta.githubCommitSha` is empty on every deployment made this way — which means "which commit is
+live?" cannot be answered from the Vercel API any more, and the audit could not answer it. The
+deployment id and its sha are recorded above and by `pnpm go-live` when it runs; keep them current
+here, because nothing else will.
 
 ⚠ **PROD IS AT MIGRATION 152 AND `main` HAS NO 152 FILE.** Applied 2026-10-09 from PR #55's branch,
 because `picking_records` was still 0 rows everywhere and that is the only state in which the
@@ -33,23 +45,32 @@ day-cap is a schema change rather than a wage reconciliation. So the ledger read
   because 0 worker-days were over the 2-job limit. The downward-correction exemption was verified
   present afterwards, which is what keeps the 16 over-a-day worker-days fixable.
 
-Open PRs: **#69** (muted-label contrast, awaiting review), **#66** (processing route — must not
-merge until the three-copy `dry_cherry_percent` bug is fixed), **#55** (picking day budget, now
-unblocked since 152 is on prod), **#65**, **#64**, **#63**, **#61** (conflicting), and
-`ci/coderabbit-trigger` which has no PR yet.
+Open PRs: **#88** (failed reads must not read as zeros, in review), **#78** (signup password
+overwrite — **this is the P0**), **#76** (engagement report cadence), **#66** (processing route —
+must not merge until the three-copy `dry_cherry_percent` bug is fixed), **#65** (landing beans).
 
 What is actually pressing, in order:
 
 | | What | Why now |
 |---|---|---|
-| 1 | **Manoj's picking answers** | Gates picking phases 3–5. Phase 2 (crop on locations) does not need him |
-| 2 | **`worker_pay_rules` and `worker_ledger` are 0 rows on prod** | Every retention/overtime/advance screen is built, shipped and **never used by anyone**. Whoever tries first is the first real exercise of that code |
-| 3 | **Laxmi stopped recording** | Still a phone call, not a bug. Also owes us the 15 May opening-stock cost (Urea 1,650 kg, DAP 150 kg at ₹0) |
-| 4 | **Vercel Hobby forbids commercial use** | Hobby is "non-commercial, personal use only" and we are a live multi-tenant SaaS. Enforcement is an account pause. Must be resolved before Razorpay goes live |
-| 5 | **Migration 74 still absent from prod** | Blocks all billing; without it the access gate resolves every tenant as legacy/always-active |
-| 6 | **Repo is public** | Not required by Vercel — private costs $0 there. It costs $4/mo at GitHub, because the `main is production` ruleset is only free on public repos. See the note under "Known and deliberately not fixed" |
+| 1 | **#78 — and then a go-live** | A stranger who knows the email of someone mid-signup can overwrite the stored password hash and end up owning the provisioned estate as **admin**. Public, unauthenticated endpoint. The fix is written and tested; it is live in production until it is merged **and** deployed |
+| 2 | **Writes are auto-retried and 7 money tables cannot refuse a duplicate** | `runTenantQuery` retries on `fetch failed`/`econnreset`/`etimedout` — exactly the errors that cannot tell "never arrived" from "committed, response lost". Protected: `attendance_records`, `rainfall_records`, `processing_records`. Not: `labor_transactions`, `expense_transactions`, `transaction_history`, `picking_records`, `labour_assignments`, `sales_records`, `dispatch_records`. One flaky round trip during a muster save doubles a labour row, and every costing number reads it |
+| 3 | **Location scoping is offered in the admin UI and enforced by 3 of 141 routes** | `getAccessibleLocationIds` has only three callers. Restrict a writer to one block and they can still read and write every other block's expenses, labour, stock, sales and rainfall. `user_locations` was 0 rows at last count, so decide: enforce at the estate-filter chokepoint, or withdraw the UI. An unenforced control is worse than an absent one |
+| 4 | **Manoj's picking answers** | Gates picking phases 3–5. Phase 2 (crop on locations) does not need him |
+| 5 | **`worker_pay_rules` and `worker_ledger` are 0 rows on prod** | Every retention/overtime/advance screen is built, shipped and **never used by anyone**. Whoever tries first is the first real exercise of that code |
+| 6 | **Laxmi stopped recording** | Still a phone call, not a bug. Also owes us the 15 May opening-stock cost (Urea 1,650 kg, DAP 150 kg at ₹0) |
+| 7 | **Vercel Hobby forbids commercial use** | Hobby is "non-commercial, personal use only" and we are a live multi-tenant SaaS. Enforcement is an account pause. Must be resolved before Razorpay goes live |
+| 8 | **Migration 74 still absent from prod** | Blocks all billing; without it the access gate resolves every tenant as legacy/always-active |
+| 9 | **Repo is public** | Not required by Vercel — private costs $0 there. It costs $4/mo at GitHub, because the `main is production` ruleset is only free on public repos. See the note under "Known and deliberately not fixed" |
 
-Rollback for anything: `vercel alias set <previous-deployment-id> www.thefarmflow.in`.
+Rows 1–3 are from [docs/AUDIT-2026-10-14.md](docs/AUDIT-2026-10-14.md), re-verified against the dev
+schema and the live aliases. That audit's own P0 remediation says "merge #78" and is **one step
+short** for the reason in the deployment note above.
+
+Rollback for anything: **`pnpm rollback -- --yes`**. Do *not* hand-alias one domain —
+`vercel alias set <id> www.thefarmflow.in` leaves real visitors on the broken build at the apex,
+which reads as a completed rollback and is not one. `pnpm rollback` moves both and re-reads them
+back from Vercel to confirm.
 
 ### Competitors, as of 2026-10-09
 
@@ -312,6 +333,38 @@ for every possible input.
 
 ## Decided — do not re-argue without new information
 
+### Decided 2026-10-14, off the two audits
+
+- **Duplicate writes get an idempotency key, not a natural-key constraint.** A UUID per submission
+  plus `UNIQUE (tenant_id, idempotency_key)` on the seven unprotected money tables, and a retry that
+  violates it is treated as success. This is the only option that makes the automatic retry **safe**
+  rather than merely removing it: dropping the retry still leaves the case where the write committed
+  and the response was lost, so the writer sees an error, retries by hand, and gets the duplicate
+  anyway. Natural keys were rejected because two identical expenses on the same day are legitimate
+  here — `attendance_records` and `rainfall_records` only work because their natural key genuinely
+  is unique. Build the primitive plus labour and expenses first and prove it with a
+  commit-then-throw harness before touching the other five.
+  - **Protected today:** `attendance_records`, `rainfall_records`, **`processing_records`**
+    (`UNIQUE (tenant_id, location_id, coffee_type, process_date)`). **Unprotected:**
+    `labor_transactions`, `expense_transactions`, `transaction_history`, `picking_records`,
+    `labour_assignments`, `sales_records`, `dispatch_records`. Queried from `pg_index` on dev, not
+    grepped — a grep for `ALTER TABLE … UNIQUE` misses inline `CREATE TABLE` constraints and wrongly
+    reports `attendance_records` unprotected too. The audit said eight tables; it is seven.
+- **The per-user location-scoping admin UI gets withdrawn, and the table stays.** Three of 141
+  routes honour `getAccessibleLocationIds`, so restricting a writer to one block still lets them
+  read and write every other block's expenses, labour, stock, sales and rainfall. `user_locations`
+  is 0 rows, nobody has asked for it, and **an unenforced control is worse than an absent one
+  because it gets trusted.** Reversible the day a customer actually needs per-block access, and the
+  enforcement point when that happens is the estate-filter layer every route already calls, never
+  130 call sites.
+- **Reviews must be requested; CodeRabbit never auto-reviews this repo.** Confirmed from its own
+  comment: *"This repository does not receive automatic reviews because it has fewer than 10 stars."*
+  So `.github/workflows/coderabbit-retry.yml` is load-bearing, not a convenience, and a PR with no
+  review is the default state rather than an oversight. `CODERABBIT_RETRY_TOKEN` is set and proven
+  working (a run acknowledged on #65). It currently holds the `gh` CLI OAuth token, which grants
+  `repo + workflow + gist` across every repo and rotates on `gh auth login` — replace it with a
+  fine-grained token scoped to this repo with Pull requests: write.
+
 - **Coffee only.** Multi-crop config removed; pepper and arecanut are intercrops, not a second market.
 - **Blocks per estate is the standard**, for every tenant present and future.
 - **The estate's acreage is the sum of its blocks.** Not separately typed.
@@ -445,19 +498,32 @@ question about production, look there first — it has probably been asked befor
   `user_locations` entries still returns `null` — which matters, because that table has **0 rows
   across all tenants**, so any fix that conflated the two would have locked out all three writers.
   It does not.
-- ⚠ **The auth half is still open, and it is the more general defect.**
-  [`lib/auth-server.ts:157-183`](lib/auth-server.ts#L157-L183) falls through to trusting the JWT's
-  own claims when its `users` lookup returns nothing, so a deleted account keeps a valid session
-  **with its role** until the token expires. Sessions are **30 days**, so that window is a month,
-  not a page load. #32 stops such a session gaining *locations*; it does not stop it being a
-  session. `users` shows **0 deletion requests and 0 anonymizations** of 11 rows — but **that does
-  not establish the fallback has never run.** It constrains one route to a missing row; a hard
-  delete or an id that drifted would reach the same branch and leave those counters at zero.
-  (Not a tenant mismatch: that lookup runs under the **owner** context and filters on `id` alone,
-  with no `tenant_id` clause, so a row belonging to another tenant is still returned rather than
-  missed.) Nothing records whether `requireSessionUser()` has taken it. If you want to know,
-  instrument the fallback rather than inferring from these counts — this file asserted "the branch
-  has never been taken" on 2026-09-23 and had no evidence for it.
+- ✅ ~~**The auth half is still open, and it is the more general defect**~~ — **FIXED**, PR #51
+  (`c80b4b9`, "a deleted account kept working for up to 30 days"). A session carrying a user id
+  whose `users` row is gone now **throws `Unauthorized`** instead of falling through to the JWT's
+  own `role`/`tenantId`. Before that, deleting a user — or moving them between tenants — left a
+  working token with the old permissions for up to a month, because sessions are 30 days. Revoking
+  access did not revoke access. That was the upstream cause of four downstream fixes (#32, #35,
+  #42, #47), which remain as defence in depth.
+  - It deliberately does **not** fall through to the username lookup either: a username can be
+    reused, so resolving a stale id by name could hand the session to a *different* account that
+    has since taken that name. Legacy tokens carrying no id at all still reach that path, so
+    revocation is not absolute for those.
+  - Verified before the change, under the real runtime path (`app_runtime`, RLS enforced, the same
+    three GUCs `runTenantQuery` sets): **11/11 on prod and 10/10 on dev**, across 6 tenants.
+  - ⚠ **This bullet said "still open", in bold, from 2026-09-23 until 2026-10-14** — three weeks
+    after #51 shipped. The 2026-10-14 audit raised it as a P1 for that reason: a stale "we have an
+    auth hole" claim in the file CLAUDE.md tells you to read first misdirects the scarcest resource
+    here, which is attention. **This is the third such claim in this project** (the `gh` capability
+    note and the ruleset status were the other two), so the pattern is the finding, not the
+    instance. The surrounding reasoning below is still sound and still worth keeping:
+  - **Do not infer from deletion counters.** `users` showing 0 deletion requests and 0
+    anonymizations of 11 rows would *not* have established the old fallback never ran — a hard
+    delete or a drifted id reaches the same branch and leaves those counters at zero. (Not a tenant
+    mismatch either: that lookup runs under the **owner** context and filters on `id` alone, so a
+    row belonging to another tenant is returned rather than missed.) If you ever need to know
+    whether a branch has been taken, instrument it; this file once asserted "the branch has never
+    been taken" with no evidence for it.
 - **Repo visibility is a GitHub cost, not a Vercel one.** Vercel Hobby deploys private repos at no
   charge — visibility appears nowhere in the Hobby/Pro comparison. Going private costs **$4/mo at
   GitHub**, because the `main is production` ruleset is only free on *public* repos, and private

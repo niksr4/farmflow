@@ -53,12 +53,20 @@ export async function GET(request: Request) {
       ? sql!` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${context.tenantId} AND estate = ${activeEstate}))`
       : sql!``
 
-    // Fetch bag weight for kg resolution on sales
+    /**
+     * Bag weight, used to resolve bags into kg on sales.
+     *
+     * ⚠ NO `.catch(() => [])` HERE. It had one, and the fallback was the 50 kg default -- so a
+     * failed read silently costed a 60 kg-bag tenant's entire season at 50, understating kg sold and
+     * overstating revenue per kg by a fifth, with nothing logged. The default is for a tenant who
+     * has not set a weight, which is a real and answerable state; it is not a stand-in for a read
+     * that did not happen. A failure belongs in the catch below, which returns an honest error.
+     */
     const bagWeightRows = await runTenantQuery<{ bag_weight_kg: number }>(
       sql!,
       context,
       sql!`SELECT bag_weight_kg FROM tenants WHERE id = ${context.tenantId} LIMIT 1`,
-    ).catch(() => [])
+    )
     const bagWeightKg = Number((bagWeightRows as any[])[0]?.bag_weight_kg) || DEFAULT_BAG_WEIGHT_KG
 
     const [laborResult, expenseResult, parchmentResult, salesResult] = await Promise.all([

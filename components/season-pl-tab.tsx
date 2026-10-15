@@ -19,6 +19,16 @@ const fmtKg = (n: number) =>
 
 const fmtPct = (n: number) => `${n.toFixed(1)}%`
 
+/**
+ * A reconciliation figure the server could not read comes back as null, and must not be printed as
+ * a number. "Not available" is a worse-looking card than a zero and a far better one than a wrong
+ * figure: the zero version of this panel told estates their dispatch and sales records contradicted
+ * each other whenever one query failed. See lib/server/incomplete-read.ts.
+ */
+const UNAVAILABLE = "Not available"
+const orUnavailable = (n: number | null, format: (v: number) => string) =>
+  n === null ? UNAVAILABLE : format(n)
+
 function KpiCard({
   label,
   value,
@@ -352,9 +362,14 @@ export default function SeasonPlTab() {
             <Card className="border-stone-200 bg-white">
               <CardHeader className="border-b border-stone-100 pb-3">
                 <div className="flex items-center gap-2">
-                  {!data.reconciliation.balanceOk ? (
+                  {/* Three states, not two. `balanceOk === null` means the dispatch figure could not
+                      be read, which is neither a pass nor a fault -- showing the red cross for it
+                      is what made a network blip look like the estate's bookkeeping error. */}
+                  {data.reconciliation.balanceOk === null ? (
+                    <AlertTriangle className="h-4 w-4 text-stone-400" />
+                  ) : !data.reconciliation.balanceOk ? (
                     <XCircle className="h-4 w-4 text-rose-500" />
-                  ) : data.reconciliation.unsoldKg > 0 ? (
+                  ) : (data.reconciliation.unsoldKg ?? 0) > 0 ? (
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                   ) : (
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -367,7 +382,7 @@ export default function SeasonPlTab() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-lg border border-stone-100 bg-stone-50 p-3">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Dispatched & received</p>
-                    <p className="mt-1 text-xl font-black tabular-nums text-stone-900">{fmtKg(data.reconciliation.dispatchKgReceived)}</p>
+                    <p className="mt-1 text-xl font-black tabular-nums text-stone-900">{orUnavailable(data.reconciliation.dispatchKgReceived, fmtKg)}</p>
                     <p className="mt-0.5 text-xs text-stone-400">from curing works</p>
                   </div>
                   <div className="rounded-lg border border-stone-100 bg-stone-50 p-3">
@@ -375,30 +390,49 @@ export default function SeasonPlTab() {
                     <p className="mt-1 text-xl font-black tabular-nums text-stone-900">{fmtKg(data.reconciliation.salesKgSold)}</p>
                     <p className="mt-0.5 text-xs text-stone-400">recorded in sales</p>
                   </div>
-                  <div className={cn("rounded-lg border p-3", data.reconciliation.balanceOk ? "border-emerald-100 bg-emerald-50" : "border-rose-200 bg-rose-50")}>
-                    <p className={cn("text-[10px] font-bold uppercase tracking-[0.18em]", data.reconciliation.balanceOk ? "text-emerald-600" : "text-rose-600")}>
-                      {data.reconciliation.balanceOk ? "Unsold balance" : "Balance error"}
-                    </p>
-                    <p className={cn("mt-1 text-xl font-black tabular-nums", data.reconciliation.balanceOk ? "text-emerald-800" : "text-rose-700")}>
-                      {data.reconciliation.balanceOk
-                        ? fmtKg(data.reconciliation.unsoldKg)
-                        : `−${fmtKg(Math.abs(data.reconciliation.unsoldKg))}`}
-                    </p>
-                    <p className={cn("mt-0.5 text-xs", data.reconciliation.balanceOk ? "text-emerald-600" : "text-rose-600")}>
-                      {data.reconciliation.balanceOk
-                        ? `${fmtPct(data.reconciliation.unsoldPct)} unsold`
-                        : "Sold more than dispatched — check records"}
-                    </p>
-                  </div>
+                  {/* Unknown gets its own neutral tile. It used to fall into the red "Balance
+                      error" branch, because `balanceOk` was false whenever the read failed. */}
+                  {data.reconciliation.balanceOk === null ? (
+                    <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">Unsold balance</p>
+                      <p className="mt-1 text-xl font-black tabular-nums text-stone-500">{UNAVAILABLE}</p>
+                      <p className="mt-0.5 text-xs text-stone-500">could not be read just now</p>
+                    </div>
+                  ) : (
+                    <div className={cn("rounded-lg border p-3", data.reconciliation.balanceOk ? "border-emerald-100 bg-emerald-50" : "border-rose-200 bg-rose-50")}>
+                      <p className={cn("text-[10px] font-bold uppercase tracking-[0.18em]", data.reconciliation.balanceOk ? "text-emerald-600" : "text-rose-600")}>
+                        {data.reconciliation.balanceOk ? "Unsold balance" : "Balance error"}
+                      </p>
+                      <p className={cn("mt-1 text-xl font-black tabular-nums", data.reconciliation.balanceOk ? "text-emerald-800" : "text-rose-700")}>
+                        {data.reconciliation.balanceOk
+                          ? orUnavailable(data.reconciliation.unsoldKg, fmtKg)
+                          : `−${fmtKg(Math.abs(data.reconciliation.unsoldKg ?? 0))}`}
+                      </p>
+                      <p className={cn("mt-0.5 text-xs", data.reconciliation.balanceOk ? "text-emerald-600" : "text-rose-600")}>
+                        {data.reconciliation.balanceOk
+                          ? `${orUnavailable(data.reconciliation.unsoldPct, fmtPct)} unsold`
+                          : "Sold more than dispatched — check records"}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg border border-sky-100 bg-sky-50 p-3">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-600">Closing inventory value</p>
-                    <p className="mt-1 text-xl font-black tabular-nums text-sky-900">{fmt(data.reconciliation.closingInventoryValue)}</p>
+                    <p className="mt-1 text-xl font-black tabular-nums text-sky-900">{orUnavailable(data.reconciliation.closingInventoryValue, fmt)}</p>
                     <p className="mt-0.5 text-xs text-sky-600">inputs on hand (cost basis)</p>
                   </div>
                 </div>
-                {!data.reconciliation.balanceOk && (
+                {/* ⚠ `=== false`, NOT `!balanceOk`. The accusation below sends somebody to audit two
+                    tabs of records, so it may only appear when the figures were actually read and
+                    actually disagree. `!null` is true, which is precisely how a failed read used to
+                    produce it. */}
+                {data.reconciliation.balanceOk === false && (
                   <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-                    <span className="font-bold">Data integrity issue:</span> Sales kg exceed dispatch kgs received by {fmtKg(Math.abs(data.reconciliation.unsoldKg))}. This means either dispatch records are incomplete or sales entries have incorrect kg figures. Review both tabs to reconcile.
+                    <span className="font-bold">Data integrity issue:</span> Sales kg exceed dispatch kgs received by {fmtKg(Math.abs(data.reconciliation.unsoldKg ?? 0))}. This means either dispatch records are incomplete or sales entries have incorrect kg figures. Review both tabs to reconcile.
+                  </div>
+                )}
+                {data.reconciliation.balanceOk === null && (
+                  <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+                    Part of this reconciliation could not be loaded, so the balance is not shown. Your records are fine. Reload the tab to try again.
                   </div>
                 )}
               </CardContent>

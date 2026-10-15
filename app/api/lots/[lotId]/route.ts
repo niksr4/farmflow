@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { sql } from "@/lib/server/db"
+import { attemptRead, rowsOrNone } from "@/lib/server/incomplete-read"
 import { checkRateLimit, buildRateLimitHeaders } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -88,17 +89,27 @@ export async function GET(
     const lastMoisture = rows.findLast((r: any) => r.moisture_pct != null)?.moisture_pct ?? null
     const qualityGrade = rows.findLast((r: any) => r.quality_grade != null)?.quality_grade ?? null
 
-    // Fetch compliance certifications for this estate (public-safe subset)
-    const certRows = await sql`
-      SELECT certification_name, status, valid_until::text AS valid_until
-      FROM compliance_records
-      WHERE tenant_id = (
-        SELECT tenant_id FROM processing_records WHERE lot_id = ${normalized} LIMIT 1
-      )
-        AND status = 'active'
-      LIMIT 10
-    `.catch(() => [])
-    const certs = (Array.isArray(certRows) ? certRows : (certRows as any)?.rows ?? []).map((r: any) => ({
+    /**
+     * Compliance certifications for this estate (public-safe subset).
+     *
+     * A missing certification list degrades honestly -- this is a list, not a total, and the page
+     * makes no claim about having all of them. The swallowed catch it replaces was still worth
+     * removing: it reported nothing when the read broke, so a cert list that had stopped loading
+     * would look exactly like an estate with no certifications. attemptRead logs the difference.
+     */
+    const certReading = await attemptRead<{ certification_name: string; valid_until: string | null }>(
+      "lot compliance certifications",
+      sql`
+        SELECT certification_name, status, valid_until::text AS valid_until
+        FROM compliance_records
+        WHERE tenant_id = (
+          SELECT tenant_id FROM processing_records WHERE lot_id = ${normalized} LIMIT 1
+        )
+          AND status = 'active'
+        LIMIT 10
+      `,
+    )
+    const certs = rowsOrNone(certReading).map((r: any) => ({
       name: String(r.certification_name || ""),
       validUntil: r.valid_until ? String(r.valid_until).slice(0, 10) : null,
     }))
