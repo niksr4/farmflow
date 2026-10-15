@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql, accountsSql } from "@/lib/server/db"
 import { isModuleAccessError } from "@/lib/server/module-access"
 import { requireSessionUser } from "@/lib/server/auth"
+import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { getClaudeClient, CLAUDE_HAIKU, isClaudeConfigured, extractClaudeText } from "@/lib/server/claude"
 
@@ -137,6 +138,30 @@ async function buildBaseline(
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireSessionUser()
+
+    /**
+     * ⚠ THIS WAS THE ONE AI ROUTE WITH A MODEL CALL AND NO LIMIT. Every other one pairs the call
+     * with both a module gate and a rate limit -- ai-assistant, ai-analysis and ai-season-compare
+     * all do. So any authenticated user in any tenant could invoke paid model calls in a loop,
+     * with no circuit breaker on third-party spend. Raised as P2-2 by the 2026-10-14 audit, and
+     * the reason to fix it is that it was the single inconsistency in an otherwise uniform
+     * pattern, which is exactly how it would have been missed again.
+     *
+     * Keyed on the TENANT, matching ai-assistant. That does mean one user can exhaust the
+     * estate's allowance; this is a per-keystroke validation helper, so the alternative -- a
+     * per-user key -- would multiply the ceiling by the headcount and defeat the point.
+     *
+     * No module gate added: this validates form input across every module, so gating it on one
+     * would break validation in the others. The limit is the control that was missing.
+     */
+    const rateLimit = await checkRateLimit("aiValidate", sessionUser.tenantId)
+    if (!rateLimit.success) {
+      return NextResponse.json<ValidateResponse>(
+        { ok: true, warning: null, severity: null },
+        { headers: buildRateLimitHeaders(rateLimit) },
+      )
+    }
+
     if (!isClaudeConfigured()) {
       return NextResponse.json<ValidateResponse>({ ok: true, warning: null, severity: null })
     }

@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server"
+// ⚠ A RAW ISO INSTANT IS A DEVELOPER ARTEFACT, and this surface is read by a person: System
+// Health rendered "Last run started at 2026-05-28T02:14:16.164Z." while the card beside it said
+// "Updated 14-Oct-2026, 2:24 PM". UTC, millisecond precision, in a product whose entire date
+// discipline is about showing IST wall clocks. Raised as UX-14 by the 2026-10-14 UX audit.
+import { istDate } from "@/lib/date-utils"
 import { adminSql } from "@/lib/server/db"
 import { inspectPlatformSchemaReadiness } from "@/lib/schema-readiness"
 import { requireOwnerRole } from "@/lib/tenant"
@@ -59,7 +64,7 @@ const buildAgentCheck = (agentName: string, run: any, actionPath: string): Healt
       label: agentName,
       status: "critical",
       value: "Last run failed",
-      detail: startedAt ? `Failed at ${startedAt.toISOString()}.` : "Last run failed.",
+      detail: startedAt ? `Failed at ${istDate(startedAt, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}.` : "Last run failed.",
       actionPath,
     }
   }
@@ -70,7 +75,7 @@ const buildAgentCheck = (agentName: string, run: any, actionPath: string): Healt
       label: agentName,
       status: "warning",
       value: "Run is stale",
-      detail: startedAt ? `Last run started at ${startedAt.toISOString()}.` : "No recent run timestamp.",
+      detail: startedAt ? `Last run started at ${istDate(startedAt, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}.` : "No recent run timestamp.",
       actionPath,
     }
   }
@@ -80,7 +85,7 @@ const buildAgentCheck = (agentName: string, run: any, actionPath: string): Healt
     label: agentName,
     status: "healthy",
     value: "Healthy",
-    detail: startedAt ? `Last run started at ${startedAt.toISOString()}.` : "Agent is healthy.",
+    detail: startedAt ? `Last run started at ${istDate(startedAt, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}.` : "Agent is healthy.",
     actionPath,
   }
 }
