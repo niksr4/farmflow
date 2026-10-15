@@ -10,6 +10,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { dayCapRefusal, DAY_CAP_STATUS } from "@/lib/server/day-cap-refusal"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -338,6 +339,16 @@ export async function POST(request: Request) {
   } catch (error) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    /**
+     * The shared worker-day budget (scripts/152) refuses a booking that would take somebody past a
+     * full day across picking and day-work together. The writer can fix that; until 2026-10-15 it
+     * arrived here as "Failed to save picking record", which is what Nandu at Laxmi saw when Aliza
+     * was already marked for a whole day.
+     */
+    const refusal = dayCapRefusal(error)
+    if (refusal) {
+      return NextResponse.json({ success: false, error: refusal }, { status: DAY_CAP_STATUS })
     }
     await logRouteMutationFailure({ source: "picking-records", endpoint: "/api/picking-records", action: "create", error })
     return NextResponse.json({ success: false, error: "Failed to save picking record" }, { status: 500 })

@@ -192,6 +192,39 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
   const nextStatus = existingSignup?.status === "verified" ? "verified" : "pending"
   const nextVerifiedAt = existingSignup?.status === "verified" ? existingSignup.verified_at : null
 
+  /**
+   * ⚠ ACCOUNT TAKEOVER. THE CREDENTIAL ON AN EXISTING REQUEST IS NOT THE CALLER'S TO REPLACE.
+   *
+   * /api/auth/signup is unauthenticated -- it is a public page and only rate-limits on IP+email.
+   * This UPDATE used to write `password_hash = ${passwordHash}` over whatever was already there,
+   * and then re-send the verification link to the address on the row. So:
+   *
+   *   1. Someone genuinely signs up and has not clicked their link yet.
+   *   2. A stranger who knows their email POSTs the signup form with their OWN password.
+   *   3. The stored hash becomes the stranger's, and the victim is re-sent "verify your signup".
+   *   4. The victim clicks, expecting their own signup. provision-tenant.ts creates the admin
+   *      user with the hash on the row -- the stranger's -- and the stranger can log in.
+   *
+   * The victim sees a signup they really did start, completes it, and ends up with an estate
+   * somebody else holds the password to. Nothing errors at any step.
+   *
+   * Five rows on production are in the vulnerable state right now (3 pending, 2 verified, none
+   * provisioned), and /signup is a live public URL, so every future signup would be too.
+   *
+   * THE CREDENTIAL IS THEREFORE WRITTEN ONCE, AT CREATE, AND NEVER REWRITTEN BY A LATER CALLER.
+   * A fresh signup for an email that already has an unprovisioned request re-sends the link for
+   * the request that exists; it cannot change what that link will produce. Someone who has
+   * genuinely forgotten the password they first chose still gets in, through password reset after
+   * provisioning, which proves control of the mailbox -- which is exactly the proof this path
+   * cannot demand and must not assume.
+   *
+   * The same reasoning covers `name` and `estate_name`: they are what the eventual tenant is
+   * called, so letting a stranger rewrite them is defacement rather than takeover, but it is the
+   * same unproven caller writing the same unverified row.
+   */
+  const keepExistingCredential = Boolean(existingSignup)
+  const passwordHashToStore = keepExistingCredential ? existingSignup!.password_hash : passwordHash
+
   let signupRequest: SignupRequestRecord | null = null
 
   try {
@@ -202,13 +235,14 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
           sql`
             UPDATE signup_requests
             SET
-              name = ${name},
+              -- name and estate_name are deliberately NOT updated from this caller: see the note
+              -- above. They describe the tenant the link will create, and the caller has not
+              -- proven they own this mailbox.
               email = ${email},
               normalized_email = ${email},
-              estate_name = ${estateName},
               country = ${country},
               preferred_locale = ${preferredLocale},
-              password_hash = ${passwordHash},
+              password_hash = ${passwordHashToStore},
               status = ${nextStatus},
               source = ${source},
               verified_at = ${nextVerifiedAt},
@@ -313,6 +347,18 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
       emailDomain: email.split("@")[1] || "",
       estateName,
       source: source || "signup-page",
+      /**
+       * A second signup for an address that already has an unprovisioned request is the shape of
+       * the takeover attempt above, and it is also just somebody signing up twice -- the two are
+       * indistinguishable from here, which is the whole reason the credential is now left alone.
+       *
+       * Recorded rather than blocked. There is no honest way to refuse it: saying "that email
+       * already has a signup" to an unauthenticated caller confirms the address is in the funnel,
+       * and refusing silently would break the legitimate person who lost their first email. So
+       * the request is served as before and the attempt leaves a trail instead.
+       */
+      refreshedExistingRequest: Boolean(existingSignup),
+      credentialRetained: keepExistingCredential,
     },
   })
 
@@ -335,6 +381,7 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
     email,
     maskedEmail: maskEmailAddress(email),
     verificationSent: true,
+    credentialRetained: keepExistingCredential,
   }
 }
 

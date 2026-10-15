@@ -139,6 +139,17 @@ export default function SignupRoute() {
                   })
                   if (data.verificationSent) {
                     const params = new URLSearchParams({ email: data.email || normalized.email })
+                    /**
+                     * This address already had a signup waiting, so the password just typed was
+                     * NOT stored -- the credential on an existing request is not a later caller's
+                     * to replace, or anyone knowing an email could set the password on somebody
+                     * else's pending estate.
+                     *
+                     * Carried to the next screen rather than swallowed. Without it the person
+                     * verifies, tries the password they just chose, and is locked out of their
+                     * own estate with nothing having reported a problem.
+                     */
+                    if (data.credentialRetained) params.set("existing", "1")
                     router.push(`/verify-email?${params.toString()}`)
                   } else {
                     router.push("/login")

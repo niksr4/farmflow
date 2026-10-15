@@ -24,7 +24,7 @@ export default function PrivacyPolicyPage() {
           <li><strong>Account data:</strong> username, email address, role, and tenant association provided at registration.</li>
           <li><strong>Operational data:</strong> inventory records, processing logs, dispatch records, sales entries, accounts, and any other data you enter while using FarmFlow.</li>
           <li><strong>Worker or contact data:</strong> names or identifiers of estate workers or buyers that you optionally enter into the system. You are responsible for ensuring lawful basis for entering such data.</li>
-          <li><strong>Usage and analytics data:</strong> pages visited, features used, session duration, and click events, collected via PostHog (analytics) and Google Analytics 4 (GA4) to improve the product.</li>
+          <li><strong>Usage and analytics data:</strong> pages visited, features used, session duration, and click events, collected via PostHog (analytics) to improve the product.</li>
           <li><strong>Technical data:</strong> IP address, browser type, device type, and cookies necessary for session management and security.</li>
           <li><strong>Communications:</strong> messages you send via the contact form or by email.</li>
         </ul>
@@ -38,19 +38,11 @@ export default function PrivacyPolicyPage() {
         <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
           <li><strong>Session cookies:</strong> required to keep you logged in. These are strictly necessary and cannot be disabled.</li>
           <li><strong>PostHog:</strong> a product analytics tool used to understand how features are used and to identify areas for improvement. PostHog is configured to route data via our own domain (<code>/ingest/</code>) and stores data in the EU. PostHog may set persistent cookies.</li>
-          <li><strong>Google Analytics 4 (GA4):</strong> used to understand overall website traffic and acquisition channels. GA4 sets cookies (including <code>_ga</code> and <code>_gid</code>) and sends anonymised usage data to Google&apos;s servers.</li>
         </ul>
         <p className="text-sm text-muted-foreground">
-          By using FarmFlow, you consent to the use of analytics cookies described above. You can opt out of Google
-          Analytics tracking at any time by installing the{" "}
-          <a
-            href="https://tools.google.com/dlpage/gaoptout"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            Google Analytics Opt-out Browser Add-on
-          </a>.
+          By using FarmFlow, you consent to the use of analytics cookies described above. We removed Google
+          Analytics in October 2026, so FarmFlow no longer sets <code>_ga</code> or <code>_gid</code> cookies and
+          sends nothing to Google.
         </p>
       </section>
 
@@ -98,7 +90,6 @@ export default function PrivacyPolicyPage() {
           <li><strong>Resend (email):</strong> transactional email delivery.</li>
           <li><strong>Anthropic (AI):</strong> AI assistant and analysis features pass relevant context to Anthropic&apos;s API. No data is retained by Anthropic for training without consent.</li>
           <li><strong>PostHog (analytics):</strong> product analytics, EU-hosted.</li>
-          <li><strong>Google Analytics (analytics):</strong> website traffic analytics.</li>
           <li><strong>Sentry (error tracking):</strong> error and performance monitoring.</li>
         </ul>
         <p className="text-sm text-muted-foreground">

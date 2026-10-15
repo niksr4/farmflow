@@ -637,11 +637,31 @@ export default function LaborDeploymentTab({
                       // otherwise scrolling away (which blurs this field) would silently
                       // discard the code + category the user just entered. Only commits when
                       // the query resolves to a real activity, so validation still holds.
+                      //
+                      // ⚠ AND IF IT DOES NOT RESOLVE, KEEP WHAT THEY TYPED. `setCodeQuery(null)`
+                      // used to run unconditionally, which blanked the field whenever the query
+                      // matched nothing -- so the writer looked back at an empty box with no idea
+                      // what happened to their entry. The commonest way to hit that is not a typo:
+                      // `activities` is fetched in an effect, so on a slow connection the list is
+                      // still empty when the field is blurred, resolveActivityFromQuery can only
+                      // return null, and a perfectly valid code is discarded. Rural mobile data is
+                      // the normal case for these estates.
+                      //
+                      // Found by tests/e2e/form-persistence.spec.ts on the authenticated suite's
+                      // first ever CI run -- it had never executed, because the job's secrets were
+                      // never set and both its steps silently skipped.
                       const query = (codeQuery ?? "").trim()
                       setTimeout(() => {
                         const resolved = resolveActivityFromQuery(query, activities)
-                        if (resolved) handleCodeChange(resolved.code)
-                        setCodeQuery(null)
+                        if (resolved) {
+                          handleCodeChange(resolved.code)
+                          setCodeQuery(null)
+                          return
+                        }
+                        // Nothing matched. Leave the text in place rather than clearing it: an
+                        // empty field is indistinguishable from "I never typed anything", and
+                        // `required` on the input will stop the form submitting regardless.
+                        if (!query) setCodeQuery(null)
                       }, 150)
                     }}
                     placeholder="Search activity name or code…"

@@ -158,6 +158,25 @@ jobs:
       #
       # Runs against the dev DB, which is the one CI has credentials for. Prod is deliberately not
       # reachable from CI; verify it with `pnpm schema:rls:prod` when applying migrations there.
+      # ⚠ SAY SO WHEN THE GUARD IS NOT RUNNING. Measured on 2026-10-14: this job had been reporting
+      # `success` with BOTH real steps `skipped`, because no repository secret was ever set --
+      # `gh secret list` held only NEON_API_KEY. So the isolation guard described above, wired in
+      # precisely because a table reached prod with no policy, had never once executed. A skipped
+      # step and a passing step are indistinguishable on the checks list, which is the same
+      # failure class as everything else this guard exists to catch: a green tick that means
+      # nothing ran. This step cannot fail the build without blocking every PR until the secrets
+      # are added, so it annotates loudly instead -- and the annotation is the thing to delete
+      # once they are set, not this comment.
+      - name: Warn if the isolation guard cannot run
+        if: ${{ env.DATABASE_URL_DEV == '' }}
+        run: |
+          echo "::warning title=Tenant isolation guard did NOT run::DATABASE_URL_DEV is not set as a repository secret, so schema:rls and schema:isolation were skipped. RLS drift cannot be observed by any other check. Set DATABASE_URL_DEV to activate it."
+
+      - name: Warn if the authenticated UI smoke cannot run
+        if: ${{ env.E2E_OWNER_PASSWORD == '' || env.DATABASE_URL_DEV == '' }}
+        run: |
+          echo "::warning title=Authenticated E2E did NOT run::E2E_OWNER_USERNAME/E2E_OWNER_PASSWORD (and DATABASE_URL_DEV) are not set, so no signed-in screen is exercised anywhere in CI."
+
       - name: Tenant isolation guard (RLS coverage + cross-tenant read proof)
         if: ${{ env.DATABASE_URL_DEV != '' }}
         run: |

@@ -44,6 +44,13 @@ export type SignupRequestResult = {
   email: string
   maskedEmail: string
   verificationSent: boolean
+  /**
+   * TRUE WHEN THE PASSWORD THE CALLER JUST TYPED WAS NOT STORED, because an unprovisioned signup
+   * request already existed for this address and its credential is not a later caller's to
+   * replace. The caller has to be TOLD: otherwise they verify, try the password they chose, and
+   * are locked out of their own estate with nothing having reported an error.
+   */
+  credentialRetained?: boolean
 }
 
 export type SignupVerificationResult = {

@@ -6,6 +6,7 @@ import { blockedByLabourCutoverBefore } from "@/lib/server/labour-entry-mode"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { activityCodeExistsForTenant } from "@/lib/server/activity-codes"
+import { dayCapRefusal, DAY_CAP_STATUS } from "@/lib/server/day-cap-refusal"
 import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { normalizeAttendanceDate } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
@@ -324,6 +325,12 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    // The worker-day budget refuses an overbooking rather than accepting it silently, and only
+    // the writer can resolve it -- so it must not arrive as a server fault.
+    const refusal = dayCapRefusal(error)
+    if (refusal) {
+      return NextResponse.json({ success: false, error: refusal }, { status: DAY_CAP_STATUS })
+    }
     logServerError("Failed to save labour assignments", { error, tenantId })
     return NextResponse.json(
       { success: false, error: sanitizeRouteError(error, "Could not save the work allocation") },
@@ -498,6 +505,12 @@ export async function PUT(request: Request) {
   } catch (error) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    // The worker-day budget refuses an overbooking rather than accepting it silently, and only
+    // the writer can resolve it -- so it must not arrive as a server fault.
+    const refusal = dayCapRefusal(error)
+    if (refusal) {
+      return NextResponse.json({ success: false, error: refusal }, { status: DAY_CAP_STATUS })
     }
     logServerError("Failed to update a labour assignment", { error, tenantId })
     return NextResponse.json(
