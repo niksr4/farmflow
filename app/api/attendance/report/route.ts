@@ -15,6 +15,7 @@ import {
   type AttendanceReportInput,
 } from "@/lib/attendance-report"
 import { ATTENDANCE_SCHEMA_ERROR_HELP, isMissingBiometricSchemaError } from "@/lib/biometric-attendance"
+import { todayIso } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 
@@ -107,7 +108,10 @@ export async function GET(request: Request) {
       report_date: string
     }>, Array<{ total: number; online: number }>]
 
-    const reportDate = rows[0]?.report_date || requested
+    // An estate with no workers yet returns no rows, so there is no report_date to read back. Falling
+    // through to `requested` alone left "" when no date was asked for: a CSV named "attendance-.csv"
+    // headed with a blank date. The estate's own today is what the query would have defaulted to.
+    const reportDate = rows[0]?.report_date || requested || todayIso()
     const input: AttendanceReportInput[] = rows.map((row) => ({
       employeeCode: row.device_user_code,
       employeeName: row.full_name,
