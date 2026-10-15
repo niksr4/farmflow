@@ -7,6 +7,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import { pickingRowProblem, type PayMode } from "@/lib/picking-pay"
+import { dayCapRefusal, DAY_CAP_STATUS } from "@/lib/server/day-cap-refusal"
 
 /**
  * EDITING A PICKING ROW IS A TWO-WAY DOOR, AND IT WAS NOT.
@@ -166,9 +167,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
      * day across picking and day-work together. That is a refusal the writer can act on, not a
      * fault, so it must not come back as a 500.
      */
-    const message = String((error as Error)?.message || "")
-    if (/day budget|worker .* day|day_cap/i.test(message)) {
-      return NextResponse.json({ success: false, error: message }, { status: 409 })
+    // Shared with the create and muster paths. This route had its own copy of the matcher, and the
+    // other two had none -- which is how Nandu's save failed with "Failed to save picking record".
+    const refusal = dayCapRefusal(error)
+    if (refusal) {
+      return NextResponse.json({ success: false, error: refusal }, { status: DAY_CAP_STATUS })
     }
     logServerError("Failed to update picking record", error)
     return NextResponse.json({ success: false, error: "Failed to update picking record" }, { status: 500 })
