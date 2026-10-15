@@ -49,7 +49,15 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
   const [seasonCompareLoading, setSeasonCompareLoading] = useState(false)
   const [seasonCompareError, setSeasonCompareError] = useState<string | null>(null)
   const [seasonCompareFYLabels, setSeasonCompareFYLabels] = useState<{ curr: string; prev: string } | null>(null)
+  /**
+   * Which figures the server could not read. Both endpoints now report this, and dropping it on the
+   * floor would reinstate the bug one layer up: a comparison missing labour cost reads exactly like
+   * a complete one, and an activity feed missing a module reads like a quiet week. Raised by
+   * CodeRabbit on #88 -- the server half of that PR was honest and the client still was not.
+   */
+  const [seasonCompareUnavailable, setSeasonCompareUnavailable] = useState<string[]>([])
   const [recentActivity, setRecentActivity] = useState<RecentActivityEntry[] | null>(null)
+  const [recentActivityUnavailable, setRecentActivityUnavailable] = useState<string[]>([])
   const [recentActivityLoading, setRecentActivityLoading] = useState(false)
   const [activityStreak, setActivityStreak] = useState<number>(0)
 
@@ -183,11 +191,13 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
         if (!controller.signal.aborted) {
           setSeasonCompareNarrative(json.narrative || null)
           setSeasonCompareFYLabels(json.currentFY && json.prevFY ? { curr: json.currentFY, prev: json.prevFY } : null)
+          setSeasonCompareUnavailable(Array.isArray(json.unavailable) ? json.unavailable : [])
         }
       } catch (error: any) {
         if (!controller.signal.aborted) {
           setSeasonCompareNarrative(null)
           setSeasonCompareFYLabels(null)
+          setSeasonCompareUnavailable([])
           setSeasonCompareError(error?.message || "Season comparison is temporarily unavailable.")
         }
       } finally {
@@ -212,6 +222,7 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
         const data = await res.json().catch(() => ({}))
         if (!controller.signal.aborted && data?.success && Array.isArray(data.entries)) {
           setRecentActivity(data.entries)
+          setRecentActivityUnavailable(Array.isArray(data.unavailable) ? data.unavailable : [])
         }
       } catch {
         // silent — feed just stays hidden
@@ -237,8 +248,10 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
     seasonCompareLoading,
     seasonCompareError,
     seasonCompareFYLabels,
+    seasonCompareUnavailable,
     recentActivity,
     recentActivityLoading,
+    recentActivityUnavailable,
     activityStreak,
   }
 }

@@ -65,9 +65,15 @@ const FALLBACK_STYLE: ModuleStyle = { bg: "bg-stone-50", text: "text-stone-500",
 type Props = {
   loading: boolean
   activity: ActivityEntry[] | null
+  /**
+   * Modules whose read failed. A short feed makes no numeric claim, so the list below is still
+   * honest -- but "nothing happened in sales" and "sales could not be read" look identical here,
+   * and only one of them is worth acting on.
+   */
+  unavailable?: string[]
 }
 
-export default function RecentActivityFeed({ loading, activity }: Props) {
+export default function RecentActivityFeed({ loading, activity, unavailable = [] }: Props) {
   return (
     <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
       <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
@@ -105,6 +111,11 @@ export default function RecentActivityFeed({ loading, activity }: Props) {
                 </div>
               )
             })}
+            {unavailable.length > 0 && (
+              <p className="px-6 py-3 text-xs text-amber-700 dark:text-amber-500">
+                {unavailable.join(", ")} could not be read, so this list may be missing entries.
+              </p>
+            )}
           </div>
         )}
       </div>

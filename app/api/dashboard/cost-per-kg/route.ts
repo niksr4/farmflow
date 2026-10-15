@@ -136,7 +136,27 @@ export async function GET(request: Request) {
     const dryCherryKg = Number(parchmentResult.rows[0]?.dry_cherry_kg) || 0
     const totalOutputKg = dryParchKg + dryCherryKg
     const totalCost = laborCost + expenseCost
-    const costPerKg = totalOutputKg > 0 ? totalCost / totalOutputKg : null
+
+    /**
+     * ⚠ A COST TOTAL MISSING A COMPONENT IS NOT A COST TOTAL.
+     *
+     * `tryQuery` returns `ok: false` when a relation is absent, and the lines above then read `|| 0`
+     * from its empty rows. So if the `labour_cost` view were missing while `expense_transactions`
+     * was present, `totalCost` would be the expenses alone — and labour is the dominant cost on
+     * these estates, so cost per kg would read far too low. `hasData` used an **or**, which declared
+     * that answer valid. Raised as P2-6 by the 2026-10-14 audit.
+     *
+     * Named rather than just nulled, so the UI can say which part is missing instead of showing an
+     * empty card. Same principle as failedReads() in lib/server/incomplete-read.ts.
+     */
+    const missingComponents = [
+      !laborResult.ok && "labour cost",
+      !expenseResult.ok && "other expenses",
+      !parchmentResult.ok && "processing output",
+    ].filter(Boolean) as string[]
+
+    const costPerKg =
+      missingComponents.length === 0 && totalOutputKg > 0 ? totalCost / totalOutputKg : null
 
     const totalRevenue = Number(salesResult.rows[0]?.total_revenue) || 0
     const totalSoldKg = Number(salesResult.rows[0]?.total_sold_kg) || 0
@@ -152,7 +172,8 @@ export async function GET(request: Request) {
     const laborPct = totalCost > 0 ? (laborCost / totalCost) * 100 : null
     const expensePct = totalCost > 0 ? (expenseCost / totalCost) * 100 : null
 
-    const hasData = laborResult.ok || expenseResult.ok
+    // AND, not OR. One component present does not make the total complete.
+    const hasData = laborResult.ok && expenseResult.ok
 
     return NextResponse.json({
       success: true,
@@ -170,6 +191,8 @@ export async function GET(request: Request) {
       laborPct,
       expensePct,
       hasData,
+      // Empty means the figures above are whole. Non-empty names what is missing from them.
+      missingComponents,
     })
   } catch (error) {
     return buildErrorResponse(error, "Failed to load cost-per-kg data", {
