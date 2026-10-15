@@ -3983,7 +3983,7 @@ export default function InventorySystem() {
             ) : lastSync ? (
               <>
                 <RefreshCw className="h-3.5 w-3.5 text-emerald-700" />
-                <span>Synced {lastSync.toLocaleTimeString()}</span>
+                <span>Synced {lastSync.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
               </>
             ) : (
               <>
