@@ -143,6 +143,33 @@ describe("the form sends what it shows", () => {
     expect(TAB).toMatch(/kgRipe:\s*f\.kgRipe === "" \? null : Number\(f\.kgRipe\)/)
   })
 
+  it("renders an input for every field the edit payload sends", () => {
+    /**
+     * ⚠ THE FIELDS WERE LOADED AND SENT ALL ALONG -- ONLY THE INPUTS WERE MISSING, and nothing
+     * could see that. `editForm` carried kgRipe/kgGreen, `toPickingPayload` sent them, and the
+     * schema accepted them, so every existing guard passed while the writer had no field on screen.
+     * Correcting 50 kg to 60 kg on a split row was refused by the client -- "Ripe and green add up
+     * to 50.0 kg, but the total picked is 60.0 kg" -- with no way to make it add up. 63% of dev
+     * picking rows carry a split and HoneyFarm's washed route records them separately.
+     *
+     * Keyed on the EDIT row specifically: the add form has always had these inputs, so a
+     * whole-file search for the name passes on the wrong one. The edit row is the block that
+     * reads from `editForm`.
+     */
+    const editRow = (() => {
+      const start = TAB.indexOf("editingId === r.id")
+      if (start === -1) throw new Error("could not locate the edit row")
+      return TAB.slice(start, start + 4000)
+    })()
+    for (const field of ["kgRipe", "kgGreen"]) {
+      expect(
+        new RegExp(`value=\\{numericInputValue\\(editForm\\.${field}\\)`).test(editRow),
+        `the edit row sends ${field} but renders no input for it, so a split row's weight cannot ` +
+          `be corrected at all -- only deleted and retyped`,
+      ).toBe(true)
+    }
+  })
+
   it("checks the edit before the round trip, as the add path does", () => {
     expect(TAB).toMatch(/editProblem/)
   })
