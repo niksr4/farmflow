@@ -442,6 +442,34 @@ export async function PUT(request: Request) {
     }
 
     try {
+    /*
+    * ⚠ ONLY WRITE WHAT THE REQUEST ACTUALLY SENT. These five used to be set
+    * unconditionally, and readPayMultiplier/optionalAmount DEFAULT when the key is
+    * absent (1 and null) -- so an edit that never mentioned them wrote those defaults
+    * over whatever was there.
+    *
+    * The panel is the reason that matters: WorkerAllocation's editing prop carries
+    * only id, activityCode, locationId, dayFraction and lumpSum, and the GET never
+    * sends the rest. So changing just the block silently reset the multiplier and the
+    * charges. Proven on dev against the real generated column:
+    *
+    *   gang headcount 6, multiplier 2, extras Rs 2,000  total_cost 7760.00 -> 4320.00
+    *   non-gang rate 500, multiplier 2                  total_cost 1000.00 ->  500.00
+    *
+    * 44% and 50% of the cost, gone, with no error. Latent only because no tenant has
+    * used holiday pay, contract pricing or gang extras yet -- and "Holiday 2x" is one
+    * tap away in that panel. 113 allocations have already been edited.
+    *
+    * An absent key means "leave it"; an explicit value (including null) means "set it".
+    *
+    * ⚠ lump_sum IS DELIBERATELY NOT IN THIS LIST, and tests/contract-work.test.ts says
+    * so: for a contract price, absent must mean "clear it", because otherwise a
+    * contract becomes permanent and unclearable. Its safety comes from the panel
+    * PREFILLING lumpSum -- which it does, and which that test also pins. I tried to
+    * fold it in here and the guard refused, correctly.
+    * Same distinction app/api/picking-records/[id]/route.ts makes, and for the same
+    * reason -- that route's header names this exact bug class.
+    */
       const updated = await runTenantQuery(
         accountsSql,
         tenantContext,
@@ -451,12 +479,12 @@ export async function PUT(request: Request) {
               location_id       = ${locationId},
               day_fraction      = ${dayFraction},
               rate              = COALESCE(${overrideRate}, rate),
-              pay_multiplier    = ${editMultiplier},
+              pay_multiplier    = CASE WHEN ${body?.payMultiplier !== undefined} THEN ${editMultiplier} ELSE pay_multiplier END,
               headcount         = COALESCE(${editCrew}, headcount),
               lump_sum          = ${editLumpSum},
-              driver_charge     = ${editExtras.driver},
-              supervisor_charge = ${editExtras.supervisor},
-              vehicle_charge    = ${editExtras.vehicle},
+              driver_charge     = CASE WHEN ${body?.driverCharge !== undefined} THEN ${editExtras.driver} ELSE driver_charge END,
+              supervisor_charge = CASE WHEN ${body?.supervisorCharge !== undefined} THEN ${editExtras.supervisor} ELSE supervisor_charge END,
+              vehicle_charge    = CASE WHEN ${body?.vehicleCharge !== undefined} THEN ${editExtras.vehicle} ELSE vehicle_charge END,
               notes             = ${String(body?.notes || "").trim() || null},
               updated_at        = NOW()
           WHERE id = ${id}::uuid
