@@ -72,12 +72,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 })
     }
 
+    /**
+     * ⚠ THIS WAS A DENY-LIST OF ONE, GUARDING A FIFTEEN-TABLE DELETE.
+     *
+     * It read `if (name.includes("honeyfarm")) refuse` -- so it protected HoneyFarm and nobody
+     * else. Laxmi, Medappa Estates and Seshagiri all pass a check for "not HoneyFarm", and
+     * `resetExisting` then deletes their sales, dispatch, rainfall, pepper, processing, expenses,
+     * labour, stock ledger, inventory, journal, receivables and billing rows. Three real estates'
+     * entire operating history, protected by not being named HoneyFarm.
+     *
+     * Inverted to an allow-list: seeding may only touch a tenant that is explicitly a demo. A new
+     * tenant is therefore refused by default, which is the direction this has to fail.
+     *
+     * ⚠ STILL A NAME CHECK, AND THAT IS NOT GOOD ENOUGH LONG TERM. A tenant renamed to "Estate
+     * Mock" would pass. The right fix is an `is_demo` column on `tenants`, set at provisioning
+     * and never by a request -- deliberately not done here because it needs a migration and this
+     * needed to stop being a one-name deny-list today. Raised by the 2026-10-15 scanner run.
+     */
     const tenantName = String(tenantRows[0]?.name || "").trim()
-    if (tenantName.toLowerCase().includes("honeyfarm")) {
+    const DEMO_TENANTS = ["estate mock", "kodagu test estate", "two estate sim"]
+    if (!DEMO_TENANTS.includes(tenantName.toLowerCase())) {
       return NextResponse.json(
         {
           success: false,
-          error: "Seeding is blocked for HoneyFarm. Use a dedicated mock/demo tenant.",
+          error: `Seeding is only allowed on a demo tenant. "${tenantName}" is not one, so nothing was changed.`,
         },
         { status: 400 },
       )
