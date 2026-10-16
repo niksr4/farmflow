@@ -3,6 +3,8 @@ import { z } from "zod"
 import { DEFAULT_SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL_FROM } from "@/lib/email-addresses"
 import { escapeHtml } from "@/lib/html-escape"
 import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } from "@/lib/rate-limit"
+import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerError } from "@/lib/server/safe-logging"
 
 const contactBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
@@ -97,13 +99,21 @@ export async function POST(request: Request) {
   `
 
   try {
-    await fetch("https://api.resend.com/emails", {
+    const response = await fetchWithTimeout("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from, to: [to], subject, text, html }),
+      timeoutMs: 8_000,
     })
-  } catch {
-    // Don't surface send failures to the user — submission is still acknowledged
+    // fetch only rejects on a network failure -- a 4xx from the provider (revoked key, unverified
+    // sender) resolved quietly, so every enquiry was acknowledged to the visitor and dropped with
+    // nothing in any log. Still acknowledged below; now at least visible.
+    if (!response.ok) {
+      logServerError("Contact form email was rejected by the provider", { status: response.status })
+    }
+  } catch (error) {
+    // Don't surface send failures to the user — submission is still acknowledged, but log it.
+    logServerError("Contact form email could not be sent", error)
   }
 
   return NextResponse.json({ success: true }, { headers })

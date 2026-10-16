@@ -174,7 +174,7 @@ export async function GET(request: Request) {
             AND record_date <= CURRENT_DATE
           ORDER BY record_date
         `,
-        ["rainfall_records"],
+        ["rainfall_daily", "rainfall_records"],
       ),
       tryQuery<{ day: string; cnt: number }>(
         context,

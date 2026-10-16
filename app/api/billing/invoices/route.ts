@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { randomUUID } from "node:crypto"
+import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { canWriteModule } from "@/lib/permissions"
 import { computeInvoiceTotals, formatInvoiceNumber } from "@/lib/billing"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -88,18 +89,46 @@ export async function POST(request: Request) {
     const totals = computeInvoiceTotals(payload.items, payload.supplyState, placeOfSupply)
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const invoiceRows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
+    // The header and every line go in ONE transaction. They used to be separate statements, so a
+    // failure on line three left a committed invoice with its totals and no (or half its) lines --
+    // a document that shows a total nothing adds up to. The id is minted here because a batched
+    // transaction cannot read the header's RETURNING id into the line inserts.
+    const invoiceId = randomUUID()
+    const lineStatements = (txn: any) =>
+      payload.items.map((item) => {
+        const lineSubtotal = item.quantity * item.unitPrice
+        const lineTax = (lineSubtotal * (item.taxRate || 0)) / 100
+        const lineTotal = lineSubtotal + lineTax
+        return txn`
+          INSERT INTO billing_invoice_items (
+            tenant_id, invoice_id, description, hsn, quantity, unit_price, tax_rate,
+            line_subtotal, tax_amount, line_total
+          )
+          VALUES (
+            ${tenantContext.tenantId},
+            ${invoiceId},
+            ${item.description},
+            ${item.hsn || null},
+            ${item.quantity},
+            ${item.unitPrice},
+            ${item.taxRate},
+            ${lineSubtotal},
+            ${lineTax},
+            ${lineTotal}
+          )
+        `
+      })
+    const [invoiceRows] = await runTenantTransaction(sql, tenantContext, (txn) => [
+      txn`
         INSERT INTO billing_invoices (
-          tenant_id, invoice_number, invoice_date, due_date, currency,
+          id, tenant_id, invoice_number, invoice_date, due_date, currency,
           bill_to_name, bill_to_gstin, bill_to_address, bill_to_state,
           place_of_supply_state, supply_state, is_inter_state,
           subtotal, tax_total, cgst_amount, sgst_amount, igst_amount, total,
           status, notes, created_by
         )
         VALUES (
+          ${invoiceId},
           ${tenantContext.tenantId},
           ${invoiceNumber},
           ${payload.invoiceDate}::date,
@@ -124,36 +153,9 @@ export async function POST(request: Request) {
         )
         RETURNING *
       `,
-    )
+      ...lineStatements(txn),
+    ])
     const invoice = invoiceRows?.[0]
-
-    for (const item of payload.items) {
-      const lineSubtotal = item.quantity * item.unitPrice
-      const lineTax = (lineSubtotal * (item.taxRate || 0)) / 100
-      const lineTotal = lineSubtotal + lineTax
-      await runTenantQuery(
-        sql,
-        tenantContext,
-        sql`
-          INSERT INTO billing_invoice_items (
-            tenant_id, invoice_id, description, hsn, quantity, unit_price, tax_rate,
-            line_subtotal, tax_amount, line_total
-          )
-          VALUES (
-            ${tenantContext.tenantId},
-            ${invoice.id},
-            ${item.description},
-            ${item.hsn || null},
-            ${item.quantity},
-            ${item.unitPrice},
-            ${item.taxRate},
-            ${lineSubtotal},
-            ${lineTax},
-            ${lineTotal}
-          )
-        `,
-      )
-    }
 
     await logAuditEvent(sql, sessionUser, {
       action: "create",

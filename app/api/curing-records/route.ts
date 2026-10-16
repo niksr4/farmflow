@@ -41,6 +41,18 @@ const findInvalidNumericField = (record: Record<string, any>) =>
     return !Number.isFinite(numeric) || numeric < 0
   })
 
+// The edit form posts an emptied optional field as "". Number("") is 0, so the validator waved it
+// through, and then the raw "" reached a numeric column and Postgres answered 500. An empty field
+// means "not recorded" -- null -- and a non-numeric string has to survive as NaN so
+// findInvalidNumericField can refuse it with a 400 instead of a database error.
+const optionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null
+  if (typeof value === "string" && value.trim() === "") return null
+  return Number(value)
+}
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("curing")
@@ -172,6 +184,9 @@ export async function POST(request: Request) {
     if (!locationId || !processDate) {
       return NextResponse.json({ success: false, error: "Location and process date are required" }, { status: 400 })
     }
+    if (typeof processDate !== "string" || !ISO_DATE_PATTERN.test(processDate)) {
+      return NextResponse.json({ success: false, error: "Process date must be a valid date" }, { status: 400 })
+    }
 
     const intakeKg = Number(data.intake_kg) || 0
     const outputKg = Number(data.output_kg) || 0
@@ -184,9 +199,9 @@ export async function POST(request: Request) {
       process_type: data.process_type || null,
       intake_kg: intakeKg,
       intake_bags: Number(data.intake_bags) || 0,
-      moisture_start_pct: data.moisture_start_pct ?? null,
-      moisture_end_pct: data.moisture_end_pct ?? null,
-      drying_days: data.drying_days ?? null,
+      moisture_start_pct: optionalNumber(data.moisture_start_pct),
+      moisture_end_pct: optionalNumber(data.moisture_end_pct),
+      drying_days: optionalNumber(data.drying_days),
       output_kg: outputKg,
       output_bags: Number(data.output_bags) || 0,
       loss_kg: computedLoss,
@@ -195,12 +210,20 @@ export async function POST(request: Request) {
       notes: data.notes || null,
     }
 
+    // Reported before the generic check: a negative loss is output > intake, and "loss kg must be
+    // 0 or more" tells the user nothing about which two boxes disagree.
+    if (record.loss_kg < 0) {
+      return NextResponse.json({ success: false, error: "Output cannot be more than intake" }, { status: 400 })
+    }
     const invalidField = findInvalidNumericField(record)
     if (invalidField) {
       return NextResponse.json(
         { success: false, error: `${invalidField.replace(/_/g, " ")} must be 0 or more` },
         { status: 400 },
       )
+    }
+    if ([record.moisture_start_pct, record.moisture_end_pct].some((pct) => pct !== null && pct > 100)) {
+      return NextResponse.json({ success: false, error: "Moisture cannot be more than 100%" }, { status: 400 })
     }
 
     const existing = await runTenantQuery(
