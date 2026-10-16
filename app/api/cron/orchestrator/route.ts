@@ -13,6 +13,7 @@ import { runOnboardingNudgeAgent } from "@/lib/server/agents/onboarding-nudge-ag
 import { runTenantDormancyProbeAgent } from "@/lib/server/agents/tenant-dormancy-probe-agent"
 import { runBiometricHealthAgent } from "@/lib/server/agents/biometric-health-agent"
 import { sql } from "@/lib/server/db"
+import { fetchWithTimeout } from "@/lib/server/http"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
@@ -31,7 +32,7 @@ async function pingHealthcheck(outcome: "success" | "fail"): Promise<void> {
   if (!baseUrl) return
   const url = outcome === "fail" ? `${baseUrl}/fail` : baseUrl
   try {
-    await fetch(url, { method: "HEAD" })
+    await fetchWithTimeout(url, { method: "HEAD", timeoutMs: 5_000 })
   } catch {
     // Non-fatal — don't let a monitoring failure break the cron response
   }

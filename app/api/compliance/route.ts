@@ -63,9 +63,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const payload = await request.json()
+    // A malformed body is the caller's mistake (400), not a 500 "Unknown error".
+    const payload = await request.json().catch(() => null)
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return NextResponse.json({ success: false, error: "Invalid request body" }, { status: 400 })
+    }
+    // name / title / id are NOT NULL (or the lookup key) below. Unchecked, a missing one reached
+    // Postgres and came back as a generic 500, and a missing or unknown id on "complete" answered
+    // success:true with no record -- the tick looked saved and nothing had changed.
+    const requireText = (value: unknown, label: string) =>
+      typeof value === "string" && value.trim() ? null : NextResponse.json({ success: false, error: `${label} is required` }, { status: 400 })
 
     if (payload.type === "certification") {
+      const missing = requireText(payload.name, "Name")
+      if (missing) return missing
       const result = await runTenantQuery(
         sql,
         tenantContext,
@@ -92,6 +103,8 @@ export async function POST(request: Request) {
     }
 
     if (payload.type === "checklist_item") {
+      const missing = requireText(payload.title, "Title")
+      if (missing) return missing
       const result = await runTenantQuery(
         sql,
         tenantContext,
@@ -115,6 +128,8 @@ export async function POST(request: Request) {
     }
 
     if (payload.type === "complete_checklist_item") {
+      const missing = requireText(payload.id, "Checklist item id")
+      if (missing) return missing
       const result = await runTenantQuery(
         sql,
         tenantContext,
@@ -125,6 +140,9 @@ export async function POST(request: Request) {
           RETURNING *
         `,
       )
+      if (!result?.length) {
+        return NextResponse.json({ success: false, error: "Checklist item not found" }, { status: 404 })
+      }
       return NextResponse.json({ success: true, record: result[0] })
     }
 

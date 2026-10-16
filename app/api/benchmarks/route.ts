@@ -3,8 +3,7 @@ import { sql, adminSql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
-import { mergeTenantEstateProfile, CROP_LABEL } from "@/lib/tenant-estate-profile"
-import { parseJsonObject } from "@/lib/server/tenant-experience-db"
+import { CROP_LABEL } from "@/lib/tenant-estate-profile"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
@@ -61,12 +60,9 @@ export async function GET(request: Request) {
     const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
     const tenantId = sessionUser.tenantId
 
-    // Resolve the calling tenant's crop family from their ui_preferences
-    const tenantRows = toRows<any>(
-      await sql.query(`SELECT ui_preferences FROM tenants WHERE id = $1 LIMIT 1`, [tenantId]),
-    )
-    const prefs = parseJsonObject(tenantRows[0]?.ui_preferences, "ui_preferences") ?? {}
-    const profile = mergeTenantEstateProfile((prefs as any).estateProfile ?? null)
+    // One crop for every tenant today, so there is nothing to resolve per tenant. (This used to
+    // read the tenant's stored preferences and build an estate profile that nothing then used -- a
+    // database round trip on every request for a value the next lines threw away.)
     const cropFamily = CROP_LABEL
     const cropLabel = CROP_LABEL
 
