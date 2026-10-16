@@ -231,6 +231,11 @@ export async function POST(request: Request) {
       ? String(body.workerType)
       : null
     const dailyRate = body?.dailyRate != null && !Number.isNaN(Number(body.dailyRate)) ? Number(body.dailyRate) : null
+    // The edit route has always refused a negative rate; create did not, so a minus sign typed on
+    // the add form was stored and then costed every day that worker worked as a negative payable.
+    if (dailyRate !== null && dailyRate < 0) {
+      return NextResponse.json({ success: false, error: "A daily rate must be zero or more" }, { status: 400 })
+    }
 
     /**
      * A salaried worker's pay, which a day rate cannot express.

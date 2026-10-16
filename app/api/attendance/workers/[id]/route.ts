@@ -162,10 +162,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const gender = readGender(body?.gender)
+    // readGender answers undefined for "leave alone" AND for "not a value we know", so an
+    // unrecognised gender used to save successfully and change nothing. Say so instead.
+    if (body?.gender !== undefined && gender === undefined) {
+      return NextResponse.json({ success: false, error: "Gender must be female, male or other" }, { status: 400 })
+    }
+    // An empty string clears the type (the Workers tab sends null for "none", but "" is the same
+    // intent). A NON-empty value that is not on the list used to collapse to null as well, which
+    // silently wiped the stored type -- the same trap the daily rate below was already fixed for.
+    const rawWorkerType = body?.workerType
+    if (rawWorkerType != null && rawWorkerType !== "" && !isWorkerType(rawWorkerType)) {
+      return NextResponse.json({ success: false, error: "That worker type is not recognised" }, { status: 400 })
+    }
     const workerType =
-      body?.workerType != null
-        ? isWorkerType(body.workerType)
-          ? String(body.workerType)
+      rawWorkerType != null
+        ? isWorkerType(rawWorkerType)
+          ? String(rawWorkerType)
           : null
         : undefined
     const phone = body?.phone != null ? String(body.phone || "").trim().slice(0, 30) || null : undefined
