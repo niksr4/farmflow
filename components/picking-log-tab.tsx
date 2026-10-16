@@ -788,16 +788,25 @@ const ALL_WORKERS = "all"
                           <Input type="number" inputMode="decimal" min={0} step={0.1} value={numericInputValue(editForm.kgPicked)} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" />
                           {(editForm.kgRipe !== "" || editForm.kgGreen !== "") && (
                             <div className="mt-1 flex items-center gap-1">
+                              {/*
+                                ⚠ THE STRING, NOT numericInputValue. editForm is string-backed, and
+                                numericInputValue is documented for NUMBER-backed state only --
+                                it renders "0" as blank. A row that is all ripe has kg_green = 0,
+                                which would have shown an empty box, so the writer could not tell
+                                "zero green, recorded" from "nothing entered". Raised by CodeRabbit
+                                on #98, and independently by the Picking tab audit, which found the
+                                same trap on all six inputs in this file.
+                              */}
                               <Input
                                 type="number" inputMode="decimal" min={0} step={0.1}
-                                value={numericInputValue(editForm.kgRipe)}
+                                value={editForm.kgRipe}
                                 onChange={(e) => setEditForm((f) => ({ ...f, kgRipe: e.target.value }))}
                                 className="h-7 w-[3.25rem] text-right text-xs" aria-label="Ripe kg" placeholder="ripe"
                               />
                               <span className="text-xs text-muted-foreground">+</span>
                               <Input
                                 type="number" inputMode="decimal" min={0} step={0.1}
-                                value={numericInputValue(editForm.kgGreen)}
+                                value={editForm.kgGreen}
                                 onChange={(e) => setEditForm((f) => ({ ...f, kgGreen: e.target.value }))}
                                 className="h-7 w-[3.25rem] text-right text-xs" aria-label="Green kg" placeholder="green"
                               />

@@ -163,7 +163,12 @@ describe("the form sends what it shows", () => {
     })()
     for (const field of ["kgRipe", "kgGreen"]) {
       expect(
-        new RegExp(`value=\\{numericInputValue\\(editForm\\.${field}\\)`).test(editRow),
+        // ⚠ ASSERTS AN INPUT BOUND TO THE FIELD, not how its value is formatted. The first
+        // version pinned `value={numericInputValue(editForm.kgRipe)}` -- and then CodeRabbit
+        // correctly asked for the raw string instead, because numericInputValue renders "0" as
+        // blank. The guard failed on a change that improved the thing it was guarding, which
+        // means it was pinning an implementation detail rather than the property.
+        new RegExp(`value=\\{(?:numericInputValue\\()?editForm\\.${field}\\b`).test(editRow),
         `the edit row sends ${field} but renders no input for it, so a split row's weight cannot ` +
           `be corrected at all -- only deleted and retyped`,
       ).toBe(true)
