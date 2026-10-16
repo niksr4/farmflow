@@ -768,7 +768,51 @@ const ALL_WORKERS = "all"
                       <TableRow key={r.id} className="bg-muted/20">
                         <TableCell><Input type="date" value={editForm.pickDate} onChange={(e) => setEditForm((f) => ({ ...f, pickDate: e.target.value }))} className="h-8 w-36" /></TableCell>
                         <TableCell className="text-sm text-muted-foreground">{r.workerName}</TableCell>
-                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.1} value={numericInputValue(editForm.kgPicked)} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
+                        {/*
+                          ⚠ RIPE AND GREEN ARE EDITED HERE, BESIDE THE WEIGHT THEY MUST ADD UP TO.
+                          They were loaded into editForm and sent by toPickingPayload, and simply
+                          never rendered -- so correcting 50 kg to 60 kg on a split row was refused
+                          by the client ("Ripe and green add up to 50.0 kg, but the total picked is
+                          60.0 kg") with no field on screen that could make it add up. The only way
+                          out was delete-and-retype, which is failure mode 1 in the edit route's own
+                          header comment. #85 turned that 500 into a clear sentence; the dead end
+                          did not move. 63% of dev picking rows carry a split, and HoneyFarm's
+                          washed route records ripe and green separately, so this is their majority
+                          row shape.
+
+                          Shown only when the row already has a split: offering the pair on a
+                          whole-weight row would invite creating one by accident, and
+                          picking_records_ripe_green_sum requires all-or-nothing.
+                        */}
+                        <TableCell>
+                          <Input type="number" inputMode="decimal" min={0} step={0.1} value={numericInputValue(editForm.kgPicked)} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" />
+                          {(editForm.kgRipe !== "" || editForm.kgGreen !== "") && (
+                            <div className="mt-1 flex items-center gap-1">
+                              {/*
+                                ⚠ THE STRING, NOT numericInputValue. editForm is string-backed, and
+                                numericInputValue is documented for NUMBER-backed state only --
+                                it renders "0" as blank. A row that is all ripe has kg_green = 0,
+                                which would have shown an empty box, so the writer could not tell
+                                "zero green, recorded" from "nothing entered". Raised by CodeRabbit
+                                on #98, and independently by the Picking tab audit, which found the
+                                same trap on all six inputs in this file.
+                              */}
+                              <Input
+                                type="number" inputMode="decimal" min={0} step={0.1}
+                                value={editForm.kgRipe}
+                                onChange={(e) => setEditForm((f) => ({ ...f, kgRipe: e.target.value }))}
+                                className="h-7 w-[3.25rem] text-right text-xs" aria-label="Ripe kg" placeholder="ripe"
+                              />
+                              <span className="text-xs text-muted-foreground">+</span>
+                              <Input
+                                type="number" inputMode="decimal" min={0} step={0.1}
+                                value={editForm.kgGreen}
+                                onChange={(e) => setEditForm((f) => ({ ...f, kgGreen: e.target.value }))}
+                                className="h-7 w-[3.25rem] text-right text-xs" aria-label="Green kg" placeholder="green"
+                              />
+                            </div>
+                          )}
+                        </TableCell>
                         {/* ⚠ RATE PER KG ONLY APPLIES TO A PIECE ROW. This input used to render for every
                             mode while toPickingPayload nulls ratePerKg unless payMode is "piece" -- so on a
                             day-rate row you could type 5, watch the Amount cell say Rs 243, save, and get
