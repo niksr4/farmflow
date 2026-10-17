@@ -53,6 +53,25 @@ const digestToneClass = {
   ok: "text-stone-300",
 } as const
 
+/**
+ * The falling coffee beans in the hero.
+ *
+ * Restored from 885c866, the commit before #30 rebuilt this page and dropped the markup. The CSS
+ * never went anywhere -- `.coffee-bean` and `@keyframes bean-fall` have been sitting in
+ * app/globals.css the whole time with nothing rendering them, which is why this looked like a
+ * deliberate removal rather than an accident.
+ *
+ * Positions, sizes and timings are the originals. The negative delays matter: they start each bean
+ * mid-fall so the first paint already has beans in the air instead of an empty hero that fills up
+ * over ten seconds.
+ */
+const heroBeanSpecs = [
+  { left: "6%", top: "10%", size: 16, duration: "9.2s", delay: "-1.4s", opacity: 0.24 },
+  { left: "14%", top: "3%", size: 12, duration: "8.4s", delay: "-5.1s", opacity: 0.18 },
+  { left: "78%", top: "8%", size: 18, duration: "10.6s", delay: "-3.6s", opacity: 0.22 },
+  { left: "88%", top: "18%", size: 13, duration: "7.8s", delay: "-6.2s", opacity: 0.2 },
+]
+
 function capture(event: string, props?: Record<string, unknown>) {
   try {
     posthog.capture(event, props)
@@ -102,6 +121,27 @@ export default function LandingPage() {
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="orb-a absolute left-[6%] top-[4%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle,rgba(52,211,153,0.07)_0%,transparent_65%)] blur-[90px]" />
             <div className="orb-b absolute right-[4%] top-[30%] h-[300px] w-[300px] rounded-full bg-[radial-gradient(circle,rgba(251,146,60,0.05)_0%,transparent_65%)] blur-[90px]" />
+
+            {/* Desktop only, as it always was: four beans is ambience on a wide screen and clutter on
+                a phone. app/globals.css hides .coffee-bean outright under prefers-reduced-motion. */}
+            <div className="pointer-events-none absolute inset-0 hidden lg:block">
+              {heroBeanSpecs.map((bean, index) => (
+                <span
+                  key={`${bean.left}-${bean.top}-${index}`}
+                  className="coffee-bean"
+                  style={{
+                    left: bean.left,
+                    top: bean.top,
+                    width: `${bean.size}px`,
+                    height: `${Math.round(bean.size * 1.45)}px`,
+                    opacity: bean.opacity,
+                    animationDuration: bean.duration,
+                    animationDelay: bean.delay,
+                    animationIterationCount: "infinite",
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="relative grid items-center gap-10 lg:grid-cols-[1.02fr_0.98fr] lg:gap-14">
