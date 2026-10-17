@@ -287,6 +287,36 @@ const ensureStarterLocation = async (tenantId: string, estateName: string) => {
   )
 }
 
+/**
+ * A new estate records labour on the muster from the day it signs up.
+ *
+ * ⚠ WITHOUT THIS A NEW TENANT CANNOT USE THE MUSTER AT ALL. `blockedByLabourCutoverBefore` refuses
+ * every muster allocation for a tenant with no `tenant_labour_entry_mode` row, because for an
+ * established estate that means "has not switched yet" and a row saved there would be counted in no
+ * total anywhere. The refusal is correct; the missing row was not.
+ *
+ * Nothing wrote this table except scripts/dev/cutover-tenant-to-muster.mjs, run by hand per tenant.
+ * So every self-serve signup landed on the legacy Accounts path, found "Set work" on the muster, and
+ * was told the estate records labour somewhere else. The cutover is only a migration boundary for an
+ * estate with labour history in Accounts, and a tenant created a second ago has none, so there is
+ * nothing here to preserve and no reason to make anybody run SQL.
+ *
+ * The date is the estate's today in IST, not the server's. A UTC date would put the cutover a day
+ * early for anybody signing up between 18:30 and midnight IST, and work marked on that first evening
+ * would fall before the boundary and be counted via Accounts, where nothing was ever entered.
+ */
+const ensureLabourEntryMode = async (tenantId: string) => {
+  await runTenantQuery(
+    sql,
+    ownerContext,
+    sql`
+      INSERT INTO tenant_labour_entry_mode (tenant_id, assignments_from, set_by)
+      VALUES (${tenantId}, (NOW() AT TIME ZONE 'Asia/Kolkata')::date, 'signup')
+      ON CONFLICT (tenant_id) DO NOTHING
+    `,
+  )
+}
+
 const usernameExists = async (username: string) => {
   const rows = await runTenantQuery(
     sql,
@@ -579,6 +609,7 @@ const provisionSignupRequestRecord = async (
     await ensureTenantModules(tenant.id)
     await ensureStarterLocation(tenant.id, signupRequest.estate_name)
     await ensureDefaultActivityCodes(tenant.id)
+    await ensureLabourEntryMode(tenant.id)
     // Populates tenant_commercial_access with a real 30-day trial record so the canonical
     // resolver (lib/commercial-access.ts) has accurate data whenever billing enforcement is
     // turned on. No-op today — bootstrap doesn't read this yet (enforcement deferred).

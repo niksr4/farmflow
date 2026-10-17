@@ -8,9 +8,10 @@
  *
  * These steps are shaped around what the answers are *for*:
  *
- *   - Every goal an estate has is a ratio. Yield per acre, cost per kilo, spend per acre. So the
- *     first step is not "add locations", it is every block carrying an area, because a block with
- *     no acreage is a denominator of zero and silently removes itself from every comparison.
+ *   - Every goal an estate has is a ratio. Yield per acre, cost per kilo, spend per acre. So it is
+ *     not enough to "add locations": every block has to carry an area, because a block with no
+ *     acreage is a denominator of zero and silently removes itself from every comparison. That step
+ *     is still all-or-nothing, it is just no longer FIRST -- see the order note below.
  *   - Stock is worth nothing to a report until it is *valued*. 91% of all consumption across every
  *     tenant is valued at zero because opening stock went in without a price.
  *   - A worker with no daily rate makes the muster more work, not less: Medappa has 10 of 33 rated
@@ -20,14 +21,41 @@
  * COMPLETION IS "ALL", NOT "ANY", wherever the number is a denominator. That is deliberate and it
  * is the whole difference from the old list. A step that goes green on the first row teaches the
  * estate that one row was enough.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────────────
+ * ⚠ THE ORDER WAS WRONG, AND THE DATA SAID SO. Checked against production on 2026-10-06: of six
+ * tenants, exactly one had acreage on every block, and NOT ONE had a complete checklist. Five of
+ * six were stalled on step one.
+ *
+ * Acreage was first because every useful ratio needs a denominator, which is sound reasoning about
+ * reports and wrong reasoning about onboarding. It put the hardest all-or-nothing gate at the front:
+ * Medappa has 21 blocks and would have had to measure all 21 before the list moved at all. They
+ * have 29 workers all carrying rates and have been marking a muster for months, with a checklist
+ * that still reads 0 done.
+ *
+ * So the list is now ordered by what it UNLOCKS, soonest first:
+ *
+ *   1. things you need to record anything at all     workers, blocks by name, the store
+ *   2. things that make a recorded thing cost money  stock prices
+ *   3. things that make the numbers mean one thing   the processing route
+ *   4. things that let two numbers be compared       block acreage
+ *   5. things that help but block nothing            weather, a second login
+ *
+ * Naming a block and measuring it are now SEPARATE steps. They were one, and conflating "I can
+ * allocate work to this block" with "I can compare this block to another" is what built the wall.
  */
 
+import { parseProcessingRoute } from "@/lib/crop-config"
+
 export type OnboardingStatusKey =
-  // The current flow, in order.
-  | "blocks_acreage"
+  // The current flow, in order. Workers first: it is the only step that unblocks the thing an
+  // estate does every single morning.
+  | "workers"
+  | "blocks"
   | "storehouse"
   | "inventory"
-  | "workers"
+  | "processing_route"
+  | "blocks_acreage"
   | "weather"
   | "team_member"
   // Still read by buildLaunchGuidePhases and the seasonal hints below.
@@ -41,10 +69,12 @@ export type OnboardingStatusKey =
 export type OnboardingStatusSnapshot = Record<OnboardingStatusKey, boolean>
 
 export const INITIAL_ONBOARDING_STATUS: OnboardingStatusSnapshot = {
-  blocks_acreage: false,
+  workers: false,
+  blocks: false,
   storehouse: false,
   inventory: false,
-  workers: false,
+  processing_route: false,
+  blocks_acreage: false,
   weather: false,
   team_member: false,
   locations: false,
@@ -105,12 +135,42 @@ export const selectBlocks = (payload: any) =>
   asArray(payload?.locations).filter((l: any) => (l?.kind || "block") === "block")
 
 /**
+ * A block exists and has a name. Nothing more.
+ *
+ * Split out from the acreage check because they unlock different things and asking for both at once
+ * is what stalled five of six tenants on step one. You can allocate a day's work to a block the
+ * moment it has a name; you only need its area to compare it with another block.
+ */
+export const isBlocksNamedDone = (payload: any) => {
+  const blocks = selectBlocks(payload)
+  return blocks.length > 0 && blocks.every((b: any) => String(b?.name || "").trim().length > 0)
+}
+
+/**
  * Every block, not the first one. One block with an area and nine without produces a per-acre
  * figure that looks precise and is wrong by an order of magnitude.
  */
 export const isBlocksAndAcreageDone = (payload: any) => {
   const blocks = selectBlocks(payload)
   return blocks.length > 0 && blocks.every((b: any) => Number(b?.areaAcres) > 0)
+}
+
+/**
+ * Somebody has said how this estate processes.
+ *
+ * ⚠ READS FOR AN EXPLICIT ANSWER, NOT A USABLE ONE. `resolveProcessingRoute` would return "both"
+ * for an estate that has never been asked, which is correct for deciding what to render and useless
+ * here: the step would be green on day one and the question would never reach anybody. Null is the
+ * unanswered state and the only thing that leaves this step open.
+ *
+ * This is why bag weight is NOT a step. It defaults to 50 kg, which is right for every tenant, so a
+ * confirmation flag would be the only way to tell "checked it" from "never looked" -- a checkbox
+ * whose only purpose is to be ticked. The bag weight sits on the same settings screen as the route
+ * instead, where somebody answering this step will see it.
+ */
+export const isProcessingRouteDone = (payload: any) => {
+  const profile = payload?.settings?.estateProfile ?? payload?.estateProfile
+  return parseProcessingRoute(profile?.processingRoute) !== null
 }
 
 export const countBlocksMissingAcreage = (payload: any) =>
@@ -186,16 +246,21 @@ export const getOnboardingStatusRequests = (
 ): OnboardingStatusRequest[] => {
   const requests: OnboardingStatusRequest[] = []
 
-  // Blocks and storehouses come from one endpoint; asking twice keeps each step's rule in its own
-  // place rather than hiding two unrelated conditions behind a shared payload index.
-  requests.push({ key: "blocks_acreage", endpoint: locationsEndpoint })
+  // Requested in the order the steps are shown, so a reader can follow one list rather than two.
+  if (access.canShowLabor) {
+    requests.push({ key: "workers", endpoint: `/api/attendance?date=${todayIso || ""}&scope=all` })
+  }
+  // Blocks, acreage and storehouses all come from one endpoint; asking three times keeps each
+  // step's rule in its own place rather than hiding unrelated conditions behind a shared index.
+  requests.push({ key: "blocks", endpoint: locationsEndpoint })
   if (access.canShowInventory) {
     requests.push({ key: "storehouse", endpoint: locationsEndpoint })
     requests.push({ key: "inventory", endpoint: "/api/inventory-neon" })
   }
-  if (access.canShowLabor) {
-    requests.push({ key: "workers", endpoint: `/api/attendance?date=${todayIso || ""}&scope=all` })
+  if (access.canShowProcessing) {
+    requests.push({ key: "processing_route", endpoint: "/api/tenant-settings" })
   }
+  requests.push({ key: "blocks_acreage", endpoint: locationsEndpoint })
   requests.push({ key: "weather", endpoint: "/api/tenant-settings" })
   if (access.canManageUsers && tenantId) {
     requests.push({ key: "team_member", endpoint: `/api/admin/users?tenantId=${encodeURIComponent(tenantId)}` })
@@ -230,13 +295,26 @@ export const buildOnboardingSteps = (
 ): OnboardingStepConfig[] => {
   const steps: OnboardingStepConfig[] = []
 
-  // First, and deliberately so. Everything the app can tell an estate is per-acre or per-block.
+  // FIRST, and deliberately so. This is the one step that unblocks the thing an estate does every
+  // morning. Acreage used to be here; see the header for what the production data said about that.
+  if (access.canShowLabor) {
+    steps.push({
+      key: "workers",
+      title: "Add your workers and their daily rates",
+      description:
+        "Everyone who turns up, with what they are paid a day. Contract crews go on as one line with a headcount. Without rates, the muster asks for a wage on every single line.",
+      done: status.workers,
+      actionLabel: "Go to Muster",
+      actionTab: "attendance",
+    })
+  }
+
   steps.push({
-    key: "blocks_acreage",
-    title: "Map your estate",
+    key: "blocks",
+    title: "Name your estates and blocks",
     description:
-      "Name each estate, the blocks inside it, and how many acres each block is. Acreage is what turns cost into cost per acre — without it, no two blocks can be compared.",
-    done: status.blocks_acreage,
+      "Every division of the land you would say out loud when telling somebody where a gang is working. Names are enough for now, and they are what lets a day's work be charged to a place.",
+    done: status.blocks,
     actionLabel: "Go to Settings",
     actionTab: "settings",
   })
@@ -256,24 +334,36 @@ export const buildOnboardingSteps = (
       key: "inventory",
       title: "Enter opening stock and what it cost",
       description:
-        "Every item in the store, with the quantity and the price paid. The price is what makes usage cost something later — stock entered without one is consumed for free.",
+        "Every item in the store, with the quantity and the price paid. The price is what makes usage cost something later, and stock entered without one is consumed for free.",
       done: status.inventory,
       actionLabel: "Go to Inventory",
       actionTab: "inventory",
     })
   }
 
-  if (access.canShowLabor) {
+  if (access.canShowProcessing) {
     steps.push({
-      key: "workers",
-      title: "Add your workers and their daily rates",
+      key: "processing_route",
+      title: "Say how you process your crop",
       description:
-        "Everyone who turns up, with what they are paid a day. Contract crews go on as one line with a headcount. Without rates, the muster asks for a wage on every single line.",
-      done: status.workers,
-      actionLabel: "Go to Muster",
-      actionTab: "attendance",
+        "Whether you pulp your cherry into parchment, dry it whole as cherry, or run both lines. This decides which fields the pulping screen asks for and what every yield figure is measured against. Check your bag weight on the same screen while you are there.",
+      done: status.processing_route,
+      actionLabel: "Go to Settings",
+      actionTab: "settings",
     })
   }
+
+  // After the daily-use steps, not before them. Acreage unlocks comparison between blocks, which
+  // matters a great deal and blocks nothing in the meantime.
+  steps.push({
+    key: "blocks_acreage",
+    title: "Put an acreage on every block",
+    description:
+      "How many acres each block is. This is what turns a cost into a cost per acre, so until every block carries one, no two blocks can be compared. Worth doing properly once.",
+    done: status.blocks_acreage,
+    actionLabel: "Go to Settings",
+    actionTab: "settings",
+  })
 
   steps.push({
     key: "weather",

@@ -54,7 +54,19 @@ test("self-serve signup provisions a basic workspace end to end", async ({ page 
     await page.locator("#password").fill(password)
     await page.locator("#estateName").fill(estateName)
     await page.locator("#country").fill("India")
-    await page.getByRole("button", { name: "Create Account" }).click()
+    /**
+     * ⚠ THIS SELECTOR USED TO NAME THE BUTTON, AND THE BUTTON HAD BEEN RENAMED.
+     *
+     * It looked for "Create Account". The button reads "Create estate", and the string "Create
+     * Account" exists nowhere in app/, components/ or lib/ -- so this click could never resolve and
+     * the spec failed on its first interaction. Nobody noticed because CI does not run it: the
+     * quality job runs test:e2e:public and the authenticated job runs tab-smoke and
+     * form-persistence, while this file is only reachable via `pnpm test:e2e:onboarding` by hand.
+     *
+     * The label comes from i18n (`t("public.signup.submit")`), so naming it is guaranteed to rot
+     * again. Selecting the form's submit button structurally cannot.
+     */
+    await page.locator('form button[type="submit"]').click()
 
     await expect(page).toHaveURL(/\/verify-email(?:\?|$)/)
     await expect(page.getByText("Verify Your Email", { exact: true })).toBeVisible()

@@ -188,8 +188,10 @@ import {
   type OnboardingAccess,
   type OnboardingStatusKey,
   isBlocksAndAcreageDone,
+  isBlocksNamedDone,
   isStorehouseDone,
   isInventoryDone,
+  isProcessingRouteDone,
   isWorkersDone,
   isWeatherDone,
   isTeamMemberDone,
@@ -1278,10 +1280,12 @@ export default function InventorySystem() {
       // tested against a real payload shape. A check reading the wrong field name never throws --
       // the step just never goes green, which nobody notices until an estate says it is stuck.
       const checks: Partial<Record<OnboardingStatusKey, (payload: any) => boolean>> = {
-        blocks_acreage: isBlocksAndAcreageDone,
+        workers: isWorkersDone,
+        blocks: isBlocksNamedDone,
         storehouse: isStorehouseDone,
         inventory: isInventoryDone,
-        workers: isWorkersDone,
+        processing_route: isProcessingRouteDone,
+        blocks_acreage: isBlocksAndAcreageDone,
         weather: isWeatherDone,
         team_member: isTeamMemberDone,
         locations: (payload) => Array.isArray(payload?.locations) && payload.locations.length > 0,
