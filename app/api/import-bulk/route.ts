@@ -11,6 +11,7 @@ import { csvToObjects } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { isLocationAccessError } from "@/lib/server/location-access"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
+import { blockedByLabourCutover } from "@/lib/server/labour-entry-mode"
 import { recomputeProcessingTotals, resolveBagWeightKg } from "@/lib/server/processing-utils"
 import {
   buildValidationErrors,
@@ -978,6 +979,33 @@ export async function POST(request: Request) {
 
         if (!deploymentDate || !code) {
           errors.push({ row: rowNumber, message: "Missing deployment_date or code" })
+          skipped += 1
+          continue
+        }
+
+        /**
+         * ⚠ THE CUTOVER, PER ROW -- THE ONLY LABOUR WRITER THAT WAS MISSING IT.
+         *
+         * Both /api/labor-neon write paths call blockedByLabourCutover; this importer did not.
+         * A row dated on or after the tenant's cutover is excluded by labour_cost's legacy arm
+         * (`NOT EXISTS (… deployment_date >= assignments_from)`), so it was saved, reported as
+         * imported, and then absent from the Costs list, accounts-summary, accounts-totals, the
+         * balance sheet, ai-charts-data, intelligence-brief -- every labour total in the app.
+         * Money entered and counted nowhere, which is verbatim what lib/server/labour-entry-mode
+         * says it exists to prevent.
+         *
+         * Sharper than "0 bad rows today": ALL FOUR live tenants have a cutover in August 2026,
+         * so any labour CSV imported now is dated after it and vanishes entirely. HoneyFarm's
+         * 1,024 legacy rows show imports do happen. Raised by the 2026-10-16 muster audit.
+         *
+         * Per ROW rather than per request, because a back-log CSV can legitimately straddle the
+         * date -- the pre-cutover rows should still land. A refused row joins `errors` with the
+         * guard's own sentence, so the writer is told which lines were skipped and why instead of
+         * the whole import failing.
+         */
+        const cutoverBlock = await blockedByLabourCutover(tenantContext, deploymentDate)
+        if (cutoverBlock) {
+          errors.push({ row: rowNumber, message: cutoverBlock })
           skipped += 1
           continue
         }
