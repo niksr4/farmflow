@@ -1,5 +1,7 @@
 "use client"
 
+import { isAdminRole } from "@/lib/permissions"
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
@@ -245,6 +247,21 @@ export default function TenantSettingsPage() {
   const [isUpdatingConsent, setIsUpdatingConsent] = useState(false)
 
   const isOwner = user?.role === "owner"
+  /**
+   * ⚠ A WRITER OPENING SETTINGS WAS GREETED BY A RED "Admin role required" TOAST, EVERY VISIT.
+   *
+   * loadUsers() hits GET /api/admin/users, which requireAdminSession() refuses with 403 for a
+   * `user` -- and "Admin role required" is on the passthrough list in route-utils, so the real
+   * sentence reached the catch and became a destructive toast. loadModules and loadAuditLogs were
+   * correctly gated on isOwner; loadUsers never was.
+   *
+   * It was invisible until the role=user redirect was removed from app/settings/page.tsx -- which
+   * was the right change (a writer should be able to set their language and password), and it
+   * exposed this. Four real accounts hit it on every visit, including HoneyFarm's own writer.
+   *
+   * isAdminRole rather than a hand comparison, per lib/permissions.ts.
+   */
+  const canSeeAdminSections = isAdminRole(user?.role)
   const canManageTenantExperience = isOwner
   const privacyFeatureEnabled = Boolean(tenantId)
   // One section is shown at a time in the content pane. Null means "not chosen yet" and resolves
@@ -599,13 +616,17 @@ export default function TenantSettingsPage() {
 
   useEffect(() => {
     if (!tenantId) return
-    loadUsers()
+    // Only fetch what this role is allowed to see. A writer has no People, Locations or Module
+    // sections rendered at all, so every one of these was wasted work even when it succeeded.
+    if (canSeeAdminSections) {
+      loadUsers()
+      loadLocations()
+    }
     if (isOwner) {
       loadModules()
       loadAuditLogs()
     }
-    loadLocations()
-  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers, isOwner])
+  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers, isOwner, canSeeAdminSections])
 
   useEffect(() => {
     if (tenantId && isOwner) {
