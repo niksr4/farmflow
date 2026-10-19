@@ -48,7 +48,15 @@ const insertWebhookEvent = async (eventId: string, eventType: string, payload: u
         'received',
         ${JSON.stringify(payload || {})}::jsonb
       )
-      ON CONFLICT (provider, external_event_id) DO NOTHING
+      -- A redelivery of an event whose processing FAILED must be processed again. Ignoring the conflict
+      -- answered it as a duplicate with a 200, so Razorpay stopped retrying and a transient
+      -- failure (a database blip mid-sync) left the subscription out of step with the provider
+      -- for good. Only 'failed' is reclaimed: 'processed'/'ignored' are final, and 'received'
+      -- is another delivery still in flight -- the status flip below makes a concurrent retry
+      -- lose this WHERE, so the same event is never worked twice at once.
+      ON CONFLICT (provider, external_event_id) DO UPDATE
+        SET status = 'received', error_message = NULL, processed_at = NULL
+        WHERE billing_webhook_events.status = 'failed'
       RETURNING id
     `,
   )
