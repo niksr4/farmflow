@@ -44,7 +44,7 @@ export const getLabourCutover = async (tenantContext: TenantContext): Promise<st
   }
 }
 
-const isMissingLabourEntryModeTable = (error: unknown) => {
+export const isMissingLabourEntryModeTable = (error: unknown) => {
   if (String((error as { code?: unknown })?.code || "") === "42P01") return true
   return String((error as Error)?.message || "").includes('relation "tenant_labour_entry_mode" does not exist')
 }

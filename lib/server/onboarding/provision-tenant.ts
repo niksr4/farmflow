@@ -8,6 +8,8 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
 import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { initializeTenantTrialAccess } from "@/lib/server/tenant-commercial-access"
+import { isMissingLabourEntryModeTable } from "@/lib/server/labour-entry-mode"
+import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sendOwnerTenantCreatedAlert } from "@/lib/server/onboarding/owner-alerts"
 import { ACCOUNT_ACTIVITY_SUGGESTIONS } from "@/lib/account-activity-suggestions"
@@ -285,6 +287,55 @@ const ensureStarterLocation = async (tenantId: string, estateName: string) => {
       ON CONFLICT (tenant_id, code) DO NOTHING
     `,
   )
+}
+
+/**
+ * A NEW ESTATE RECORDS LABOUR ON THE MUSTER FROM ITS FIRST DAY.
+ *
+ * ⚠ NOTHING IN THE APPLICATION HAS EVER WRITTEN THIS ROW. `tenant_labour_entry_mode` was read in
+ * exactly one place (lib/server/labour-entry-mode.ts) and inserted only by two hand-run scripts,
+ * so every self-serve tenant had no row -- and with no row, blockedByLabourCutoverBefore refuses
+ * EVERY muster work allocation:
+ *
+ *   "This estate records labour in Costs, not on the muster roll, so work set here would not be
+ *    counted anywhere."
+ *
+ * That refusal is correct given no cutover; labour_cost counts a muster row only from the cutover
+ * date onward, so allowing the write would save a wage that no total in the app would ever show.
+ * The bug is the missing row, not the guard.
+ *
+ * Meanwhile onboarding step 4 tells the estate to give every worker a daily rate *because* "the
+ * muster asks for a wage on every single line", and will not go green until all of them have one.
+ * So the checklist drove a new tenant to furnish a muster that then declined them, and the only
+ * self-serve tenant to survive signup has written zero business records since July.
+ *
+ * Dated the estate's today in IST, not UTC: a signup at 02:00 IST is still today at the estate,
+ * and a cutover dated tomorrow would refuse the muster for a day with nothing to say why.
+ *
+ * ON CONFLICT DO NOTHING is load-bearing beyond idempotency -- moving an existing tenant's
+ * cutover re-attributes which side of the seam their historic labour is counted on, which is real
+ * money on the balance sheet. This may only ever create the first row.
+ */
+const ensureLabourEntryMode = async (tenantId: string) => {
+  try {
+    await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        INSERT INTO tenant_labour_entry_mode (tenant_id, assignments_from, set_by)
+        VALUES (${tenantId}, (NOW() AT TIME ZONE 'Asia/Kolkata')::date, 'self-serve-signup')
+        ON CONFLICT (tenant_id) DO NOTHING
+      `,
+    )
+  } catch (error) {
+    // Migration 116 may not be applied on an instance. A tenant with no row is the old behaviour
+    // -- usable, via Costs -- so this must not abort a provisioning run that has already created
+    // the tenant. Anything else is logged rather than swallowed: it leaves the estate on a screen
+    // that refuses them, and nobody would know why.
+    if (!isMissingLabourEntryModeTable(error)) {
+      logServerError(`Failed to set the labour entry mode for tenant ${tenantId}`, error)
+    }
+  }
 }
 
 const usernameExists = async (username: string) => {
@@ -578,6 +629,7 @@ const provisionSignupRequestRecord = async (
     const tenant = await ensureTenant(signupRequest)
     await ensureTenantModules(tenant.id)
     await ensureStarterLocation(tenant.id, signupRequest.estate_name)
+    await ensureLabourEntryMode(tenant.id)
     await ensureDefaultActivityCodes(tenant.id)
     // Populates tenant_commercial_access with a real 30-day trial record so the canonical
     // resolver (lib/commercial-access.ts) has accurate data whenever billing enforcement is
