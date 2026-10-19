@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { redactWorkerPii, stripWorkerPiiWrites } from "@/lib/server/worker-pii"
 import { isLocationAccessError } from "@/lib/server/location-access"
 import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server/location-utils"
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
@@ -60,12 +61,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         id: String(w.id),
         name: String(w.full_name || ""),
         workerType: w.worker_type ? String(w.worker_type) : null,
-        phone: w.phone ? String(w.phone) : null,
         dailyRate: w.daily_rate != null ? Number(w.daily_rate) : null,
         gender: w.gender ? String(w.gender) : null,
-        bankName: w.bank_name ? String(w.bank_name) : null,
-        bankAccount: w.bank_account ? String(w.bank_account) : null,
-        bankIfsc: w.bank_ifsc ? String(w.bank_ifsc) : null,
+        // Blanked for role=user -- see lib/server/worker-pii.ts.
+        ...redactWorkerPii(
+          {
+            phone: w.phone ? String(w.phone) : null,
+            bankName: w.bank_name ? String(w.bank_name) : null,
+            bankAccount: w.bank_account ? String(w.bank_account) : null,
+            bankIfsc: w.bank_ifsc ? String(w.bank_ifsc) : null,
+          },
+          sessionUser.role,
+        ),
         deviceUserCode: w.device_user_code ? String(w.device_user_code) : null,
         locationId: w.location_id ? String(w.location_id) : null,
         estate: w.estate ? String(w.estate) : null,
@@ -180,7 +187,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           ? String(rawWorkerType)
           : null
         : undefined
-    const phone = body?.phone != null ? String(body.phone || "").trim().slice(0, 30) || null : undefined
+    const rawPhone = body?.phone != null ? String(body.phone || "").trim().slice(0, 30) || null : undefined
     const dailyRate =
       body?.dailyRate != null
         ? !Number.isNaN(Number(body.dailyRate)) && Number(body.dailyRate) >= 0
@@ -192,9 +199,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body?.dailyRate != null && (Number.isNaN(Number(body.dailyRate)) || Number(body.dailyRate) < 0)) {
       return NextResponse.json({ success: false, error: "A daily rate must be zero or more" }, { status: 400 })
     }
-    const bankName = body?.bankName != null ? String(body.bankName || "").trim().slice(0, 120) || null : undefined
-    const bankAccount = body?.bankAccount != null ? String(body.bankAccount || "").trim().slice(0, 60) || null : undefined
-    const bankIfsc = body?.bankIfsc != null ? String(body.bankIfsc || "").trim().slice(0, 20) || null : undefined
+    const rawBankName = body?.bankName != null ? String(body.bankName || "").trim().slice(0, 120) || null : undefined
+    const rawBankAccount = body?.bankAccount != null ? String(body.bankAccount || "").trim().slice(0, 60) || null : undefined
+    const rawBankIfsc = body?.bankIfsc != null ? String(body.bankIfsc || "").trim().slice(0, 20) || null : undefined
+
+    // A writer cannot READ these (the GET redacts them), so they do not get to WRITE them either
+    // -- their edit form loads empty and would submit "" , which this handler treats as "clear it".
+    // See lib/server/worker-pii.ts.
+    const { phone, bankName, bankAccount, bankIfsc } = stripWorkerPiiWrites(
+      { phone: rawPhone, bankName: rawBankName, bankAccount: rawBankAccount, bankIfsc: rawBankIfsc },
+      sessionUser.role,
+    )
     const deviceUserCode =
       body?.deviceUserCode != null ? String(body.deviceUserCode || "").trim().slice(0, 30) || null : undefined
 
