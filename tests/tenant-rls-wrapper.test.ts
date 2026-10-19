@@ -24,22 +24,74 @@ import { describe, expect, it } from "vitest"
  * looked scoped.
  */
 
-// Tables with a tenant_id column, i.e. everything scripts/98-enable-rls-all-tenant-tables.sql
-// turns RLS on for. Tables without tenant_id (tenants, agent_runs, api_response_cache,
-// schema_migrations, signup_requests…) are deliberately absent — querying those unwrapped
-// is correct, and flagging them produced false positives in earlier sweeps.
-const TENANT_TABLES = [
-  "account_activities", "agent_run_findings", "app_error_events", "attendance_records",
-  "attendance_workers", "audit_logs", "billing_invoice_items", "billing_invoices",
-  "buyer_price_records", "buyers", "certifications", "compliance_checklist_items",
-  "curing_records", "current_inventory", "data_integrity_exceptions", "digest_feedback",
-  "dispatch_records", "document_records", "expense_inventory_links", "expense_transactions",
-  "import_jobs", "journal_entries", "labor_transactions", "locations", "other_sales_records",
-  "pepper_records", "picking_records", "privacy_requests", "processing_records",
-  "quality_grading_records", "rainfall_records", "receivables",
-  "sales_records", "security_events", "tenant_modules", "tenant_weekly_metrics",
-  "transaction_history", "user_locations", "user_modules", "worker_ledger",
-]
+/**
+ * Tables with a tenant_id column, i.e. everything scripts/98-enable-rls-all-tenant-tables.sql
+ * turns RLS on for — DERIVED from the migrations, not written out by hand.
+ *
+ * ⚠ THIS WAS A HAND-KEPT LIST OF 40 UNTIL 2026-10-18, AND THE DATABASE HAD 53. The thirteen it
+ * had never been updated with were not obscure: `labour_assignments` (the muster — every tenant's
+ * wage allocation), `worker_pay_rules` (what each person is paid), `users` (the auth principals
+ * themselves), `biometric_punches`/`biometric_devices`/`biometric_enrollments`,
+ * `tenant_labour_entry_mode`, `soil_tests`, `push_subscriptions`, `tenant_dormancy_probes`,
+ * `current_inventory_violations`, `signup_requests` and `transaction_history_archive` — the last
+ * of which is the table whose missing RLS policy is the reason the schema guards were wired into
+ * CI in the first place.
+ *
+ * Tamper-confirmed: an `await accountsSql\`SELECT worker_id, total_pay FROM labour_assignments\``
+ * added to app/api/attendance/assignments/route.ts passed all 16 tests, while the same line
+ * against `sales_records` failed. The DETECTOR was never the problem — the list was. Every
+ * sentence above it claiming the detector is thorough was true and beside the point.
+ *
+ * The comment here also used to say `signup_requests` had no tenant_id and was "deliberately
+ * absent". It has one, and it carries an RLS policy.
+ *
+ * So the set is now read out of scripts/*.sql: any CREATE TABLE whose body mentions tenant_id,
+ * plus any ALTER TABLE … ADD COLUMN tenant_id. Legacy/never-created names (hf_arabica, mv_pepper…)
+ * come along harmlessly — a wider scan set can only over-report, never go quiet.
+ */
+const SCRIPTS_DIR = resolve(process.cwd(), "scripts")
+
+function deriveTenantTables(): string[] {
+  const found = new Set<string>()
+
+  for (const file of readdirSync(SCRIPTS_DIR).filter((f) => f.endsWith(".sql"))) {
+    // Line comments only: a block-comment stripper would have to understand dollar quoting.
+    const src = readFileSync(join(SCRIPTS_DIR, file), "utf8").replace(/--[^\n]*/g, "")
+
+    const create = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s*\(/gi
+    let match: RegExpExecArray | null
+    while ((match = create.exec(src))) {
+      // Walk to the matching close paren so `tenant_id` is looked for in THIS table's body and
+      // not in whatever statement happens to follow within N characters.
+      let i = create.lastIndex
+      let depth = 1
+      while (i < src.length && depth > 0) {
+        if (src[i] === "(") depth++
+        else if (src[i] === ")") depth--
+        i++
+      }
+      if (/\btenant_id\b/.test(src.slice(create.lastIndex, i))) found.add(match[1].toLowerCase())
+    }
+
+    const alter =
+      /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?tenant_id\b/gi
+    while ((match = alter.exec(src))) found.add(match[1].toLowerCase())
+  }
+
+  return [...found].sort()
+}
+
+/**
+ * Tenant tables that exist in the database but in no migration file.
+ *
+ * Both were created outside scripts/ (`current_inventory_violations` is only ever ALTERed by
+ * script 134, which guards on to_regclass; `push_subscriptions` appears in no .sql at all), so the
+ * derivation cannot see them. Measured against dev's catalogue on 2026-10-18 — these two are the
+ * entire difference, and the assertion below is what will notice if that stops being true.
+ */
+const TENANT_TABLES_NOT_IN_MIGRATIONS = ["current_inventory_violations", "push_subscriptions"]
+
+const TENANT_TABLES = [...new Set([...deriveTenantTables(), ...TENANT_TABLES_NOT_IN_MIGRATIONS])]
 
 const TENANT_WRAPPERS = ["runTenantQuery", "runTenantQueries", "runTenantTransaction"]
 
@@ -259,6 +311,44 @@ const findUnwrappedRoutes = () => {
 
   return unwrapped.sort()
 }
+
+describe("the set of tenant tables is derived, and cannot quietly become empty", () => {
+  it("finds a large set from the migrations rather than nothing at all", () => {
+    // Vacuity assertion. If the regexes stop matching — a rename of scripts/, a change in how
+    // tables are declared — the scan set collapses, TENANT_TABLE_RE matches nothing, and every
+    // test below passes while checking zero routes. 53 tenant tables existed on dev when this
+    // was written; 40 is a floor that a real breakage falls through and growth never trips.
+    expect(deriveTenantTables().length).toBeGreaterThan(40)
+  })
+
+  it("covers the tables the hand-kept list had missed for months", () => {
+    // Named explicitly, because these are the ones that matter and the ones a future regex
+    // change is most likely to drop: the muster, pay rules, and the auth principals.
+    for (const table of [
+      "labour_assignments",
+      "worker_pay_rules",
+      "users",
+      "biometric_punches",
+      "tenant_labour_entry_mode",
+      "transaction_history_archive",
+      "signup_requests",
+      "soil_tests",
+    ]) {
+      expect(TENANT_TABLES, `${table} must be in the scan set`).toContain(table)
+    }
+  })
+
+  it("keeps the not-in-migrations escape hatch honest", () => {
+    // If one of these ever does get a migration, the derivation picks it up and the entry here
+    // stops being load-bearing — at which point it should be deleted rather than left to rot.
+    const derived = deriveTenantTables()
+    const redundant = TENANT_TABLES_NOT_IN_MIGRATIONS.filter((t) => derived.includes(t))
+    expect(
+      redundant,
+      "these are now declared in scripts/*.sql, so remove them from TENANT_TABLES_NOT_IN_MIGRATIONS",
+    ).toEqual([])
+  })
+})
 
 describe("unwrappedClientCalls detector", () => {
   const detect = (src: string) => unwrappedClientCalls(src, "sample.ts")
