@@ -110,6 +110,47 @@ const dirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" 
 console.log(`\nGO LIVE   branch ${branch} @ ${sha}${dirty ? "  ⚠ working tree has uncommitted changes" : ""}`)
 console.log(LIVE ? "  MODE: live -- the domains will move" : "  MODE: report only -- nothing will change (pass --yes to act)")
 
+// ── 0. Deploy from the primary checkout, not a linked worktree ───────────────────────────────
+/**
+ * ⚠ ON 2026-10-19 A GO-LIVE RUN FROM A LINKED GIT WORKTREE SHIPPED A BUILD THAT 500'd ON ROUGHLY
+ * FORTY DB-BACKED ROUTES, AND THE CAUSE IS STILL NOT KNOWN.
+ *
+ * What is known, and it is only correlation:
+ *
+ *  - Run from the worktree `farmflow-main`: build READY, aliased, then ~40 routes answered 500.
+ *    The smoke caught it and the auto-revert worked, but the alias had already moved, so real
+ *    estates saw errors for the length of an 80-route smoke at 17:26 IST on a working day.
+ *  - The SAME commit, built from the primary checkout minutes later: clean. 80 endpoints smoked,
+ *    both domains verified, nothing wrong.
+ *
+ * Four explanations were proposed and all four disproved:
+ *
+ *  1. An uploaded .env.local overriding production config -- the primary checkout has one too, and
+ *     has deployed successfully many times.
+ *  2. An unlinked project missing production env -- the worktree has .vercel/ and deployed into
+ *     the right project.
+ *  3. An incomplete dependency install -- true (38 packages vs 40) but the two missing ones are
+ *     @testing-library and jsdom, both devDependencies absent from any production bundle.
+ *  4. A broken smoke harness -- it passes against live production, signed in, unchanged.
+ *
+ * So this refuses the condition rather than the cause. That is deliberate: "we do not know why,
+ * therefore do not do the thing that broke it" is a weaker claim than a fix, and an honest one.
+ * Deploying from the primary checkout costs nothing and is where every successful deploy has come
+ * from. If the real cause is found, delete this and write the actual guard.
+ */
+step(0, "Deploying from the primary checkout")
+const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], { encoding: "utf8" }).trim()
+if (gitDir.includes("/worktrees/")) {
+  console.error(
+    "\n⚠ STOPPED. This is a linked git worktree, and a go-live from one shipped a build that 500'd" +
+      "\n  on ~40 routes on 2026-10-19 for reasons still unexplained. The same commit built cleanly" +
+      "\n  from the primary checkout." +
+      "\n\n  Deploy from the primary checkout instead. Nothing was deployed.\n",
+  )
+  process.exit(1)
+}
+console.log("  ✓ primary checkout")
+
 // ── 1. Preflight ──────────────────────────────────────────────────────────────────────────────
 step(1, "Production schema preflight")
 if (run("node", ["scripts/dev/preflight-prod.mjs"]).status !== 0) {
