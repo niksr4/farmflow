@@ -9,6 +9,22 @@ export type ModuleBundle = {
   label: string
   description: string
   modules: string[]
+  /**
+   * Whether a tenant may put itself on this plan through guided setup.
+   *
+   * ⚠ EVERY BUNDLE USED TO BE SELECTABLE, INCLUDING ENTERPRISE. /welcome rendered all three as
+   * buttons and completeGuidedSetup accepted any id that matched, so a stranger off the public
+   * signup page could hand themselves the top tier, free and permanently. MODULE_BUNDLES.find
+   * was the entire check.
+   *
+   * Enterprise is a conversation: it is the lot traceability tier (curing, quality, receivables,
+   * billing, documents, compliance, market pricing, plant health), which an estate only needs if
+   * it sells micro-lots direct rather than bulk parchment to a curer. Nobody has asked yet.
+   *
+   * A flag rather than an `id !== "enterprise"` test, so a fourth plan added later has to say
+   * which side it is on instead of defaulting to giveaway.
+   */
+  selfServe: boolean
 }
 
 export const TENANT_PLAN_IDS = ["basic", "core", "enterprise"] as const
@@ -52,6 +68,7 @@ export const MODULES: ModuleDefinition[] = [
 export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "basic",
+    selfServe: true,
     label: "Starter",
     description: "For the estate that wants its notebook and its Excel sheet in one place. Labour, expenses, stock, a balance sheet that stays current, and the rain gauge. No harvest workflow.",
     modules: [
@@ -67,6 +84,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   },
   {
     id: "core",
+    selfServe: true,
     label: "Operations",
     description: "Picking season through to the bank payment. Adds pulping and drying records, dispatch, sales, the season P&L, and the Monday brief on top of Starter.",
     modules: [
@@ -92,6 +110,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   },
   {
     id: "enterprise",
+    selfServe: false,
     label: "Enterprise",
     description: "Everything in Operations, plus quality grading, curing records, receivables, compliance and oversight across several estates. Built for planters running more than one property.",
     modules: MODULES.map((module) => module.id),
