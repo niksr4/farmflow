@@ -3,7 +3,7 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-10-14.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-10-19 (late).** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
 
@@ -45,15 +45,32 @@ day-cap is a schema change rather than a wage reconciliation. So the ledger read
   because 0 worker-days were over the 2-job limit. The downward-correction exemption was verified
   present afterwards, which is what keeps the 16 over-a-day worker-days fixable.
 
-Open PRs: **#88** (failed reads must not read as zeros, in review), **#78** (signup password
-overwrite — **this is the P0**), **#76** (engagement report cadence), **#66** (processing route —
-must not merge until the three-copy `dry_cherry_percent` bug is fixed), **#65** (landing beans).
+Open PRs: **#66 only** (processing route — still must not merge until the three-copy
+`dry_cherry_percent` bug is fixed; `+1,925/-146` and currently behind `main`).
+
+⚠ **THIS LIST NAMED #78 AS "THE P0" FOR FOUR DAYS AFTER IT MERGED.** #78 landed 2026-10-15 and the
+guard is at `app/api/auth/signup/route.ts:89-96`. A stale open-P0 in the file CLAUDE.md tells you
+to read first misdirects the only scarce resource here, which is attention. #88, #76 and #65 are
+also merged.
+
+**27 pull requests landed on 2026-10-19**, which is most of this file's backlog. The ones that
+changed money or exposure:
+
+| PR | What it stopped |
+|---|---|
+| #112 | Correcting a muster allocation **halved what it paid** — the panel posted a reset multiplier and the route's read-before-write guard was vacuous from the only caller that exists |
+| #113 | Editing a block-less labour row silently re-attributed its cost to whatever block was last in state. **179 of Laxmi's 239 rows** |
+| #104 | A `role=user` writer could read **every worker's bank account, IFSC and phone**. 43 of 58 at Medappa, reachable by a live account |
+| #114 | "Delete my data" left the person named in **1,958 rows** for one real writer, 3,141 for another |
+| #123 | The weekly digest reported a revenue the app contradicted (₹12,12,380 of pepper), and pepper sold was being subtracted from **coffee** stock |
+| #111 | An estate with salaried staff could never complete onboarding — the step asked for a daily rate the schema forbids them having |
+| #108 | A new self-serve estate's muster refused every allocation it was told to prepare for |
 
 What is actually pressing, in order:
 
 | | What | Why now |
 |---|---|---|
-| 1 | **#78 — and then a go-live** | A stranger who knows the email of someone mid-signup can overwrite the stored password hash and end up owning the provisioned estate as **admin**. Public, unauthenticated endpoint. The fix is written and tested; it is live in production until it is merged **and** deployed |
+| 1 | **Is PostHog session replay enabled?** | Five minutes, and it either closes the question or turns PII masking into a P0 with a regulatory dimension. The column list is wider than any audit said: on top of the worker fields it covers `sales_records.bank_account`, `other_sales_records.bank_account`, `buyers.email/phone`, `users.email/normalized_email/digest_email` and `billing_invoices.bill_to_address`, so the Sales and Other Sales tabs are in scope too |
 | 2 | **Writes are auto-retried and 7 money tables cannot refuse a duplicate** | `runTenantQuery` retries on `fetch failed`/`econnreset`/`etimedout` — exactly the errors that cannot tell "never arrived" from "committed, response lost". Protected: `attendance_records`, `rainfall_records`, `processing_records`. Not: `labor_transactions`, `expense_transactions`, `transaction_history`, `picking_records`, `labour_assignments`, `sales_records`, `dispatch_records`. One flaky round trip during a muster save doubles a labour row, and every costing number reads it |
 | 3 | **Location scoping is offered in the admin UI and enforced by 3 of 141 routes** | `getAccessibleLocationIds` has only three callers. Restrict a writer to one block and they can still read and write every other block's expenses, labour, stock, sales and rainfall. `user_locations` was 0 rows at last count, so decide: enforce at the estate-filter chokepoint, or withdraw the UI. An unenforced control is worse than an absent one |
 | 4 | **Manoj's picking answers** | Gates picking phases 3–5. Phase 2 (crop on locations) does not need him |
