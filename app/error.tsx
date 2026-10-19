@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import Link from "next/link"
+import * as Sentry from "@sentry/nextjs"
 
 export default function Error({
   error,
@@ -10,8 +11,28 @@ export default function Error({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  /**
+   * ⚠ THIS SAID "Log to an error reporting service if available" AND DID NOT.
+   *
+   * console.error on a phone goes nowhere. So every time an estate saw this screen -- and the
+   * owner reports seeing it often enough on the PWA to keep reloading -- the error was displayed
+   * to the user and recorded in no system. app/global-error.tsx has called captureException the
+   * whole time, but that boundary only fires when the ROOT LAYOUT itself throws, which is rare.
+   * This one catches nearly everything, and it was the blind one.
+   *
+   * Why no data existed to diagnose it: Sentry's onRequestError covers errors thrown out of route
+   * handlers and RSC renders, which is why the server side looked healthy -- 13 error groups in
+   * seven days and twelve of them a module gate correctly refusing the smoke run. A CLIENT render
+   * error reached this file and stopped here.
+   *
+   * The digest is attached as a tag, not just left in the body, so the Error ID the user can read
+   * off the screen is searchable in Sentry. Someone saying "it said Error ID 3f2a1b" is the only
+   * bridge between a phone in a field and a stack trace.
+   */
   useEffect(() => {
-    // Log to an error reporting service if available
+    Sentry.captureException(error, {
+      tags: { boundary: "app/error", digest: error.digest ?? "none" },
+    })
     console.error(error)
   }, [error])
 
