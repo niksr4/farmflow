@@ -97,7 +97,21 @@ describe("every route that reads worker bank columns redacts them", () => {
    * `bankAccount: row.bank_account`. That is shape, not identifiers, so a route using `w.` or
    * `r.` or any other alias is still matched.
    */
-  const DISCLOSES = /bank(?:Account|Ifsc|Name)\s*:\s*\w+\.bank_(?:account|ifsc|name)/
+  const DISCLOSES =
+    /(?:bank(?:Account|Ifsc|Name)|phone)\s*:\s*\w+\.(?:bank_(?:account|ifsc|name)|phone)\b/
+
+  /**
+   * ⚠ `phone` WAS MISSING FROM THE PATTERN, so `phone: w.phone` -- a disclosure of a protected
+   * field -- passed silently. Raised by CodeRabbit on PR #104, citing this repo's own rule about
+   * regexes pinned to the identifiers that happen to be in today's code.
+   *
+   * KNOWN RESIDUAL, stated rather than papered over: a regex cannot see every disclosure shape.
+   * `...row`, `account: row.bank_account`, bracket access and returning a SELECT result directly
+   * would all slip past it. That is why the SECOND scan below exists -- it keys on the SQL rather
+   * than the response, so a route that selects the columns at all has to justify itself even if
+   * it hands them out in a shape this pattern cannot match.
+   */
+  const SELECTS_WORKER_PII = /SELECT[\s\S]{0,400}?\bbank_(?:account|ifsc)\b[\s\S]{0,200}?FROM\s+attendance_workers/i
 
   const readers = routes.filter((f) => DISCLOSES.test(stripComments(readFileSync(f, "utf8"))))
 
@@ -108,14 +122,66 @@ describe("every route that reads worker bank columns redacts them", () => {
     ).toBeGreaterThanOrEqual(2)
   })
 
-  it.each(readers)("%s passes bank details through a role gate", (file) => {
+  /**
+   * Routes allowed to disclose without redactWorkerPii, each with a reason.
+   *
+   * ⚠ THIS USED TO BE `|| /isAdminRole\s*\(/.test(src)`, which any unrelated isAdminRole call
+   * anywhere in the file satisfied -- so a route could return `bankAccount: row.bank_account`
+   * beside a role check on some other branch and pass. Asserting a mention rather than a call's
+   * CONNECTION to the thing it guards is the exact trap this repo documents. Raised by CodeRabbit
+   * on PR #104. An exemption now has to be written down here and justified.
+   */
+  const WHOLESALE_ADMIN_GATED: Record<string, string> = {}
+
+  /**
+   * Every region of `src` that is an argument to a redactWorkerPii(...) call.
+   *
+   * ⚠ THE GATE USED TO BE PER-FILE, AND THAT IS NOT THE PROPERTY. A route that redacted the three
+   * bank fields and disclosed `phone` beside them passed, because the file contained the string
+   * `redactWorkerPii(` somewhere. Tamper-proven: moving `phone: row.phone` out of the redaction
+   * left all eleven tests green. The same per-file looseness let `NOTredactWorkerPii(` satisfy an
+   * unanchored pattern -- hence the \b below.
+   *
+   * So the check is per-OCCURRENCE: every disclosure the pattern finds must sit INSIDE one of
+   * these regions. A balanced-paren walk rather than a character window, because a window is what
+   * a comment shifts.
+   */
+  const redactionRegions = (src: string): [number, number][] => {
+    const regions: [number, number][] = []
+    const call = /\bredactWorkerPii\s*\(/g
+    let m: RegExpExecArray | null
+    while ((m = call.exec(src))) {
+      let i = call.lastIndex
+      let depth = 1
+      while (i < src.length && depth > 0) {
+        if (src[i] === "(") depth++
+        else if (src[i] === ")") depth--
+        i++
+      }
+      regions.push([m.index, i])
+    }
+    return regions
+  }
+
+  it.each(readers)("%s redacts every field it discloses, not merely some", (file) => {
     const src = stripComments(readFileSync(file, "utf8"))
-    const gated = /redactWorkerPii\s*\(/.test(src) || /isAdminRole\s*\(/.test(src)
+    if (file in WHOLESALE_ADMIN_GATED) return
+
+    const regions = redactionRegions(src)
+    const global = new RegExp(DISCLOSES.source, "g")
+    const leaked: string[] = []
+    let m: RegExpExecArray | null
+    while ((m = global.exec(src))) {
+      const at = m.index
+      if (!regions.some(([from, to]) => at > from && at < to)) leaked.push(m[0])
+    }
+
     expect(
-      gated,
-      `${file} returns bankAccount/bankIfsc without calling redactWorkerPii() or isAdminRole(). ` +
-        "A role=user writer can read every worker's account number.",
-    ).toBe(true)
+      leaked,
+      `${file} returns these straight from a database row, outside any redactWorkerPii() call. ` +
+        "A file that redacts some protected fields and discloses another is the shape this guard " +
+        "missed before: the gate was per-file, and the property is per-field.",
+    ).toEqual([])
   })
 })
 
@@ -148,13 +214,54 @@ describe("redacting the read must not let a writer blank what they cannot see", 
     expect(out.bankAccount, "an admin clearing a stale account number must still work").toBeNull()
   })
 
-  it("the worker PUT routes the writer's edit form posts to apply the write gate", () => {
+  it("the worker PUT applies the write gate to every protected field", () => {
     const src = stripComments(readFileSync("app/api/attendance/workers/[id]/route.ts", "utf8"))
     expect(/stripWorkerPiiWrites\s*\(/.test(src)).toBe(true)
-    // And the raw body values must not reach the UPDATE directly, bypassing the gate.
-    expect(
-      /const bankAccount = body\?\.bankAccount/.test(src),
-      "bankAccount is read straight off the body again -- the write gate has been bypassed",
-    ).toBe(false)
+
+    /**
+     * ⚠ THIS USED TO ASSERT THE ABSENCE OF ONE STRING -- `const bankAccount = body?.bankAccount`
+     * -- and only for bankAccount. A different spelling (`const { bankAccount } = body`, or the
+     * body read inline in the SQL template) bypassed the gate and passed, and phone, bank name
+     * and IFSC were not checked at all. Raised by CodeRabbit on PR #104.
+     *
+     * Asserted as a property instead: every protected column's UPDATE must be driven by the
+     * variable the destructuring produced, and the raw body must not reach the statement.
+     */
+    const update = src.slice(src.indexOf("UPDATE attendance_workers"))
+    const statement = update.slice(0, update.indexOf("WHERE id ="))
+    expect(statement.length, "could not isolate the UPDATE statement").toBeGreaterThan(100)
+
+    const columns = [
+      ["phone", "phone"],
+      ["bank_name", "bankName"],
+      ["bank_account", "bankAccount"],
+      ["bank_ifsc", "bankIfsc"],
+    ] as const
+
+    for (const [column, variable] of columns) {
+      // The column is written from the gated variable...
+      expect(
+        new RegExp(`${column}\\s*=\\s*CASE WHEN \\$\\{${variable} !== undefined\\}`).test(statement),
+        `${column} is not written from the gated ${variable}, so a writer's blank may reach it`,
+      ).toBe(true)
+      // ...and never straight off the request body.
+      expect(
+        new RegExp(`${column}[^,]*body\\s*\\??\\.`).test(statement),
+        `${column} reads the request body directly inside the UPDATE, bypassing the write gate`,
+      ).toBe(false)
+    }
+
+    // And the gated names must come from the helper, not be reassigned around it.
+    // The CALL, not the import -- src.indexOf("stripWorkerPiiWrites") finds the import line,
+    // which is the third time today a scan in this repo matched a mention instead of a call.
+    const destructure = src.slice(src.search(/stripWorkerPiiWrites\s*\(/))
+    for (const [, variable] of columns) {
+      expect(
+        src.indexOf(`const ${variable} = body`),
+        `${variable} is read straight off the body again -- the write gate has been bypassed`,
+      ).toBe(-1)
+      expect(destructure.slice(0, 400)).toContain(variable)
+    }
   })
+
 })

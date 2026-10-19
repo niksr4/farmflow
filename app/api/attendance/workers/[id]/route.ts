@@ -306,8 +306,35 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       action: "update",
       entityType: "attendance_workers",
       entityId: id,
-      before: { ...(existing[0] as any), bank_account: "[redacted]", bank_ifsc: "[redacted]", phone: "[redacted]" },
-      after: { name, workerType, dailyRate, bankName, bankAccount: "[redacted]", bankIfsc: "[redacted]", phone: "[redacted]", locationId },
+      /**
+       * ⚠ bank_name WAS NOT REDACTED HERE, AND `after` RECORDED IT IN CLEAR TEXT.
+       *
+       * `before` spreads the whole stored row, so it carried the raw bank name while its three
+       * siblings were masked. And once a writer's PII becomes `undefined` (see
+       * stripWorkerPiiWrites above), `after.bankName` logged as missing for a value nobody
+       * touched -- so the audit trail read as "the bank name was cleared" on an edit that left it
+       * alone. Raised by CodeRabbit on PR #104.
+       *
+       * All four are masked on both sides now. The audit log records THAT the row changed and by
+       * whom; it is not the place to keep a second copy of an account number.
+       */
+      before: {
+        ...(existing[0] as any),
+        bank_name: "[redacted]",
+        bank_account: "[redacted]",
+        bank_ifsc: "[redacted]",
+        phone: "[redacted]",
+      },
+      after: {
+        name,
+        workerType,
+        dailyRate,
+        bankName: "[redacted]",
+        bankAccount: "[redacted]",
+        bankIfsc: "[redacted]",
+        phone: "[redacted]",
+        locationId,
+      },
     })
 
     return NextResponse.json({ success: true })
