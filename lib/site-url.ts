@@ -71,27 +71,180 @@ export type SitemapEntry = {
   path: string
   changeFrequency: "daily" | "weekly" | "monthly" | "yearly"
   priority: number
+  /**
+   * The <title>, without the " | FarmFlow" suffix the root template appends.
+   *
+   * ⚠ NINE OF THESE PAGES HAD NO METADATA AT ALL and inherited a bare "FarmFlow" from the root
+   * layout, so Google saw the same title and the same description on /plans, /capabilities,
+   * /journey, /standards, /trust, /contact, /signup and every legal page. Duplicate titles across
+   * a site are a direct ranking problem: there is nothing for a query to match against, and
+   * nothing to tell two results apart in a list.
+   *
+   * Keep these under about 60 characters. Google truncates past that, and a truncated title is a
+   * sentence somebody else finished for you.
+   */
+  title: string
+  /**
+   * The meta description. Not a ranking factor directly, but it is the sentence under the blue
+   * link, so it decides whether anybody clicks. Aim for 140 to 160 characters.
+   */
+  description: string
 }
 
 export const PUBLIC_SITEMAP_ENTRIES: SitemapEntry[] = [
-  { path: "/", changeFrequency: "weekly", priority: 1.0 },
-  { path: "/plans", changeFrequency: "weekly", priority: 0.9 },
-  { path: "/capabilities", changeFrequency: "weekly", priority: 0.9 },
-  { path: "/journey", changeFrequency: "monthly", priority: 0.7 },
-  { path: "/standards", changeFrequency: "monthly", priority: 0.7 },
-  { path: "/trust", changeFrequency: "monthly", priority: 0.7 },
-  { path: "/contact", changeFrequency: "monthly", priority: 0.8 },
-  // The signup page is a landing page as much as a form -- somebody searching "coffee estate
-  // management software India" and arriving here is the point of all of this.
-  { path: "/signup", changeFrequency: "monthly", priority: 0.8 },
-  // Findable, deliberately not promoted.
-  { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
-  { path: "/legal/terms", changeFrequency: "yearly", priority: 0.3 },
-  { path: "/legal/privacy", changeFrequency: "yearly", priority: 0.3 },
-  { path: "/legal/dpa", changeFrequency: "yearly", priority: 0.2 },
-  { path: "/legal/billing", changeFrequency: "yearly", priority: 0.2 },
-  { path: "/legal/subprocessors", changeFrequency: "yearly", priority: 0.2 },
+  {
+    path: "/",
+    changeFrequency: "weekly",
+    priority: 1.0,
+    // Leads with the phrase a planter actually types. The brand goes last because "FarmFlow"
+    // is not what anybody searches for yet.
+    title: "Coffee estate management software",
+    description:
+      "Track cherry intake, pulping, outturn, the daily muster and cost per kilo of parchment. Built for Arabica and Robusta estates in Karnataka. Free for 30 days.",
+  },
+  {
+    path: "/plans",
+    changeFrequency: "weekly",
+    priority: 0.9,
+    title: "Pricing for coffee estates",
+    description:
+      "What FarmFlow costs, what each plan includes, and which one suits a single estate or a group. Priced in rupees, billed annually, free for the first 30 days.",
+  },
+  {
+    path: "/capabilities",
+    changeFrequency: "weekly",
+    priority: 0.9,
+    title: "Labour, the store, and what a kilo really cost",
+    description:
+      "The muster roll, worker payroll, the fertiliser store, pulping and outturn, and cost per kilo by block. Everything an estate writes down in a day, in one place.",
+  },
+  {
+    path: "/journey",
+    changeFrequency: "monthly",
+    priority: 0.7,
+    title: "From cherry intake to the curing works",
+    description:
+      "How a crop moves through FarmFlow: weighed at the store, pulped and dried, costed by block, then dispatched to the curer with the paperwork already done.",
+  },
+  {
+    path: "/standards",
+    changeFrequency: "monthly",
+    priority: 0.7,
+    title: "Record keeping that holds up",
+    description:
+      "How FarmFlow keeps numbers you can defend: a wrong figure is worse than no figure, so every total traces back to the day and the worker it came from.",
+  },
+  {
+    path: "/trust",
+    changeFrequency: "monthly",
+    priority: 0.7,
+    title: "Security and how your data is handled",
+    description:
+      "Where your estate's data lives, who can see it, how tenants are kept apart at the database level, and what happens when you ask for it back or ask us to delete it.",
+  },
+  {
+    path: "/contact",
+    changeFrequency: "monthly",
+    priority: 0.8,
+    title: "Talk to us about your estate",
+    description:
+      "A real person reads these. Tell us about your estate, your blocks and how you record labour today, and we will tell you whether FarmFlow fits.",
+  },
+  {
+    path: "/signup",
+    changeFrequency: "monthly",
+    priority: 0.8,
+    title: "Start a 30 day free trial",
+    description:
+      "Set up your estate in a few minutes. No card required. Eighty seven activity codes and your blocks are ready before you enter your first day of labour.",
+  },
+  {
+    path: "/privacy",
+    changeFrequency: "yearly",
+    priority: 0.3,
+    title: "Privacy notice",
+    description:
+      "What personal data FarmFlow holds about estate workers and users, why we hold it, how long for, and how to ask for a copy or ask us to erase it.",
+  },
+  {
+    path: "/legal/terms",
+    changeFrequency: "yearly",
+    priority: 0.3,
+    title: "Terms of service",
+    description:
+      "The terms under which an estate uses FarmFlow: what we provide, what you are responsible for, how billing works and how either side can end the arrangement.",
+  },
+  {
+    path: "/legal/privacy",
+    changeFrequency: "yearly",
+    priority: 0.3,
+    title: "Privacy policy",
+    description:
+      "The full privacy policy for FarmFlow, covering what we collect, the legal basis for it, who processes it on our behalf, and your rights under the DPDP Act.",
+  },
+  {
+    path: "/legal/dpa",
+    changeFrequency: "yearly",
+    priority: 0.2,
+    title: "Data processing agreement",
+    description:
+      "The data processing terms between your estate as controller and FarmFlow as processor, including security measures, subprocessors and breach notification.",
+  },
+  {
+    path: "/legal/billing",
+    changeFrequency: "yearly",
+    priority: 0.2,
+    title: "Billing terms",
+    description:
+      "How FarmFlow charges: billing cycles, what happens at renewal, how to change plan, refunds, and what access looks like if an invoice goes unpaid.",
+  },
+  {
+    path: "/legal/subprocessors",
+    changeFrequency: "yearly",
+    priority: 0.2,
+    title: "Subprocessors",
+    description:
+      "The third parties FarmFlow relies on to run the service, what each one does, where it processes data, and why it is needed.",
+  },
 ]
+
+/**
+ * Build a page's Metadata from the single list above.
+ *
+ * One source of truth for the sitemap, the <title>, the description and the canonical, so a page
+ * cannot end up advertised in the sitemap with no metadata of its own, which is the state nine of
+ * these were in.
+ *
+ * The Open Graph URL is the CANONICAL host. It used to be the apex, which 307s to www, while the
+ * sitemap said www -- two contradictory canonical signals on the same site.
+ */
+export const seoFor = (path: string) => {
+  const entry = PUBLIC_SITEMAP_ENTRIES.find((e) => e.path === path)
+  if (!entry) {
+    throw new Error(
+      `No SEO entry for ${path}. Add it to PUBLIC_SITEMAP_ENTRIES in lib/site-url.ts, or the page ` +
+        "ships with the root layout's generic title and competes with every other page.",
+    )
+  }
+  const url = new URL(entry.path, CANONICAL_SITE_URL).toString()
+  return {
+    title: entry.title,
+    description: entry.description,
+    alternates: { canonical: entry.path },
+    openGraph: {
+      type: "website" as const,
+      url,
+      siteName: "FarmFlow",
+      title: entry.title,
+      description: entry.description,
+    },
+    twitter: {
+      card: "summary_large_image" as const,
+      title: entry.title,
+      description: entry.description,
+    },
+  }
+}
 
 /**
  * Ungated pages deliberately kept OUT of the sitemap, each with the reason.

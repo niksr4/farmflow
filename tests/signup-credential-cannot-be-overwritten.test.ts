@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 /**
@@ -139,7 +139,25 @@ describe("a stranger cannot set the password on somebody else's pending signup",
  * to read anywhere.
  */
 const signupRoute = readFileSync("app/api/auth/signup/route.ts", "utf8")
-const signupPage = readFileSync("app/signup/page.tsx", "utf8")
+/**
+ * ⚠ THE SIGNUP FORM MOVED, AND THIS LINE IS WHY YOU CHECK FIRST.
+ *
+ * app/signup/page.tsx became a thin server wrapper on 2026-10-19 so it could export `metadata`
+ * (a client component cannot), and the form itself moved to app/signup/page-client.tsx. This test
+ * read the old path, so it went red on a change that altered no behaviour whatsoever -- exactly
+ * the tax CLAUDE.md documents: five tests broke across nine decomposition passes and NONE was
+ * asserting "this file contains X", every one was asserting "the implementation does X".
+ *
+ * Both halves are read and joined, so the assertion holds wherever the code sits. That is the
+ * upgrade rather than a path swap: moving it again does not break this.
+ */
+const signupPage = [
+  "app/signup/page.tsx",
+  "app/signup/page-client.tsx",
+]
+  .filter((f) => existsSync(f))
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n")
 const verifyRoute = readFileSync("app/verify-email/page.tsx", "utf8")
 const verifyPage = readFileSync("components/verify-email-page.tsx", "utf8")
 
