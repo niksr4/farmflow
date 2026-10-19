@@ -18,33 +18,12 @@ import SentryAuthSync from "@/components/sentry-auth-sync"
 import WebVitals from "@/components/web-vitals"
 import { LocaleProvider } from "@/components/locale-provider"
 import { LOCALE_COOKIE_KEY, normalizeAppLocale } from "@/lib/i18n"
+import { resolveMetadataBase } from "@/lib/site-url"
 
 // Self-hosted, and shared with components/public-site-shell.tsx so the app and the marketing site
 // cannot drift onto different weights of the same typeface. See app/fonts/index.ts for why.
 import { bodyFont, displayFont } from "@/app/fonts"
 
-const resolveMetadataBase = () => {
-  const explicitUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim()
-  if (explicitUrl) {
-    try {
-      return new URL(explicitUrl)
-    } catch {
-      // fall through to Vercel/local fallbacks.
-    }
-  }
-
-  const vercelUrl = String(process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "").trim()
-  if (vercelUrl) {
-    const normalized = vercelUrl.startsWith("http://") || vercelUrl.startsWith("https://") ? vercelUrl : `https://${vercelUrl}`
-    try {
-      return new URL(normalized)
-    } catch {
-      // fall through to localhost.
-    }
-  }
-
-  return new URL("http://localhost:3000")
-}
 
 export const metadata: Metadata = {
   metadataBase: resolveMetadataBase(),
