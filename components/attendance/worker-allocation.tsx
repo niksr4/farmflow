@@ -61,6 +61,23 @@ export default function WorkerAllocation({
      * prefill would silently wipe the contract price of every row it touched.
      */
     lumpSum?: number | null
+    /**
+     * ⚠ THE SAME REASONING AS lumpSum ABOVE, AND THESE FOUR WERE MISSED.
+     *
+     * The panel posts all of them on every save, so the PUT's "absent means leave alone" guard is
+     * never reached from here -- it protects a caller that does not exist. Without a prefill,
+     * correcting an allocation's block reset the multiplier to 1 and HALVED total_cost, and
+     * cleared a gang's driver, supervisor and vehicle charges to null.
+     *
+     * They were not prefillable before this change either: GET /api/attendance did not return
+     * them. Write-only columns, saved by POST and visible nowhere.
+     */
+    payMultiplier?: number | null
+    driverCharge?: number | null
+    supervisorCharge?: number | null
+    vehicleCharge?: number | null
+    /** The crew that actually turned out for THIS job, not the gang's roster size. */
+    headcount?: number | null
   } | null
   /** A gang carries its crew size; an individual is always one. */
   headcount: number
@@ -130,7 +147,7 @@ export default function WorkerAllocation({
    */
   const allowedShare = editing?.dayFraction != null ? Math.max(remaining, editing.dayFraction) : remaining
   const [dayFraction, setDayFraction] = useState(editing?.dayFraction ?? (alreadyBooked ? 0.5 : 1))
-  const [payMultiplier, setPayMultiplier] = useState(1)
+  const [payMultiplier, setPayMultiplier] = useState(editing?.payMultiplier ?? 1)
   // Blank means "whatever this work pays"; typing here prices this one entry differently without
   // changing the code for everyone.
   const [rateOverride, setRateOverride] = useState("")
@@ -145,10 +162,19 @@ export default function WorkerAllocation({
   const [contractPrice, setContractPrice] = useState(
     editing?.lumpSum != null ? String(editing.lumpSum) : "",
   )
-  const [crew, setCrew] = useState(String(headcount || 1))
-  const [driver, setDriver] = useState("")
-  const [supervisor, setSupervisor] = useState("")
-  const [vehicle, setVehicle] = useState("")
+  /**
+   * The crew on the job being corrected, falling back to the gang's roster size for a new entry.
+   *
+   * It read `headcount` unconditionally, which is the gang's CURRENT size -- so "8 of 11 came"
+   * became 11 the moment anyone edited the row, and the route's `headcount = COALESCE(...)` was
+   * handed the wrong number rather than no number.
+   */
+  const [crew, setCrew] = useState(String(editing?.headcount ?? headcount ?? 1))
+  const [driver, setDriver] = useState(editing?.driverCharge != null ? String(editing.driverCharge) : "")
+  const [supervisor, setSupervisor] = useState(
+    editing?.supervisorCharge != null ? String(editing.supervisorCharge) : "",
+  )
+  const [vehicle, setVehicle] = useState(editing?.vehicleCharge != null ? String(editing.vehicleCharge) : "")
   const [busy, setBusy] = useState(false)
 
   // The daily wage, unless this day was worth something else. Work that pays differently is
