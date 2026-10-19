@@ -1,3 +1,8 @@
+import type { Metadata } from "next"
+import { seoFor } from "@/lib/site-url"
+
+export const metadata: Metadata = seoFor("/legal/subprocessors")
+
 // Kept in sync with the subprocessor list in section 5 of app/legal/privacy/page.tsx --
 // update both together. This is the page that list is supposed to be the "full list" for,
 // so drifting out of sync with it defeats the point of having a separate page at all.

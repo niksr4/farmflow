@@ -27,9 +27,27 @@ import { bodyFont, displayFont } from "@/app/fonts"
 
 export const metadata: Metadata = {
   metadataBase: resolveMetadataBase(),
-  title: "FarmFlow",
-  description: "Coffee estate operations with traceability, yields, and buyer-ready reporting.",
-  generator: "v0.dev",
+  /**
+   * `template` lets every page supply its own title and get the brand appended, so /plans is
+   * "Pricing for coffee estates | FarmFlow" rather than the bare "FarmFlow" that nine public
+   * pages were serving. `default` covers anything that declares none.
+   */
+  title: {
+    default: "FarmFlow: coffee estate management software",
+    template: "%s | FarmFlow",
+  },
+  description:
+    "Coffee estate management software for Arabica and Robusta planters. The muster, outturn, the store, and cost per kilo of parchment in one book.",
+  // `generator: "v0.dev"` was here and shipped a <meta name="generator" content="v0.dev"> on every
+  // page. It tells a reader nothing useful and advertises the scaffolding this started from.
+  keywords: [
+    "coffee estate management software",
+    "coffee plantation software India",
+    "estate muster roll software",
+    "coffee outturn tracking",
+    "Arabica Robusta estate records",
+    "coffee estate payroll Karnataka",
+  ],
   applicationName: "FarmFlow",
   appleWebApp: {
     capable: true,

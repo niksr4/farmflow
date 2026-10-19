@@ -1,3 +1,8 @@
+import type { Metadata } from "next"
+import { seoFor } from "@/lib/site-url"
+
+export const metadata: Metadata = seoFor("/legal/billing")
+
 export default function BillingPolicyPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-6 py-12">
