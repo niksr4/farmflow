@@ -146,6 +146,26 @@ const EMPTY_FORM = {
   estate: UNASSIGNED_ESTATE,
 }
 
+/**
+ * What this worker is paid, in the form their type is actually paid in.
+ *
+ * ⚠ A Rs 17,000/MONTH MANAGER READ AS "No rate set" ON A PHONE AND "--" ON DESKTOP. The roster
+ * showed `dailyRate` only, and a salaried worker has no daily rate BY DATABASE CONSTRAINT
+ * (scripts/141: CHECK (monthly_wage IS NULL OR COALESCE(daily_rate, 0) = 0)). So monthly_wage was
+ * settable in four places on this screen -- add form, mobile edit, desktop edit, bulk edit -- and
+ * displayed in none of them. Saved correctly, shown as nothing, and reads as "it did not save".
+ *
+ * That is the same shape as the gender bug this file already documents above, and the same root
+ * cause as the onboarding checklist that could never go green for an estate with salaried staff.
+ */
+const payBasisLabel = (worker: { dailyRate: number | null; monthlyWage?: number | null }) => {
+  // formatCurrency rather than a hand-rolled toLocaleString: this file had both forms, and the
+  // two cells below rendered the same figure two ways.
+  if (worker.monthlyWage != null) return `${formatCurrency(worker.monthlyWage)}/month`
+  if (worker.dailyRate != null) return `${formatCurrency(worker.dailyRate)}/day`
+  return null
+}
+
 export default function WorkerProfilesTab() {
   const { user } = useAuth()
   const canWrite = canWriteModule((user?.role ?? "user") as UserRole, "accounts")
@@ -1049,7 +1069,7 @@ export default function WorkerProfilesTab() {
                             )}
                           </div>
                           <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-500">
-                            {w.dailyRate != null ? `₹${w.dailyRate.toLocaleString("en-IN")}/day` : "No rate set"}
+                            {payBasisLabel(w) ?? "No rate set"}
                           </p>
                         </div>
                         <span className="shrink-0 text-stone-400">
@@ -1211,7 +1231,8 @@ export default function WorkerProfilesTab() {
                     <TableHead>Name</TableHead>
                     <TableHead>Type</TableHead>
                     {showEstateField && <TableHead>Estate</TableHead>}
-                    <TableHead>Daily Rate</TableHead>
+                    {/* "Daily Rate" was wrong for the two salaried staff whose cell this is. */}
+                    <TableHead>Pay</TableHead>
                     {/* Gender was settable on create and displayed nowhere, which made it
                         write-only: you could record it and never see or correct it. INDICOFS
                         4.6.3G asks the estate to *demonstrate* this data. */}
@@ -1503,7 +1524,7 @@ export default function WorkerProfilesTab() {
                           </TableCell>
                         )}
                         <TableCell className="text-sm">
-                          {w.dailyRate != null ? `₹${w.dailyRate.toLocaleString("en-IN")}` : <span className="text-xs text-muted-foreground">—</span>}
+                          {payBasisLabel(w) ?? <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{formatGender(w.gender) ?? "—"}</TableCell>
                         <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{w.phone || "—"}</TableCell>
@@ -1665,7 +1686,7 @@ export default function WorkerProfilesTab() {
                           : "no attendance recorded"}
                         {w.lastSeen ? `, last on ${formatDateOnly(w.lastSeen)}` : ""}
                         {w.estate ? ` · ${w.estate}` : ""}
-                        {w.dailyRate != null ? ` · ${formatCurrency(w.dailyRate)}/day` : ""}
+                        {payBasisLabel(w) ? ` · ${payBasisLabel(w)}` : ""}
                       </p>
                     </div>
                     {canWrite && (

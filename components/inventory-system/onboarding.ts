@@ -1,3 +1,4 @@
+import { isPaidDaily } from "@/lib/worker-types"
 /**
  * What an estate has to tell FarmFlow before FarmFlow can tell it anything.
  *
@@ -134,14 +135,42 @@ export const countItemsMissingPrice = (payload: any) => {
   return items.filter((i: any) => !(Number(i?.avg_price ?? i?.avgPrice ?? i?.price) > 0)).length
 }
 
-/** A rate on every worker, or the muster still asks for one on every line. */
+/**
+ * Does this worker have the pay basis their type is paid on?
+ *
+ * ⚠ THIS STEP COULD NEVER GO GREEN FOR AN ESTATE WITH SALARIED STAFF, AND THERE WAS NO WAY OUT.
+ * The old predicate was `every(Number(w.dailyRate) > 0)`. A monthly staff member has no daily
+ * rate BY DATABASE CONSTRAINT -- scripts/141 adds
+ *
+ *   CHECK (monthly_wage IS NULL OR COALESCE(daily_rate, 0) = 0)
+ *
+ * so recording a salary makes a daily rate impossible. A correctly-recorded Rs 17,000/month
+ * manager was therefore counted forever as "missing a rate", the step stayed red, and the banner
+ * told the estate to go and fix something the schema forbids. Nobody files a bug for that; they
+ * stop reading the checklist.
+ *
+ * THIS IS THE THIRD SITE OF ONE BUG. app/api/payroll-summary/route.ts:461 fixed it with the
+ * comment "Monthly staff have no daily rate on purpose, so 'missing' is the wrong word for them
+ * -- same fix as the muster's own banner in attendance-tab.tsx", and attendance-tab.tsx:572 is
+ * that second site. Both route through isPaidDaily so they cannot drift; this one did not exist
+ * to them because it lives in the onboarding module.
+ *
+ * A salaried worker with no salary IS unpriced, so the rule is the full one rather than an
+ * exemption: priced means the basis your type is actually paid on.
+ */
+export const hasPayBasis = (worker: any): boolean =>
+  isPaidDaily(worker?.workerType)
+    ? Number(worker?.dailyRate) > 0
+    : Number(worker?.monthlyWage) > 0
+
+/** A pay basis on every worker, or the muster still asks for one on every line. */
 export const isWorkersDone = (payload: any) => {
   const workers = asArray(payload?.workers)
-  return workers.length > 0 && workers.every((w: any) => Number(w?.dailyRate) > 0)
+  return workers.length > 0 && workers.every(hasPayBasis)
 }
 
 export const countWorkersMissingRate = (payload: any) =>
-  asArray(payload?.workers).filter((w: any) => !(Number(w?.dailyRate) > 0)).length
+  asArray(payload?.workers).filter((w: any) => !hasPayBasis(w)).length
 
 /**
  * Both coordinates or neither -- a latitude with no longitude is not a location, and the forecast
