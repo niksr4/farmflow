@@ -136,12 +136,28 @@ export async function estimateSellableStock(tenantId: string): Promise<SellableS
            AND process_date BETWEEN $2::date AND $3::date`,
         [tenantId, fiscalYearStart, fiscalYearEnd],
       ),
+      /**
+       * ⚠ THIS CHAIN OMITTED TWO COLUMNS THE OTHER READERS INCLUDE.
+       *
+       * It resolved kgs -> weight_kgs -> bags, while app/api/sales/route.ts resolves
+       * kgs_received -> kgs -> weight_kgs -> kgs_sent -> bags and scripts/121 resolves
+       * kgs -> weight_kgs -> kgs_received -> kgs_sent. Three orders over five columns of one table,
+       * which is three answers to "how much was sold". A legacy row carrying only `kgs_sent`
+       * counted as its real weight in the oversell guard and as ZERO KILOGRAMS here -- and this
+       * figure is the denominator of the unsold-stock estimate the digest pairs with advice to sell.
+       *
+       * booked_revenue.kgs is the one order, defined once in the view. Bags stay the residual
+       * fallback here because the view deliberately does not convert them -- bag weight is a
+       * per-tenant setting the database does not know.
+       *
+       * It also reads other_sales_records now, which is correct: pepper sold is stock gone.
+       */
       sql.query(
         `SELECT COALESCE(SUM(
-           COALESCE(NULLIF(kgs, 0), NULLIF(weight_kgs, 0),
-             bags_sold * COALESCE((SELECT bag_weight_kg FROM tenants WHERE id = $1 LIMIT 1), 50))
+           COALESCE(NULLIF(kgs, 0),
+             bags_sold * COALESCE((SELECT NULLIF(bag_weight_kg, 0) FROM tenants WHERE id = $1 LIMIT 1), 50))
          ), 0) AS total_kg
-         FROM sales_records
+         FROM booked_revenue
          WHERE tenant_id = $1
            AND sale_date BETWEEN $2::date AND $3::date`,
         [tenantId, fiscalYearStart, fiscalYearEnd],
