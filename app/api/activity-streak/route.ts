@@ -51,7 +51,12 @@ export async function GET() {
             `,
             [tenantId, tz],
           ),
-    ])
+    ]).catch((error) => {
+      // A cosmetic streak may degrade to 0, but a failing DB must still leave a trace.
+      // From #92; main already imported logServerError, so only the catch is taken.
+      logServerError("Activity streak query failed", error)
+      return [[], []] as const
+    })
 
     // Merge distinct days from both DB connections
     const daySet = new Set<string>()
