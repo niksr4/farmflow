@@ -1,0 +1,18 @@
+# Belt and braces: production configuration comes from Vercel, never from a file on a laptop.
+#
+# ⚠ Next.js loads .env.local at RUNTIME with HIGHER precedence than platform environment
+# variables. So if a local env file ever reaches a deployment bundle, the live app runs on
+# whatever that file says -- and this one defines APP_DATABASE_URL (the DEV app_runtime
+# connection) and NEXTAUTH_SECRET. A production deployment pointed at the dev database is a
+# silent, total failure of every DB-backed route.
+#
+# The Vercel CLI is understood to exclude .env* by default. This states it explicitly rather
+# than relying on that, because the cost of being wrong is the whole site and the default is
+# not something this repo controls.
+.env
+.env.*
+!.env.example
+
+# Never ship local notes, scratch work or the scanner's token into a deployment.
+.farmflow-scanner
+scratchpad
