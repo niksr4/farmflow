@@ -24,6 +24,7 @@ import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server
 import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
 import { escapeHtml } from "@/lib/html-escape"
 import { formatCurrency } from "@/lib/format"
+import { TENANT_BAG_KG_SQL } from "@/lib/server/bag-weight"
 
 type DigestResult = {
   tenantId: string
@@ -308,12 +309,13 @@ async function fetchSeasonCostBasis(tenantId: string): Promise<SeasonCostBasis |
     const rows = await sql.query(`
       WITH fy AS (SELECT $2::date AS s, $3::date AS e),
       bag AS (
-        SELECT COALESCE(NULLIF(bag_weight_kg, 0), 50) AS kg FROM tenants WHERE id = $1
+        SELECT ${TENANT_BAG_KG_SQL} AS kg
       ),
       sold AS (
         -- One row per sale with its weight resolved once. booked_revenue.kgs already collapses
         -- kgs/weight_kgs/kgs_received/kgs_sent into one figure; bags are the residual fallback.
         SELECT
+          br.source,
           br.sale_date,
           br.revenue,
           COALESCE(NULLIF(br.kgs, 0), br.bags_sold * (SELECT kg FROM bag)) AS kgs
@@ -330,7 +332,8 @@ async function fetchSeasonCostBasis(tenantId: string): Promise<SeasonCostBasis |
         (SELECT COALESCE(SUM(kgs),0) FROM sold
            WHERE sale_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS sold_kg,
         (SELECT SUM(revenue) / NULLIF(SUM(kgs), 0) FROM sold
-           WHERE sale_date >= NOW() - INTERVAL '6 months' AND revenue > 0 AND kgs > 0) AS avg_sell_price,
+           WHERE source = 'sale'
+             AND sale_date >= NOW() - INTERVAL '6 months' AND revenue > 0 AND kgs > 0) AS avg_sell_price,
         (SELECT MAX(sale_date)::text FROM sold) AS last_sale
     `, [tenantId, start, end])
 

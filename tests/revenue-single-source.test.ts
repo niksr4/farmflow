@@ -70,7 +70,23 @@ const stripComments = (body: string) =>
   body
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/^[^\n"'`]*\/\/.*$/gm, " ")
-    .replace(/(^|\s)--\s.*$/gm, "$1 ")
+    /**
+     * ⚠ TWO BUGS IN ONE LINE, BOTH OF WHICH LET A GUARD GO QUIET. It read
+     * `/(^|\s)--\s.*$/gm`, requiring whitespace AFTER the dashes.
+     *
+     *  1. Postgres accepts `--FROM booked_revenue` as a comment and that pattern left it intact,
+     *     so a COMMENTED-OUT view read satisfied the "this file must read the view" assertion.
+     *     The guard passed on a file that no longer reads booked_revenue at all.
+     *  2. `\s` matches a newline, so on an empty `--` comment the `\s` after the dashes consumed
+     *     the line break and `.*$` then ate the WHOLE NEXT LINE -- which could be a forbidden
+     *     `SUM(revenue) FROM sales_records`, deleted before the scan ever saw it.
+     *
+     * `[^\n]*` cannot cross a line break, which fixes both. The leading `(^|\s)` is kept so a
+     * decrement (`attempts--`, `--i`) is still not mistaken for a comment; a preceding newline
+     * matched by `\s` is put back by `$1`. Raised by CodeRabbit on PR #123, and both cases are
+     * tamper-tested below.
+     */
+    .replace(/(^|\s)--[^\n]*/gm, "$1 ")
 
 const routes = SCAN_ROOTS.flatMap(walk).map((file) => ({
   rel: path.relative(REPO_ROOT, file),
@@ -81,6 +97,44 @@ const routes = SCAN_ROOTS.flatMap(walk).map((file) => ({
 const sumsRawRevenue = (body: string) =>
   /SUM\(\s*(?:[a-z_]+\.)?(?:revenue|total_revenue|contract_amount)\s*\)/i.test(body) &&
   /\bFROM\s+(sales_records|other_sales_records)\b/i.test(body)
+
+/**
+ * The stripper is the guard's foundation: everything below scans its output, so a bug here makes
+ * every assertion in this file quietly weaker. CodeRabbit asked for these two cases by name on
+ * PR #123 and both of them passed against the old pattern.
+ */
+describe("the SQL comment stripper cannot hide what this guard looks for", () => {
+  it("treats --FROM with no space as the comment Postgres says it is", () => {
+    // Bug 1: the old pattern required whitespace after the dashes, so this survived stripping and
+    // satisfied the "must read the view" assertion while reading nothing.
+    const stripped = stripComments("const q = `SELECT 1\n--FROM booked_revenue\n`")
+    expect(
+      /FROM booked_revenue/.test(stripped),
+      "a commented-out view read must not satisfy the required-view assertion",
+    ).toBe(false)
+  })
+
+  it("does not swallow the line after an empty comment", () => {
+    // Bug 2: `\s` matched the newline, so `.*$` ate the next line whole -- taking a forbidden
+    // raw-revenue sum with it.
+    const stripped = stripComments("SELECT 1\n--\nSUM(revenue) FROM sales_records\n")
+    expect(
+      /SUM\(revenue\)\s*FROM sales_records/.test(stripped),
+      "an empty -- comment deleted the following line, hiding exactly what this guard forbids",
+    ).toBe(true)
+  })
+
+  it("still refuses to treat a decrement as a comment", () => {
+    // The reason the leading (^|\s) is kept. Removing it would strip the rest of these lines.
+    for (const code of ["let i = n; i--; useIt(i)", "while (--attempts) { retry() }"]) {
+      expect(stripComments(code)).toContain(code.includes("useIt") ? "useIt(i)" : "retry()")
+    }
+  })
+
+  it("still strips an ordinary SQL comment", () => {
+    expect(stripComments("SELECT 1 -- FROM booked_revenue\n")).not.toMatch(/FROM booked_revenue/)
+  })
+})
 
 describe("revenue comes from booked_revenue", () => {
   it("finds files under every scanned root", () => {

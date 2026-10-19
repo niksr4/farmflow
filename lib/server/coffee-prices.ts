@@ -6,6 +6,7 @@ import { fetchWithTimeout } from "@/lib/server/http"
 import { withResponseCache } from "@/lib/server/response-cache"
 import { logServerWarning } from "@/lib/server/safe-logging"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { TENANT_BAG_KG_SQL } from "@/lib/server/bag-weight"
 
 // Alpha Vantage "COFFEE" commodity function returns ICO composite indicator
 // price in USD per pound, monthly intervals.
@@ -150,15 +151,29 @@ export async function estimateSellableStock(tenantId: string): Promise<SellableS
        * fallback here because the view deliberately does not convert them -- bag weight is a
        * per-tenant setting the database does not know.
        *
-       * It also reads other_sales_records now, which is correct: pepper sold is stock gone.
+       * ⚠ RESTRICTED TO THE COFFEE ARM, AND THE COMMENT HERE USED TO ARGUE THE OPPOSITE.
+       *
+       * It said "it also reads other_sales_records now, which is correct: pepper sold is stock
+       * gone". The pepper did leave the estate -- but it never entered producedKg, which counts
+       * dry_parch + dry_cherry from processing_records and is coffee only. So subtracting pepper
+       * kilos from coffee kilos understates unsold coffee, and the digest pairs that figure with
+       * advice about whether to SELL coffee.
+       *
+       * Worked example from the review: produced 10,000 kg of coffee, sold 6,000 kg of coffee,
+       * sold 2,500 kg of pepper. The estate pulse and the weekly digest showed 1,500 kg unsold
+       * instead of 4,000. With enough pepper the Math.max clamp shows 0 kg. Nothing throws.
+       *
+       * `source = 'sale'` is the documented discriminator -- migration 144's own comment says
+       * "callers that genuinely mean coffee filter on source = 'sale'". Raised by CodeRabbit on
+       * PR #123.
        */
       sql.query(
         `SELECT COALESCE(SUM(
-           COALESCE(NULLIF(kgs, 0),
-             bags_sold * COALESCE((SELECT NULLIF(bag_weight_kg, 0) FROM tenants WHERE id = $1 LIMIT 1), 50))
+           COALESCE(NULLIF(kgs, 0), bags_sold * ${TENANT_BAG_KG_SQL})
          ), 0) AS total_kg
          FROM booked_revenue
          WHERE tenant_id = $1
+           AND source = 'sale'
            AND sale_date BETWEEN $2::date AND $3::date`,
         [tenantId, fiscalYearStart, fiscalYearEnd],
       ),

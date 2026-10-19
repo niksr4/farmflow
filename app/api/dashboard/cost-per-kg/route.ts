@@ -8,11 +8,14 @@ import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { DEFAULT_BAG_WEIGHT_KG } from "@/lib/server/bag-weight"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const DEFAULT_BAG_WEIGHT_KG = 50
+// Shared with lib/server/bag-weight.ts, which holds the SQL form of the same rule. This route
+// resolves it in JavaScript rather than in the query, which is fine -- but the NUMBER must not
+// drift from the one the SQL default uses, or two screens disagree about the same estate.
 
 const isMissingRelation = (error: unknown, relation: string) =>
   String((error as Error)?.message || error).includes(`relation "${relation}" does not exist`)
