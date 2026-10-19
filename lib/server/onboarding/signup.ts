@@ -5,6 +5,8 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sendSignupVerificationEmail } from "@/lib/server/onboarding/email"
+import { sendOwnerSignupRequestedAlert } from "@/lib/server/onboarding/owner-alerts"
+import { logServerError } from "@/lib/server/safe-logging"
 import type { SignupRequestRecord, SignupRequestResult } from "@/lib/server/onboarding/types"
 import {
   generateSignupToken,
@@ -375,6 +377,37 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
   }
 
   await markVerificationSent(signupRequest.id)
+
+  /**
+   * ⚠ THE OWNER WAS NOT TOLD A SIGNUP HAD STARTED, FOR THE WHOLE LIFE OF THE FUNNEL.
+   *
+   * sendOwnerSignupRequestedAlert has existed, fully written, failure-logged via logAppErrorEvent
+   * and covered by three tests -- and was called by NOTHING outside those tests. Its own failure
+   * metadata names `/api/auth/signup` as the endpoint, so this is where it was meant to go. The
+   * only owner alert actually wired up fires AFTER successful provisioning, which means an estate
+   * that starts a signup and stalls was invisible by construction.
+   *
+   * That is not hypothetical. Of seven signup requests on production, five never got past this
+   * point, and the one real inbound estate sat `pending` for 144 days with nobody aware it had
+   * ever arrived. Three other mechanisms that might have caught it are each pointed at the far
+   * end of the funnel: the nudge agent only queries `status = 'provisioned'`, no screen lists
+   * signup_requests at all, and the dormancy gate cannot see a lead with no tenant.
+   *
+   * Deliberately after markVerificationSent and deliberately not awaited for its result: the
+   * signup has already succeeded by here, and an alert to me must never be what makes an estate's
+   * signup fail. The helper itself never throws -- it logs its own delivery failure -- so the
+   * catch is belt and braces.
+   */
+  void sendOwnerSignupRequestedAlert({
+    signupRequestId: signupRequest.id,
+    name: signupRequest.name,
+    email: signupRequest.email,
+    estateName: signupRequest.estate_name,
+    source: signupRequest.source,
+    ipAddress,
+  }).catch((error: unknown) => {
+    logServerError("Owner signup-request alert threw", error)
+  })
 
   return {
     signupRequestId: signupRequest.id,
