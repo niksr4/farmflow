@@ -24,6 +24,7 @@ import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server
 import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
 import { escapeHtml } from "@/lib/html-escape"
 import { formatCurrency } from "@/lib/format"
+import { TENANT_BAG_KG_SQL } from "@/lib/server/bag-weight"
 
 type DigestResult = {
   tenantId: string
@@ -117,7 +118,10 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
           WHERE tenant_id = $1 AND entry_date BETWEEN $2 AND $3)    AS expense_total,
         (SELECT COUNT(*) FROM expense_transactions
           WHERE tenant_id = $1 AND entry_date BETWEEN $2 AND $3)    AS expense_entries,
-        (SELECT COALESCE(SUM(revenue), 0) FROM sales_records
+        -- booked_revenue, not sales_records: coffee AND pepper AND contract sales, under the one
+        -- definition scripts/121 created. Summing sales_records here reported a week's revenue that
+        -- the P&L tab of the same estate disagreed with, by email, every Monday.
+        (SELECT COALESCE(SUM(revenue), 0) FROM booked_revenue
           WHERE tenant_id = $1 AND sale_date BETWEEN $2 AND $3)     AS sales_revenue,
         (SELECT COALESCE(SUM(bags_dispatched), 0) FROM dispatch_records
           WHERE tenant_id = $1 AND dispatch_date BETWEEN $2 AND $3) AS dispatch_bags,
@@ -274,8 +278,50 @@ async function fetchSeasonCostBasis(tenantId: string): Promise<SeasonCostBasis |
     const end = fy.endDate
     const fyLabel = fy.label
 
+    /**
+     * ⚠ EVERY REVENUE FIGURE HERE READ `sales_records` DIRECTLY, AND THIS GOES OUT BY EMAIL.
+     *
+     * scripts/121 created `booked_revenue` precisely because six routes summed only sales_records
+     * and were blind to HoneyFarm's Rs 12,12,380 of pepper. The fix was applied to those six and
+     * never to the agents, so the owner's Monday email reported a season revenue, a sold weight and
+     * a "last sale" date that all excluded other_sales_records -- while the P&L tab of the same
+     * estate included it. Two numbers, one estate, and the email was the one nobody could check.
+     *
+     * tests/revenue-single-source.test.ts could not see this because it scanned app/api only.
+     *
+     * THREE THINGS CHANGED, and the second two are not cosmetic:
+     *
+     * 1. `booked_revenue` replaces `sales_records`, so pepper and contract sales count.
+     *
+     * 2. THE BAG WEIGHT COMES FROM THE TENANT, NOT FROM 50. This query hardcoded `bags_sold*50`,
+     *    so a 60 kg-bag estate's sold weight was understated by a sixth and its price per kg
+     *    overstated by a fifth -- the exact failure app/api/dashboard/cost-per-kg/route.ts carries a
+     *    comment about, having had it once already. The view deliberately does not convert bags
+     *    (bag weight is a per-tenant setting the database does not know), so the conversion stays
+     *    here and now reads the setting.
+     *
+     * 3. `avg_sell_price` NOW EXCLUDES ROWS WITH NO WEIGHT. A lump-sum contract -- HoneyFarm have a
+     *    Rs 7,00,000 one -- carries revenue and no kilos. Dividing a total that includes it by a
+     *    weight that does not would have reported a price per kg several times the real one, which
+     *    is a worse answer than the pepper-blind figure it replaces. `kgs > 0` is what keeps the
+     *    ratio meaning what its name says.
+     */
     const rows = await sql.query(`
-      WITH fy AS (SELECT $2::date AS s, $3::date AS e)
+      WITH fy AS (SELECT $2::date AS s, $3::date AS e),
+      bag AS (
+        SELECT ${TENANT_BAG_KG_SQL} AS kg
+      ),
+      sold AS (
+        -- One row per sale with its weight resolved once. booked_revenue.kgs already collapses
+        -- kgs/weight_kgs/kgs_received/kgs_sent into one figure; bags are the residual fallback.
+        SELECT
+          br.source,
+          br.sale_date,
+          br.revenue,
+          COALESCE(NULLIF(br.kgs, 0), br.bags_sold * (SELECT kg FROM bag)) AS kgs
+        FROM booked_revenue br
+        WHERE br.tenant_id = $1
+      )
       SELECT
         (SELECT COALESCE(SUM(total_cost),0) FROM labour_cost
            WHERE tenant_id=$1 AND work_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS labour,
@@ -283,14 +329,12 @@ async function fetchSeasonCostBasis(tenantId: string): Promise<SeasonCostBasis |
            WHERE tenant_id=$1 AND entry_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS expenses,
         (SELECT COALESCE(SUM(dry_parch+dry_cherry),0) FROM processing_records
            WHERE tenant_id=$1 AND process_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS output_kg,
-        (SELECT COALESCE(SUM(COALESCE(NULLIF(kgs,0),NULLIF(weight_kgs,0),bags_sold*50)),0)
-           FROM sales_records WHERE tenant_id=$1 AND sale_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS sold_kg,
-        (SELECT COALESCE(
-           SUM(revenue) / NULLIF(SUM(COALESCE(NULLIF(kgs,0),NULLIF(weight_kgs,0),bags_sold*50)), 0)
-         , NULL)
-           FROM sales_records
-           WHERE tenant_id=$1 AND sale_date >= NOW() - INTERVAL '6 months' AND revenue > 0) AS avg_sell_price,
-        (SELECT MAX(sale_date)::text FROM sales_records WHERE tenant_id=$1) AS last_sale
+        (SELECT COALESCE(SUM(kgs),0) FROM sold
+           WHERE sale_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS sold_kg,
+        (SELECT SUM(revenue) / NULLIF(SUM(kgs), 0) FROM sold
+           WHERE source = 'sale'
+             AND sale_date >= NOW() - INTERVAL '6 months' AND revenue > 0 AND kgs > 0) AS avg_sell_price,
+        (SELECT MAX(sale_date)::text FROM sold) AS last_sale
     `, [tenantId, start, end])
 
     const toRows = (r: unknown): any[] => Array.isArray(r) ? r : (r as any)?.rows ?? []

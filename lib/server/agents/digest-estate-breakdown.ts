@@ -115,9 +115,15 @@ export async function fetchActivityByEstate(
         [tenantId, startDate, endDate],
       ),
       sql.query(
-        `SELECT ${ESTATE_KEY_SQL} AS estate, COALESCE(SUM(sr.revenue), 0) AS value
-         FROM sales_records sr LEFT JOIN locations l ON l.id = sr.location_id
-         WHERE sr.tenant_id = $1 AND sr.sale_date BETWEEN $2::date AND $3::date
+        // booked_revenue, not sales_records. The per-estate revenue line in the digest excluded
+        // other_sales_records, so an estate whose only sale that week was pepper read as having
+        // earned nothing -- the same blindness scripts/121 fixed in six routes and not in here.
+        // The locations join is unchanged: booked_revenue carries location_id for both arms, and
+        // the estate label has to come from locations so coffee and pepper group under one key
+        // (the view's own `estate` column is NULL on the other_sales arm by design).
+        `SELECT ${ESTATE_KEY_SQL} AS estate, COALESCE(SUM(br.revenue), 0) AS value
+         FROM booked_revenue br LEFT JOIN locations l ON l.id = br.location_id
+         WHERE br.tenant_id = $1 AND br.sale_date BETWEEN $2::date AND $3::date
          GROUP BY 1`,
         [tenantId, startDate, endDate],
       ),

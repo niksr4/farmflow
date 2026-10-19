@@ -147,7 +147,10 @@ async function fetchYesterdayActivity(tenantId: string, yesterdayDate: string): 
           WHERE tenant_id = $1 AND (entry_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS expense_total,
         (SELECT COUNT(*) FROM expense_transactions
           WHERE tenant_id = $1 AND (entry_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS expense_entries,
-        (SELECT COALESCE(SUM(revenue), 0) FROM sales_records
+        -- booked_revenue, not sales_records: a day on which the estate sold only pepper reported
+        -- zero revenue here while the P&L tab showed the sale. scripts/121 created the view to end
+        -- exactly this, and the agents were never moved onto it.
+        (SELECT COALESCE(SUM(revenue), 0) FROM booked_revenue
           WHERE tenant_id = $1 AND sale_date = $2::date) AS sales_revenue,
         (SELECT COALESCE(SUM(bags_dispatched), 0) FROM dispatch_records
           WHERE tenant_id = $1 AND dispatch_date = $2::date) AS dispatch_bags,
