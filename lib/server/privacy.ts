@@ -483,74 +483,170 @@ export async function requestDeletion(sessionUser: SessionUser, reason?: string 
   )
 }
 
+/**
+ * Tables and columns this sweep deliberately does NOT touch, with the reason for each.
+ *
+ * Kept tiny on purpose. A test asserts every entry still exists in the catalogue, so an exemption
+ * that stops being relevant fails the build rather than quietly becoming folklore.
+ */
+const ANONYMIZATION_EXCLUSIONS: Record<string, string> = {
+  // anonymizeUserById rewrites this itself -- it is the source of truth being replaced, not a
+  // reference to it.
+  "users.username":
+    "scrubbed directly by anonymizeUserById, along with the password hash and both email columns",
+  // Keyed on user_id ONLY, deliberately, and that must not become username-keyed: a username is
+  // freed on anonymization and can be taken by somebody else, so matching by name would overwrite
+  // a PREVIOUSLY anonymized person's deletion request with this user's handle. Raised by Greptile
+  // on PR #22 and handled separately below.
+  "privacy_requests.username": "keyed on user_id separately, see the note at its UPDATE",
+  // A security trail, governed by retention rather than by erasure. Scrubbing the actor out of
+  // auth events is a policy decision about how long security evidence lives, not a bug fix, so it
+  // is left for a human to decide rather than swept here.
+  "security_events.actor_username":
+    "security evidence, governed by retention policy -- a deliberate decision, not an oversight",
+}
+
+/**
+ * Every text column on a tenant table that holds a person's NAME.
+ *
+ * ⚠ THIS WAS A HAND-KEPT LIST OF EIGHT TABLES AND THE DATABASE HAS TWENTY-SIX SUCH COLUMNS.
+ * Erasure reported success while leaving the person named in thousands of operational rows. For
+ * two real accounts on production at the time this was written:
+ *
+ *   KAB123     1,202 labour_assignments.recorded_by + 453 attendance_records.marked_by
+ *              + 172 labor_transactions.recorded_by + 131 expense_transactions.recorded_by
+ *              = 1,958 rows still carrying the literal string after erasure "completed"
+ *   Gagan Rai  1,480 + 1,648 + 13 = 3,141 rows
+ *
+ * None of those four tables was on the list. Neither were journal_entries, worker_ledger,
+ * worker_pay_rules, other_sales_records, soil_tests, billing_invoices, import_jobs,
+ * document_records, compliance_checklist_items or transaction_history_archive.
+ *
+ * So the set is read out of information_schema instead, and a table added tomorrow is covered
+ * tomorrow. This is the same failure mode as the RLS wrapper guard that knew about 40 of 53
+ * tenant tables, and the seeding deny-list that named one estate.
+ *
+ * ONLY TEXT COLUMNS. The six uuid identity columns (audit_logs.user_id,
+ * privacy_requests.user_id, push_subscriptions.user_id, signup_requests.user_id,
+ * user_locations.user_id, user_modules.user_id) are opaque pointers, not personal data, once the
+ * users row they point at has been scrubbed -- and three of them are NOT NULL, so nulling them
+ * would throw rather than erase. The two that genuinely need nulling are handled explicitly below
+ * for reasons written at each one.
+ */
+const IDENTITY_NAME_COLUMNS_SQL = `
+  SELECT c.table_name, c.column_name
+  FROM information_schema.columns c
+  WHERE c.table_schema = 'public'
+    AND c.data_type IN ('text', 'character varying')
+    AND (
+      c.column_name LIKE '%username'
+      OR c.column_name = 'user_id'
+      OR c.column_name LIKE '%\\_by'
+    )
+    AND EXISTS (
+      SELECT 1 FROM information_schema.columns t
+      WHERE t.table_schema = 'public' AND t.table_name = c.table_name AND t.column_name = 'tenant_id'
+    )
+    AND EXISTS (
+      SELECT 1 FROM information_schema.tables x
+      WHERE x.table_schema = 'public' AND x.table_name = c.table_name AND x.table_type = 'BASE TABLE'
+    )
+  ORDER BY c.table_name, c.column_name
+`
+
+/**
+ * ⚠ `LIKE '%username'`, NOT `= 'username'`.
+ *
+ * My first version matched the column name exactly, which silently failed to find
+ * security_events.actor_username -- so the exclusion recorded for it below was dead code, and a
+ * column added tomorrow as `approver_username` would be missed with nothing saying so. Caught by
+ * running the query against dev and finding 25 columns where the catalogue holds 26.
+ */
+
+/** A catalogue identifier is still validated before being concatenated. Defence in depth. */
+const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/
+
+/**
+ * The pure half: given what the catalogue returned, which columns does erasure rewrite?
+ *
+ * Separated from the query so the decision can be tested against a fixed catalogue with no
+ * database -- the same reason the source-scanning guards in this repo take source TEXT rather
+ * than a path. A test that re-implemented this filter would stay green while the real one changed.
+ */
+export const selectAnonymizationTargets = (
+  catalogue: { table_name: unknown; column_name: unknown }[],
+): { table: string; column: string }[] =>
+  catalogue
+    .map((row) => ({ table: String(row.table_name), column: String(row.column_name) }))
+    .filter((target) => SAFE_IDENTIFIER.test(target.table) && SAFE_IDENTIFIER.test(target.column))
+    .filter((target) => !(`${target.table}.${target.column}` in ANONYMIZATION_EXCLUSIONS))
+
+export const anonymizationTargets = async (tenantContext: {
+  tenantId: string
+  role: string
+}): Promise<{ table: string; column: string }[]> => {
+  const rows = await runTenantQuery(
+    ensureSql(),
+    tenantContext,
+    ensureSql().query(IDENTITY_NAME_COLUMNS_SQL, []),
+  )
+  return selectAnonymizationTargets(rows as { table_name: unknown; column_name: unknown }[])
+}
+
+/** Exported so a test can assert every exemption still names a real column. */
+export const anonymizationExclusions = () => ({ ...ANONYMIZATION_EXCLUSIONS })
+
 const anonymizeReferences = async (
   tenantContext: { tenantId: string; role: string },
   oldUsername: string,
   anonymizedUsername: string,
   userId: string,
 ) => {
-  const updates = [
-    ensureSql()`
-      UPDATE transaction_history
-      SET user_id = ${anonymizedUsername}
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND user_id = ${oldUsername}
-    `,
-    ensureSql()`
-      UPDATE rainfall_records
-      SET user_id = ${anonymizedUsername}
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND user_id = ${oldUsername}
-    `,
-    ensureSql()`
-      UPDATE dispatch_records
-      SET created_by = ${anonymizedUsername}
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND created_by = ${oldUsername}
-    `,
-    ensureSql()`
-      UPDATE curing_records
-      SET recorded_by = ${anonymizedUsername}
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND recorded_by = ${oldUsername}
-    `,
-    ensureSql()`
-      UPDATE quality_grading_records
-      SET graded_by = ${anonymizedUsername}
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND graded_by = ${oldUsername}
-    `,
-    ensureSql()`
-      UPDATE pepper_records
-      SET recorded_by = ${anonymizedUsername}
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND recorded_by = ${oldUsername}
-    `,
+  const targets = await anonymizationTargets(tenantContext)
+
+  /**
+   * A sweep that finds nothing must not look like a sweep that found nothing to do. If the
+   * catalogue query breaks -- a schema rename, a permissions change -- erasure would otherwise
+   * report success having rewritten zero rows, which is precisely the failure being fixed.
+   */
+  if (targets.length === 0) {
+    throw new Error("Anonymization found no identity columns to sweep; refusing to report success")
+  }
+
+  for (const { table, column } of targets) {
+    await safeExec(
+      ensureSql().query(
+        `UPDATE ${table} SET ${column} = $1 WHERE tenant_id = $2 AND ${column} = $3`,
+        [anonymizedUsername, tenantContext.tenantId, oldUsername],
+      ),
+      tenantContext,
+    )
+  }
+
+  /**
+   * audit_logs also carries a uuid, and an audit row can predate the username column, so this one
+   * matches either. Append-only evidence: the row stays, the person does not.
+   */
+  await safeExec(
     ensureSql()`
       UPDATE audit_logs
-      SET username = ${anonymizedUsername},
-          user_id = NULL
+      SET user_id = NULL
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND (username = ${oldUsername} OR user_id = ${userId})
+        AND user_id = ${userId}
     `,
-    // Same reasoning as audit_logs immediately above: privacy_requests.username is a denormalized
-    // copy (see requestDeletion) that this sweep previously left untouched, so a "deletion"
-    // request's own row kept showing the anonymized user's real original username forever --
-    // undermining the point of anonymizing them in the first place. user_id is nulled the same
-    // way audit_logs' is (the column is nullable, ON DELETE SET NULL, per
-    // scripts/40-dpdp-privacy.sql), since after anonymization there's no live user to still be
-    // "the requester" of this row.
-    /**
-     * ⚠ user_id ONLY. The audit_logs sweep above matches `username OR user_id` because an audit
-     * row can predate the user_id column and is append-only evidence; a privacy request is the
-     * opposite -- it is the record of someone asking to be forgotten, and mis-attributing one is
-     * the exact harm this module exists to prevent.
-     *
-     * Usernames are freed on anonymization and can be taken by someone else. `username =
-     * ${oldUsername}` therefore also matches the stale rows of a PREVIOUSLY anonymized person who
-     * once held this name, and would overwrite their request with this user's anonymized handle.
-     * Raised by Greptile on PR #22.
-     */
+    tenantContext,
+  )
+
+  /**
+   * ⚠ user_id ONLY, and this must never become username-keyed.
+   *
+   * A privacy request is the record of someone asking to be forgotten, and mis-attributing one is
+   * the exact harm this module exists to prevent. Usernames are freed on anonymization and can be
+   * taken by somebody else, so `username = oldUsername` would also match the stale rows of a
+   * PREVIOUSLY anonymized person who once held this name, and overwrite their request with this
+   * user's handle. Raised by Greptile on PR #22.
+   */
+  await safeExec(
     ensureSql()`
       UPDATE privacy_requests
       SET username = ${anonymizedUsername},
@@ -558,11 +654,8 @@ const anonymizeReferences = async (
       WHERE tenant_id = ${tenantContext.tenantId}
         AND user_id = ${userId}
     `,
-  ]
-
-  for (const query of updates) {
-    await safeExec(query, tenantContext)
-  }
+    tenantContext,
+  )
 }
 
 export async function anonymizeUserById(tenantId: string, userId: string) {
