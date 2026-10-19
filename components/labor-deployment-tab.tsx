@@ -64,6 +64,19 @@ interface FormData {
   taskDescription: string
 }
 
+/**
+ * "Whole estate, not one block" as a pickable value.
+ *
+ * ⚠ A LABOUR ROW WITH NO BLOCK COULD NOT BE CORRECTED WITHOUT INVENTING ONE. The picker offered
+ * only blocks, and submit refuses to save without a selection, so opening any of Laxmi's 179
+ * block-less rows to fix a figure demanded an answer the row never had -- and the easiest way out
+ * of that prompt is to pick a block, which silently attributes an estate-wide cost to it.
+ *
+ * components/other-expenses-tab.tsx solved this and left the reasoning in a comment. This is the
+ * same sentinel; a stored NULL is "whole estate", not "unset".
+ */
+const LOCATION_ESTATE_WIDE = "__estate_wide__"
+
 const DEFAULT_SET_LABELS = ["In-house", "Outside"]
 
 // The DB stores whatever group name was typed; only these two legacy names are remapped.
@@ -182,7 +195,9 @@ export default function LaborDeploymentTab({
   const fetchActivities = useCallback(async () => {
     try {
       const response = await fetch(
-        formLocationId ? `/api/get-activity?locationId=${formLocationId}` : "/api/get-activity",
+        formLocationId && formLocationId !== LOCATION_ESTATE_WIDE
+          ? `/api/get-activity?locationId=${formLocationId}`
+          : "/api/get-activity",
       )
       const data = await response.json()
       if (data.success && data.activities) {
@@ -399,7 +414,7 @@ export default function LaborDeploymentTab({
       totalCost: calculateTotal(),
       notes: formData.notes,
       taskDescription: formData.taskDescription,
-      locationId: formLocationId || null,
+      locationId: formLocationId && formLocationId !== LOCATION_ESTATE_WIDE ? formLocationId : null,
       user: "admin",
     }
 
@@ -448,7 +463,16 @@ export default function LaborDeploymentTab({
       notes: deployment.notes || "",
       taskDescription: deployment.taskDescription || "",
     })
-    if (deployment.locationId) setFormLocationId(deployment.locationId)
+    /**
+     * Always set it, including for a row with no block. Setting it only when the row HAS one left
+     * the PREVIOUS row's block in state, so editing a Citrus row and then a block-less one showed,
+     * and saved, Citrus. Silent re-attribution of cost to a block it never touched.
+     *
+     * resetForm deliberately does not clear this -- a writer filing ten rows for one block should
+     * not repick it ten times -- which is exactly what makes it wrong when opening an existing row.
+     * Word for word the bug components/other-expenses-tab.tsx already fixed.
+     */
+    setFormLocationId(deployment.locationId || LOCATION_ESTATE_WIDE)
     setPrefilled(false)
     setEditingId(deployment.id)
     setIsAdding(true)
@@ -615,6 +639,7 @@ export default function LaborDeploymentTab({
                         <SelectValue placeholder="Select location" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={LOCATION_ESTATE_WIDE}>Whole estate, not one block</SelectItem>
                         {locations.map((loc) => (
                           <SelectItem key={loc.id} value={loc.id}>
                             {formatLocationLabel(loc, locations)}
@@ -1007,7 +1032,7 @@ export default function LaborDeploymentTab({
       {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
       {!cutoverReached && activeSection === "form" && isMobile && !isAdding && (
         <QuickLogPanel
-          locationId={formLocationId || undefined}
+          locationId={formLocationId && formLocationId !== LOCATION_ESTATE_WIDE ? formLocationId : undefined}
           onNavigateToFull={openNewForm}
         />
       )}
