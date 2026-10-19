@@ -44,6 +44,7 @@ import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 import ActivityCodeReference from "@/components/attendance/activity-code-reference"
 import WorkerAllocation from "@/components/attendance/worker-allocation"
 import { estateTodayDate, todayIso } from "@/lib/date-utils"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 type AttendanceWorker = {
   id: string
@@ -710,7 +711,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     // misaligned in Excel is a report nobody trusts again (same rule as the weekly export below
     // and attendance-report-tab.tsx's exportCsv).
     const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .map((row) => row.map((cell) => `"${neutraliseFormula(String(cell)).replace(/"/g, '""')}"`).join(","))
       .join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
@@ -736,7 +737,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     // Same quoting rule as exportDailyReportToCSV above -- worker names contain commas often
     // enough that an unquoted export silently misaligns in Excel.
     const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .map((row) => row.map((cell) => `"${neutraliseFormula(String(cell)).replace(/"/g, '""')}"`).join(","))
       .join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")

@@ -1,4 +1,5 @@
 import { istTodayParts } from "@/lib/date-utils"
+import { neutraliseFormula } from "@/lib/csv-safe"
 /**
  * CSV assembly for the operations export.
  *
@@ -16,7 +17,10 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 export const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
 
-export const toCsvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`
+export const toCsvCell = (value: unknown) => {
+  const text = typeof value === "string" ? neutraliseFormula(value) : String(value ?? "")
+  return `"${text.replace(/"/g, '""')}"`
+}
 export const toCsvLine = (values: unknown[]) => values.map((value) => toCsvCell(value)).join(",")
 export const toCsv = (rows: Array<Record<string, unknown>>) => {
   if (!rows.length) return ""

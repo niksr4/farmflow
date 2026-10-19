@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/format"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 type SummaryRow = { code: string; reference: string; total: number }
 
@@ -43,7 +44,7 @@ export default function AccountsSummaryCard() {
 
   const buildSummaryExportCsv = () => {
     const header = "Code,Reference,Total Expenditure (₹)"
-    const dataRows = rows.map((r) => `${r.code},"${r.reference.replace(/"/g, '""')}",${r.total.toFixed(2)}`)
+    const dataRows = rows.map((r) => `${r.code},"${neutraliseFormula(r.reference).replace(/"/g, '""')}",${r.total.toFixed(2)}`)
     const totalsRow = `,GRAND TOTAL,${grandTotal.toFixed(2)}`
     return [header, ...dataRows, totalsRow].join("\n")
   }

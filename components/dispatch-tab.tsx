@@ -56,6 +56,7 @@ import type {
   LocationScope,
 } from "@/components/dispatch/types"
 import { ARABICA, ROBUSTA, parseCoffeeVariety } from "@/lib/crop-config"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 export default function DispatchTab({ showDataToolsControls = false }: DispatchTabProps) {
   const { user } = useAuth()
@@ -732,7 +733,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         record.notes || "",
       ])
 
-      const csvContent = [headers.join(","), ...rows.map((row: string[]) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))].join(
+      const csvContent = [headers.join(","), ...rows.map((row: string[]) => row.map((cell) => `"${neutraliseFormula(cell).replace(/"/g, '""')}"`).join(","))].join(
         "\n",
       )
 

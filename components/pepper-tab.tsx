@@ -26,6 +26,7 @@ import TaskGuideCard from "@/components/task-guide-card"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 interface LocationOption {
   id: string
@@ -271,7 +272,7 @@ export function PepperTab() {
   const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const buildPepperExportCsv = () => {
-    const toCsvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`
+    const toCsvCell = (value: unknown) => `"${neutraliseFormula(String(value ?? "")).replace(/"/g, '""')}"`
     const toCsvRow = (values: unknown[]) => values.map((value) => toCsvCell(value)).join(",")
     const toNumber = (value: unknown) => {
       const parsed = Number(value)

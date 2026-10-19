@@ -4,6 +4,7 @@ import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } fr
 import { DEFAULT_SUPPORT_EMAIL, DEFAULT_ALERT_EMAIL_FROM } from "@/lib/email-addresses"
 import { escapeHtml } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -64,7 +65,10 @@ export async function POST(request: Request) {
         <div style="background:#f6f8fa;border-radius:8px;padding:16px;font-size:14px;line-height:1.6;color:#222;white-space:pre-wrap">${safeMessage}</div>
       `
 
-      await fetchWithTimeout("https://api.resend.com/emails", {
+      // A rejected or unreachable send used to be swallowed (`.catch(() => {})`, and a non-2xx
+      // response never threw at all), so the person was told "sent" for feedback nobody received.
+      // This is the only channel they have to reach support from inside the app.
+      const sendResponse = await fetchWithTimeout("https://api.resend.com/emails", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${resendKey}`,
@@ -77,7 +81,17 @@ export async function POST(request: Request) {
           html,
         }),
         timeoutMs: 8_000,
-      }).catch(() => {})
+      }).catch((sendError) => {
+        logServerError("Feedback email could not be sent", sendError)
+        return null
+      })
+      if (!sendResponse || !sendResponse.ok) {
+        if (sendResponse) logServerError("Feedback email rejected by provider", new Error(`HTTP ${sendResponse.status}`))
+        return NextResponse.json(
+          { success: false, error: "We couldn't send your feedback just now. Please try again in a minute." },
+          { status: 502, headers },
+        )
+      }
     }
 
     return NextResponse.json({ success: true }, { headers })

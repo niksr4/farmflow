@@ -262,9 +262,17 @@ export async function GET(request: Request) {
 
     if (enabledModules.includes("accounts")) {
       try {
-        const recentStartIso = toIsoDate(new Date(safeEnd.getTime() - 29 * DAY_MS))
-        const previousStartIso = toIsoDate(new Date(safeEnd.getTime() - 59 * DAY_MS))
-        const previousEndIso = toIsoDate(new Date(safeEnd.getTime() - 30 * DAY_MS))
+        // The trend compares the last 30 days with the 30 before. The callers pass the whole
+        // fiscal year, whose end is next March -- anchoring on that put both windows in the
+        // future, so every tenant read "no trend" for most of the year. Anchor on today (IST)
+        // when the range runs past it.
+        const todayParts = istTodayParts()
+        const todayUtc = new Date(Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day))
+        const trendAnchor = safeEnd.getTime() > todayUtc.getTime() ? todayUtc : safeEnd
+        const trendEndIso = toIsoDate(trendAnchor)
+        const recentStartIso = toIsoDate(new Date(trendAnchor.getTime() - 29 * DAY_MS))
+        const previousStartIso = toIsoDate(new Date(trendAnchor.getTime() - 59 * DAY_MS))
+        const previousEndIso = toIsoDate(new Date(trendAnchor.getTime() - 30 * DAY_MS))
 
         const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
           sql`
@@ -360,7 +368,7 @@ export async function GET(request: Request) {
               COALESCE(
                 SUM(
                   CASE
-                    WHEN work_date >= ${recentStartIso}::date AND work_date <= ${endDateIso}::date
+                    WHEN work_date >= ${recentStartIso}::date AND work_date <= ${trendEndIso}::date
                       THEN total_cost
                     ELSE 0
                   END
@@ -386,7 +394,7 @@ export async function GET(request: Request) {
               COALESCE(
                 SUM(
                   CASE
-                    WHEN entry_date >= ${recentStartIso}::date AND entry_date <= ${endDateIso}::date
+                    WHEN entry_date >= ${recentStartIso}::date AND entry_date <= ${trendEndIso}::date
                       THEN total_amount
                     ELSE 0
                   END
