@@ -156,7 +156,7 @@ export async function GET(request: Request) {
     }
     // Check if database doesn't exist yet
     if (rawMessage.includes("does not exist")) {
-      return NextResponse.json({ success: true, records: [] })
+      return NextResponse.json({ success: true, records: [], totalCount: 0, totalsByType: [], locationScope: "all" })
     }
     console.error("Error fetching dispatch records:", error)
     return NextResponse.json(

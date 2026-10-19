@@ -60,7 +60,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       status: 200,
       headers: {
         "Content-Type": mimeType,
-        "Content-Length": String(Number(row.file_size_bytes) || fileBytes.byteLength),
+        // The bytes actually sent, not the recorded size: a mismatch makes the browser truncate or hang.
+        "Content-Length": String(fileBytes.byteLength),
         "Content-Disposition": `attachment; filename="${fileName}"`,
         "Cache-Control": "private, no-store",
       },

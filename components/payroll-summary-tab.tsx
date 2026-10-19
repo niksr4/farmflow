@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/format"
 import { weekRangeFor } from "@/lib/payroll-period"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 type PayrollWorker = {
   id: string
@@ -91,7 +92,7 @@ const today = () => todayIso()
 const firstOfMonth = () => todayIso().slice(0, 7) + "-01"
 
 const escapeCsv = (v: string | number | null | undefined) => {
-  const s = String(v ?? "")
+  const s = neutraliseFormula(String(v ?? ""))
   return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s
 }
 

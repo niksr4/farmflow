@@ -165,7 +165,9 @@ export async function GET(request: Request) {
             ${salesDateClause}
             ${estateClause}
         `,
-        ["sales_records"],
+        // The query reads the booked_revenue view, so a missing view must degrade to the same
+        // explicit "missing" status as a missing base table instead of 500-ing the whole sheet.
+        ["sales_records", "booked_revenue"],
       ),
       runOptionalQuery<{ total_revenue: number; total_count: number }>(
         tenantContext,
@@ -179,7 +181,7 @@ export async function GET(request: Request) {
             ${salesDateClause}
             ${estateClause}
         `,
-        ["other_sales_records"],
+        ["other_sales_records", "booked_revenue"],
       ),
       runOptionalQuery<{ total_cost: number; total_count: number }>(
         tenantContext,

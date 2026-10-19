@@ -12,6 +12,7 @@ import AttendanceMonthlyGrid from "@/components/attendance-monthly-grid"
 import AttendanceYearlySummary from "@/components/attendance-yearly-summary"
 import { workerTypeLabel, isPaidDaily } from "@/lib/worker-types"
 import { todayIso } from "@/lib/date-utils"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 /**
  * Attendance over a period — the counterpart to the payroll summary, and the thing an estate
@@ -179,7 +180,7 @@ export default function AttendanceReportTab() {
     const csv = [header, ...lines]
       // Quote everything: worker names contain commas often enough, and a report that opens
       // misaligned in Excel is a report nobody trusts again.
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .map((row) => row.map((cell) => `"${neutraliseFormula(String(cell)).replace(/"/g, '""')}"`).join(","))
       .join("\n")
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }))
     const a = document.createElement("a")

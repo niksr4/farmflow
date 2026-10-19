@@ -916,7 +916,8 @@ export async function POST(request: Request) {
       after: {
         entry_date: date,
         code,
-        total_amount: amount,
+        // What was stored: the amount follows the stock when a depletion is linked.
+        total_amount: derivedAmount ?? amount,
         notes: normalizedNotes,
         location_id: supportsLocation ? validLocationId : null,
         inventory_item_type: inventoryItemType,
@@ -1130,7 +1131,8 @@ export async function PUT(request: Request) {
       after: {
         entry_date: date,
         code,
-        total_amount: amount,
+        // What was stored: the amount follows the stock when a depletion is linked.
+        total_amount: derivedAmount ?? amount,
         notes: normalizedNotes,
         location_id: supportsLocation ? validLocationId : null,
         inventory_item_type: supportsInventoryLink ? inventoryItemType : null,

@@ -57,6 +57,7 @@ import type {
   Activity,
   ActivitySuggestion,
 } from "@/components/accounts/types"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 export default function AccountsPage({
   showDataToolsControls: _showDataToolsControls = false,
@@ -518,7 +519,7 @@ export default function AccountsPage({
 
   const escapeCsvField = (field: any): string => {
     if (field === null || field === undefined) return ""
-    const stringField = String(field)
+    const stringField = neutraliseFormula(String(field))
     if (stringField.search(/("|,|\n)/g) >= 0) return `"${stringField.replace(/"/g, '""')}"`
     return stringField
   }

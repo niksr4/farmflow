@@ -78,6 +78,7 @@ import { cn } from "@/lib/utils"
 import AppSidebar from "@/components/app-sidebar"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
+import { neutraliseFormula } from "@/lib/csv-safe"
 import {
   buildLocationMap,
   itemTypesForMovement,
@@ -2411,7 +2412,7 @@ export default function InventorySystem() {
   // escapeCsvField and payroll-summary-tab.tsx's escapeCsv.
   const escapeCsvField = (field: unknown): string => {
     if (field === null || field === undefined) return ""
-    const stringField = String(field)
+    const stringField = neutraliseFormula(String(field))
     if (/[",\n]/.test(stringField)) return `"${stringField.replace(/"/g, '""')}"`
     return stringField
   }

@@ -38,6 +38,7 @@ import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { trackClick, reportActionError } from "@/lib/track-action"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import { formatLocationLabel } from "@/lib/location-label"
+import { neutraliseFormula } from "@/lib/csv-safe"
 
 interface ProcessingRecord {
   id?: number
@@ -888,10 +889,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         rec.dry_cherry_bags,
         rec.dry_cherry_bags_todate,
         rec.moisture_pct ?? "",
-        `"${String(rec.quality_grade || "").replace(/"/g, '""')}"`,
-        `"${String(rec.defect_notes || "").replace(/"/g, '""')}"`,
+        `"${neutraliseFormula(String(rec.quality_grade || "")).replace(/"/g, '""')}"`,
+        `"${neutraliseFormula(String(rec.defect_notes || "")).replace(/"/g, '""')}"`,
         `"${String(rec.quality_photo_url || "").replace(/"/g, '""')}"`,
-        `"${(rec.notes || "").replace(/"/g, '""')}"`,
+        `"${neutraliseFormula(rec.notes || "").replace(/"/g, '""')}"`,
       ])
 
       return [headers.join(","), ...rows.map((row: any[]) => row.join(","))].join("\n")
