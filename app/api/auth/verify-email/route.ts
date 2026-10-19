@@ -7,6 +7,7 @@ import { verifySignupToken } from "@/lib/server/onboarding/provision-tenant"
 import { normalizeOnboardingError, SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE } from "@/lib/server/onboarding/utils"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { reportFunnelFailure } from "@/lib/server/funnel-telemetry"
 
 const verifyBodySchema = z.object({
   token: z.string().trim().min(1, "Verification token is required"),
@@ -78,6 +79,14 @@ export async function POST(request: Request) {
     // strings through unchanged and only replaces a genuine raw DB/internal error.
     const message = sanitizeRouteError(normalizedError, "Failed to verify email")
 
-    return NextResponse.json({ success: false, error: message }, { status, headers })
+    reportFunnelFailure({
+      endpoint: "/api/auth/verify-email",
+      error,
+      status,
+      rawMessage,
+      sanitizedMessage: message,
+    })
+
+
   }
 }
