@@ -318,11 +318,13 @@ export default function WelcomeOnboardingPage() {
                     Start with the plan that best matches your operation today. You can change it later in Settings.
                   </p>
                   <p className="mt-1 text-[11px] font-medium text-emerald-700">
-                    All plans include a 30-day free trial — no credit card required.
+                    Both plans start with a 30-day free trial. No card, nothing to cancel.
                   </p>
                 </div>
                 <div className="grid gap-3">
-                  {moduleBundles.map((bundle) => {
+                  {moduleBundles
+                    .filter((bundle) => bundle.selfServe)
+                    .map((bundle) => {
                     const selected = draft.moduleBundleId === bundle.id
                     return (
                       <button
@@ -361,6 +363,43 @@ export default function WelcomeOnboardingPage() {
                       </button>
                     )
                   })}
+
+                  {/*
+                    ⚠ ENTERPRISE WAS A BUTTON HERE, AND CLICKING IT WORKED.
+                    Guided setup accepted any id present in MODULE_BUNDLES, so a stranger off the
+                    public signup page could put themselves on the top tier, free and permanently.
+                    It is now described but not claimable, and the server refuses the id as well
+                    (lib/server/onboarding/setup.ts) because the UI is not a control.
+                  */}
+                  {moduleBundles
+                    .filter((bundle) => !bundle.selfServe)
+                    .map((bundle) => (
+                      <div key={bundle.id} className="rounded-2xl border border-dashed border-border/70 bg-muted/30 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="font-semibold text-slate-900 dark:text-slate-100">{bundle.label}</p>
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                Talk to us
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">{bundle.description}</p>
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              This one we set up with you, because it changes how your harvest is
+                              tracked from the tree to the buyer. Write to{" "}
+                              <a
+                                className="font-medium text-emerald-700 underline dark:text-emerald-400"
+                                href="mailto:support@thefarmflow.in?subject=Enterprise%20plan"
+                              >
+                                support@thefarmflow.in
+                              </a>{" "}
+                              and we will walk through whether you need it.
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-[10px] text-slate-400">{bundle.modules.length} modules</span>
+                        </div>
+                      </div>
+                    ))}
                 </div>
               </div>
 

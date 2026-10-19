@@ -171,6 +171,13 @@ export async function completeGuidedSetup(sessionUser: SessionUser, input: Compl
   if (!bundle) {
     throw new Error("Module bundle is invalid")
   }
+  // ⚠ THIS CHECK USED TO BE THE `find` ABOVE AND NOTHING ELSE, so any id in MODULE_BUNDLES was
+  // claimable -- including enterprise, by anyone who signed up. The UI no longer offers it, but
+  // the UI is not a control: this is a public, unauthenticated-origin flow and the body is the
+  // caller's to write.
+  if (!bundle.selfServe) {
+    throw new Error("That plan is set up with us directly. Write to support@thefarmflow.in.")
+  }
 
   const before = await loadGuidedSetup(sessionUser)
 
