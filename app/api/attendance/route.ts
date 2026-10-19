@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { redactWorkerPii } from "@/lib/server/worker-pii"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { getLabourCutover } from "@/lib/server/labour-entry-mode"
@@ -290,10 +291,17 @@ export async function GET(request: Request) {
         workerType: row.worker_type ? String(row.worker_type) : null,
         gender: row.gender ? String(row.gender) : null,
         monthlyWage: row.monthly_wage != null ? Number(row.monthly_wage) : null,
-        phone: row.phone ? String(row.phone) : null,
-        bankName: row.bank_name ? String(row.bank_name) : null,
-        bankAccount: row.bank_account ? String(row.bank_account) : null,
-        bankIfsc: row.bank_ifsc ? String(row.bank_ifsc) : null,
+        // Blanked for role=user -- see lib/server/worker-pii.ts. Kept as keys so the response
+        // shape does not vary by role.
+        ...redactWorkerPii(
+          {
+            phone: row.phone ? String(row.phone) : null,
+            bankName: row.bank_name ? String(row.bank_name) : null,
+            bankAccount: row.bank_account ? String(row.bank_account) : null,
+            bankIfsc: row.bank_ifsc ? String(row.bank_ifsc) : null,
+          },
+          sessionUser.role,
+        ),
         kind: row.kind === "gang" ? "gang" : "individual",
         headcount: row.headcount != null ? Number(row.headcount) : null,
         estate: row.estate ? String(row.estate) : null,

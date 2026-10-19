@@ -43,7 +43,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import TabPanel from "@/components/tab-panel"
 import { BrandLoading } from "@/components/ui/brand-loading"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -4205,7 +4206,7 @@ export default function InventorySystem() {
               document.body,
             )}
 
-          <TabsContent
+          <TabPanel
             value={DASHBOARD_LAUNCHER_TAB}
             className="space-y-4"
             forceMount={isTabLoaded(DASHBOARD_LAUNCHER_TAB) ? true : undefined}
@@ -4223,9 +4224,9 @@ export default function InventorySystem() {
               buildWorkspaceHref={buildWorkspaceHref}
               estateName={tenantSettings.estateName}
             />
-          </TabsContent>
+          </TabPanel>
 
-          <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
+          <TabPanel value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
             {/* ── Desktop: season strip ── */}
             {!isMobile && (
               <SeasonProgressStrip
@@ -4361,10 +4362,10 @@ export default function InventorySystem() {
                 seasonMetric: alert.metric || null,
               })}
             />
-          </TabsContent>
+          </TabPanel>
 
           {canShowInventoryWorkspace && (
-            <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
+            <TabPanel value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
               {resolvedInventoryWorkspaceView !== "transactions" && !inventoryBannerDismissed && (
                 <InventoryWorkspaceBanner
                   canShowAccounts={canShowAccounts}
@@ -4741,23 +4742,23 @@ export default function InventorySystem() {
                 </div>
               </div>
               )}
-            </TabsContent>
+            </TabPanel>
           )}
 
           {canShowPickingLog && (
-            <TabsContent value="picking" className="space-y-6" forceMount={isTabLoaded("picking") ? true : undefined}>
+            <TabPanel value="picking" className="space-y-6" forceMount={isTabLoaded("picking") ? true : undefined}>
               <PickingLogTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
 
           {canShowAttendance && (
-            <TabsContent value="attendance" className="space-y-6" forceMount={isTabLoaded("attendance") ? true : undefined}>
+            <TabPanel value="attendance" className="space-y-6" forceMount={isTabLoaded("attendance") ? true : undefined}>
               <AttendanceWorkspace key={estateRemountKey} showLaborManagement={canShowLaborManagement} selectedEstate={selectedEstate} />
-            </TabsContent>
+            </TabPanel>
           )}
 
           {canShowAccounts && (
-            <TabsContent value="accounts" className="space-y-6" forceMount={isTabLoaded("accounts") ? true : undefined}>
+            <TabPanel value="accounts" className="space-y-6" forceMount={isTabLoaded("accounts") ? true : undefined}>
               <AccountsPage
                 key={estateRemountKey}
                 showDataToolsControls={showDataToolsControls}
@@ -4767,29 +4768,29 @@ export default function InventorySystem() {
                 showLaborManagement={canShowLaborManagement}
                 showPickingLog={canShowPickingLog}
               />
-            </TabsContent>
+            </TabPanel>
           )}
 
           {canShowBalanceSheet && (
-            <TabsContent value="balance-sheet" className="space-y-6" forceMount={isTabLoaded("balance-sheet") ? true : undefined}>
+            <TabPanel value="balance-sheet" className="space-y-6" forceMount={isTabLoaded("balance-sheet") ? true : undefined}>
               <BalanceSheetTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
 
           {canShowSeasonPl && (
-            <TabsContent value="season-pl" className="space-y-6" forceMount={isTabLoaded("season-pl") ? true : undefined}>
+            <TabPanel value="season-pl" className="space-y-6" forceMount={isTabLoaded("season-pl") ? true : undefined}>
               <SeasonPlTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
 
           {canShowReceivables && (
-            <TabsContent value="receivables" className="space-y-6" forceMount={isTabLoaded("receivables") ? true : undefined}>
+            <TabPanel value="receivables" className="space-y-6" forceMount={isTabLoaded("receivables") ? true : undefined}>
               <ReceivablesTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
 
           {canShowProcessingWorkspace && (
-            <TabsContent value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
+            <TabPanel value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
               <ProcessingWorkspace
                 key={estateRemountKey}
                 canShowProcessing={canShowProcessing}
@@ -4800,15 +4801,15 @@ export default function InventorySystem() {
                 ProcessingTab={ProcessingTab as any}
                 PepperTab={PepperTab as any}
               />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowDispatch && (
-            <TabsContent value="dispatch" className="space-y-6" forceMount={isTabLoaded("dispatch") ? true : undefined}>
+            <TabPanel value="dispatch" className="space-y-6" forceMount={isTabLoaded("dispatch") ? true : undefined}>
               <DispatchTab key={estateRemountKey} showDataToolsControls={showDataToolsControls} />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowSalesWorkspace && (
-            <TabsContent value="sales" className="space-y-6" forceMount={isTabLoaded("sales") ? true : undefined}>
+            <TabPanel value="sales" className="space-y-6" forceMount={isTabLoaded("sales") ? true : undefined}>
               <SalesTab
                 key={estateRemountKey}
                 showDataToolsControls={showDataToolsControls}
@@ -4817,65 +4818,65 @@ export default function InventorySystem() {
                 activeWorkspaceView={salesWorkspaceView}
                 onWorkspaceViewChange={setSalesWorkspaceView}
               />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowCuring && (
-            <TabsContent value="curing" className="space-y-6" forceMount={isTabLoaded("curing") ? true : undefined}>
+            <TabPanel value="curing" className="space-y-6" forceMount={isTabLoaded("curing") ? true : undefined}>
               <CuringTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowQuality && (
-            <TabsContent value="quality" className="space-y-6" forceMount={isTabLoaded("quality") ? true : undefined}>
+            <TabPanel value="quality" className="space-y-6" forceMount={isTabLoaded("quality") ? true : undefined}>
               <QualityGradingTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowSeason && (
-            <TabsContent value="season" className="space-y-6" forceMount={isTabLoaded("season") ? true : undefined}>
+            <TabPanel value="season" className="space-y-6" forceMount={isTabLoaded("season") ? true : undefined}>
               <SeasonDashboard key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowYieldForecast && (
-            <TabsContent value="yield-forecast" className="space-y-6" forceMount={isTabLoaded("yield-forecast") ? true : undefined}>
+            <TabPanel value="yield-forecast" className="space-y-6" forceMount={isTabLoaded("yield-forecast") ? true : undefined}>
               <YieldForecastTab />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowActivityLog && (
-            <TabsContent value="activity-log" className="space-y-6" forceMount={isTabLoaded("activity-log") ? true : undefined}>
+            <TabPanel value="activity-log" className="space-y-6" forceMount={isTabLoaded("activity-log") ? true : undefined}>
               <ActivityLogTab tenantId={activityTenantId} />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowRainfallSection && (
-            <TabsContent value="rainfall" className="space-y-6" forceMount={isTabLoaded("rainfall") ? true : undefined}>
+            <TabPanel value="rainfall" className="space-y-6" forceMount={isTabLoaded("rainfall") ? true : undefined}>
               <RainfallWeatherTab
                 username={user?.username || "system"}
                 showRainfall={canShowRainfall}
                 showWeather={canShowWeather}
                 showDataToolsControls={canManageData}
               />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowDocuments && (
-            <TabsContent value="documents" className="space-y-6" forceMount={isTabLoaded("documents") ? true : undefined}>
+            <TabPanel value="documents" className="space-y-6" forceMount={isTabLoaded("documents") ? true : undefined}>
               <DocumentsTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowJournal && (
-            <TabsContent value="journal" className="space-y-6" forceMount={isTabLoaded("journal") ? true : undefined}>
+            <TabPanel value="journal" className="space-y-6" forceMount={isTabLoaded("journal") ? true : undefined}>
               <JournalTab key={estateRemountKey} />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowResources && (
-            <TabsContent value="resources" className="space-y-6" forceMount={isTabLoaded("resources") ? true : undefined}>
+            <TabPanel value="resources" className="space-y-6" forceMount={isTabLoaded("resources") ? true : undefined}>
               <ResourcesTab />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowPlantHealth && (
-            <TabsContent value="plant-health" className="space-y-6" forceMount={isTabLoaded("plant-health") ? true : undefined}>
+            <TabPanel value="plant-health" className="space-y-6" forceMount={isTabLoaded("plant-health") ? true : undefined}>
               <PlantHealthTab />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowAiAnalysis && (
-            <TabsContent value="ai-analysis" className="space-y-6" forceMount={isTabLoaded("ai-analysis") ? true : undefined}>
+            <TabPanel value="ai-analysis" className="space-y-6" forceMount={isTabLoaded("ai-analysis") ? true : undefined}>
               <AiAnalysisCharts inventory={inventory} transactions={transactions} />
 
               <AiAnalysisCard
@@ -4884,27 +4885,27 @@ export default function InventorySystem() {
                 analysis={aiAnalysis}
                 onGenerate={generateAIAnalysis}
               />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowNews && (
-            <TabsContent value="news" className="space-y-6" forceMount={isTabLoaded("news") ? true : undefined}>
+            <TabPanel value="news" className="space-y-6" forceMount={isTabLoaded("news") ? true : undefined}>
               <NewsTab />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowMarketPricing && (
-            <TabsContent value="market-pricing" className="space-y-6" forceMount={isTabLoaded("market-pricing") ? true : undefined}>
+            <TabPanel value="market-pricing" className="space-y-6" forceMount={isTabLoaded("market-pricing") ? true : undefined}>
               <MarketPricingTab />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowCompliance && (
-            <TabsContent value="compliance" className="space-y-6" forceMount={isTabLoaded("compliance") ? true : undefined}>
+            <TabPanel value="compliance" className="space-y-6" forceMount={isTabLoaded("compliance") ? true : undefined}>
               <ComplianceTab />
-            </TabsContent>
+            </TabPanel>
           )}
           {canShowBilling && (
-            <TabsContent value="billing" className="space-y-6" forceMount={isTabLoaded("billing") ? true : undefined}>
+            <TabPanel value="billing" className="space-y-6" forceMount={isTabLoaded("billing") ? true : undefined}>
               <BillingTab showDataToolsControls={showDataToolsControls} />
-            </TabsContent>
+            </TabPanel>
           )}
         </Tabs>
         {isInventoryDrilldownOpen && (
