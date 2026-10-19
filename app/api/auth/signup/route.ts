@@ -7,6 +7,7 @@ import { createOrRefreshSignupRequest } from "@/lib/server/onboarding/signup"
 import { SIGNUP_EMAIL_PATTERN, normalizeOnboardingError, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { reportFunnelFailure } from "@/lib/server/funnel-telemetry"
 
 const signupBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
@@ -116,6 +117,14 @@ export async function POST(request: Request) {
     // strings through unchanged and only replaces a genuine raw DB/internal error.
     const message = sanitizeRouteError(normalizedError, "Failed to create signup request")
 
-    return NextResponse.json({ success: false, error: message }, { status, headers })
+    reportFunnelFailure({
+      endpoint: "/api/auth/signup",
+      error,
+      status,
+      rawMessage,
+      sanitizedMessage: message,
+    })
+
+
   }
 }

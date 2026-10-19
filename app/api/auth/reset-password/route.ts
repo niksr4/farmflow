@@ -11,6 +11,7 @@ import {
 import { resetPasswordWithToken } from "@/lib/server/password-reset"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { reportFunnelFailure } from "@/lib/server/funnel-telemetry"
 
 const resetPasswordBodySchema = z.object({
   token: z.string().trim().min(1, "Reset token is required"),
@@ -76,6 +77,14 @@ export async function POST(request: Request) {
     // field itself always goes through sanitizeRouteError, which passes short, safe, curated
     // strings through unchanged and only replaces a genuine raw DB/internal error.
     const message = sanitizeRouteError(error, "Failed to reset password")
+
+    reportFunnelFailure({
+      endpoint: "/api/auth/reset-password",
+      error,
+      status,
+      rawMessage,
+      sanitizedMessage: message,
+    })
 
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }
