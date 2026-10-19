@@ -17,7 +17,16 @@ on:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    # ⚠ PINNED, NOT `ubuntu-latest`. On 2026-10-19 the latest label rolled to Ubuntu 26.04 and
+    # Playwright 1.58.2 cannot install chromium there: "ERROR: Playwright does not support
+    # chromium on ubuntu26.04-x64". Both jobs died at the browser install step, which blocked
+    # EVERY open pull request at once -- nine of them -- on a change in GitHub's image rather
+    # than anything in this repo.
+    #
+    # `ubuntu-latest` means "whatever GitHub ships this week", which is a dependency nobody
+    # declared and nobody can test before it lands. Pin it, and bump deliberately when
+    # Playwright supports the next LTS.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       NEXTAUTH_SECRET: ci-nextauth-secret
@@ -108,7 +117,16 @@ jobs:
   #   DATABASE_URL_DEV                        (dev/test Neon connection the app runs against)
   #   NEXTAUTH_SECRET                         (matching the dev DB's sessions)
   authenticated-e2e:
-    runs-on: ubuntu-latest
+    # ⚠ PINNED, NOT `ubuntu-latest`. On 2026-10-19 the latest label rolled to Ubuntu 26.04 and
+    # Playwright 1.58.2 cannot install chromium there: "ERROR: Playwright does not support
+    # chromium on ubuntu26.04-x64". Both jobs died at the browser install step, which blocked
+    # EVERY open pull request at once -- nine of them -- on a change in GitHub's image rather
+    # than anything in this repo.
+    #
+    # `ubuntu-latest` means "whatever GitHub ships this week", which is a dependency nobody
+    # declared and nobody can test before it lands. Pin it, and bump deliberately when
+    # Playwright supports the next LTS.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       E2E_OWNER_USERNAME: ${{ secrets.E2E_OWNER_USERNAME }}
