@@ -71,6 +71,20 @@ type LabourAssignment = {
   headcount: number
   lumpSum: number | null
   totalCost: number
+  /**
+   * ⚠ REQUIRED, NOT OPTIONAL, AND THAT IS THE POINT.
+   *
+   * These four were absent from this type while the allocation panel declared them optional. So
+   * the panel compiled green, received `undefined` for every one, and fell back to a multiplier
+   * of 1 and empty charges -- which is exactly the bug. An optional field on the receiving side
+   * plus a missing field on the sending side is a silent default, and typecheck says nothing.
+   *
+   * Declared required here so dropping one from GET /api/attendance is a build error.
+   */
+  payMultiplier: number
+  driverCharge: number | null
+  supervisorCharge: number | null
+  vehicleCharge: number | null
 }
 type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: number }
 type AttendanceRecordDetail = {

@@ -226,6 +226,7 @@ export async function GET(request: Request) {
       accountsSql`
         SELECT a.id, a.worker_id, a.activity_code, a.location_id, a.day_fraction,
                a.rate, a.headcount, a.lump_sum, a.total_cost, a.notes,
+               a.pay_multiplier, a.driver_charge, a.supervisor_charge, a.vehicle_charge,
                aa.activity AS activity_name,
                COALESCE(l.name, l.code) AS location_name
         FROM labour_assignments a
@@ -322,6 +323,23 @@ export async function GET(request: Request) {
         lumpSum: row.lump_sum != null ? Number(row.lump_sum) : null,
         totalCost: row.total_cost != null ? Number(row.total_cost) : 0,
         notes: row.notes ? String(row.notes) : null,
+        /**
+         * ⚠ THESE FOUR WERE WRITE-ONLY, AND THAT MADE A ROUTE GUARD VACUOUS.
+         *
+         * POST saved them, this SELECT never returned them, so the allocation panel could not
+         * prefill them on edit -- `useState(1)` for the multiplier, `useState("")` for the three
+         * charges. The panel then posts all four keys on every save, so the PUT guard -- a
+         * CASE WHEN on each value being not-undefined, else keep the column -- was ALWAYS true
+         * for the only caller that exists. It protected a caller that does not.
+         *
+         * Consequence: editing a "Holiday 2x" allocation to fix its block reset the multiplier to
+         * 1 and HALVED total_cost, silently. Nothing on screen said so, except that the Holiday 2x
+         * button came back unhighlighted.
+         */
+        payMultiplier: row.pay_multiplier != null ? Number(row.pay_multiplier) : 1,
+        driverCharge: row.driver_charge != null ? Number(row.driver_charge) : null,
+        supervisorCharge: row.supervisor_charge != null ? Number(row.supervisor_charge) : null,
+        vehicleCharge: row.vehicle_charge != null ? Number(row.vehicle_charge) : null,
       })),
       pickingWorkerIds: pickingRows.map((row: any) => String(row.worker_id)).filter(Boolean),
       presentWorkerIds: presentRows.map((row: any) => String(row.worker_id)).filter(Boolean),
