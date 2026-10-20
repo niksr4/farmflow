@@ -393,13 +393,32 @@ branch merged.
 
 Keep the *lesson*, which outlived the fact: 152 really was applied to prod from a feature branch
 before its file existed on `main`, so **"highest file on main" and "highest row in prod" are
-independent statements** and neither implies the other. Prod's ledger has 152 rows and dev's 153;
-the single difference is `102-biometric-attendance.sql`, present in dev and not prod. Count both,
-sort numerically, and do not trust this paragraph either.
+independent statements** and neither implies the other.
+
+**Measured against both ledgers 2026-10-20.** Prod has 152 rows, dev 153, and both top out at
+**154**. The single difference is a **stale row in dev naming a file that no longer exists**:
+`102-biometric-attendance.sql`. The biometric migration lives at `106-biometric-attendance.sql`
+now and is recorded under that name in *both* ledgers, with the tables present in both — so the
+102 row is a harmless remnant of a rename, not a pending migration. `scripts/102-*.sql` is
+`102-laxmi-restock-type-repair.sql`, which is a different thing entirely.
+
+⚠ **I wrote `102-biometric-attendance.sql` into this file as a FILENAME on 2026-10-19, copied out
+of a handoff without checking it against `ls scripts/`.** CodeRabbit caught it on PR #125. The
+handoff was quoting the ledger correctly and the objection was right about the file; both were
+true of different things, which is exactly why a version string in `schema_migrations` must not be
+read as a path. Count both, sort numerically, and do not trust this paragraph either.
+
+Two files on `main` are in neither ledger — `app-runtime-role.sql` and `create-sales-table.sql` —
+and that is fine: `migrate.mjs` filters on `/^\d{2,}-.*\.sql$/`, so a non-numeric name is never
+a candidate. A naive "files minus ledger" diff reports them as pending; apply the runner's filter
+before believing it.
 
 ⚠ **THE RUNNER HAS NO SINGLE-FILE OPTION.** `pnpm migrate:prod` applies *everything* pending in
 whatever `scripts/` the working tree currently holds — there is no `--only`. So running it from
-`main` right now applies **153**, not 152. Applying one specific migration means checking out a
+`main` **at that time** applied 153 rather than 152 — kept as the worked example, and no longer
+the current state: `main` tops out at 154 and both databases are at 154, so there is nothing
+pending. What is pending always depends on the target database's ledger *and* the checked-out
+branch, never on this sentence. Applying one specific migration means checking out a
 branch whose `scripts/` contains it and nothing later; 152 was applied from
 `feat/picking-shares-the-day-budget`, which carries 148–152 and no 153. **Check which branch you are
 on before pointing the runner at prod.**
@@ -831,11 +850,19 @@ has ever received was requested by hand.
 
 Manual `@coderabbitai review` from the **niksr4** account works and answers in about fifteen
 seconds. It is rate-limited to roughly one an hour and returns a plain `Review rate limited`
-comment past that — which is a refusal, not a pass. The hourly
+comment past that — which is a refusal, not a pass.
+
 `.github/workflows/coderabbit-retry.yml` needs `CODERABBIT_RETRY_TOKEN` (set since 2026-10-14) and
-is honest when it is missing, but **its cron is unreliable**: on 2026-10-19 it had not fired
-between 07:46 and a manual trigger at 12:20, which is why twelve fresh PRs sat with no review and
-no request.
+is honest when it is missing. **It runs on GitHub's infrastructure, so it keeps working with the
+laptop shut** — confirmed 2026-10-20, five successful scheduled runs overnight, which delivered
+reviews to both then-open PRs without anybody present.
+
+⚠ **BUT IT IS NOT HOURLY, WHATEVER THE CRON SAYS.** Observed firing times on 2026-10-19/20:
+`07:46 → 15:36 → 21:03 → 00:20 → 06:01 → 11:38`. That is roughly every five to six hours. GitHub
+throttles scheduled workflows on low-activity repositories, so the real throughput is **four or
+five reviews a day, not twenty-four**. Plan a backlog around that number, and do not read a gap as
+a broken workflow — on 2026-10-19 a gap between 07:46 and a manual trigger at 12:20 looked like
+failure and was ordinary throttling.
 
 ⚠ **A GREEN `CodeRabbit` CHECK DOES NOT MEAN IT REVIEWED ANYTHING.** On PR #68 the check read
 `pass` while its own detail said *"Review skipped: manual review required for this OSS repository"*
