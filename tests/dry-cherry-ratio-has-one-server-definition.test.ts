@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 
@@ -46,8 +46,17 @@ const stripComments = (source: string) =>
  * Computing the ratio, as opposed to merely naming the column. `AS dry_cherry_percent` labels a
  * computed expression; `dry_cherry_percent =` assigns one. Reading the column, listing it among
  * writable fields, or selecting it are all fine and must stay fine -- several routes do.
+ *
+ * Three shapes, after review on #128:
+ *   - the SQL alias
+ *   - an assignment, with `(?!=)` so a COMPARISON like `row.dry_cherry_percent === 0` is not read
+ *     as a definition. There is none today, and a false failure on correct code is how a guard
+ *     gets weakened by whoever hits it next.
+ *   - an object property whose value divides, which is how the rule would come back in TypeScript
+ *     rather than SQL: `dry_cherry_percent: dryCherry / denom * 100`
  */
-const COMPUTES_THE_RATIO = /\bAS\s+dry_cherry_percent\b|\bdry_cherry_percent\s*=/
+const COMPUTES_THE_RATIO =
+  /\bAS\s+dry_cherry_percent\b|\bdry_cherry_percent\s*=(?!=)|\bdry_cherry_percent\s*:\s*[^,\n;{}]*\//
 
 describe("the dry cherry ratio has exactly one server-side definition", () => {
   /**
@@ -95,10 +104,48 @@ describe("the dry cherry ratio has exactly one server-side definition", () => {
     expect(migrations).toContain("scripts/155-dry-cherry-denominator-follows-the-route.sql")
   })
 
-  it("the application delegates to the database function", () => {
-    const source = stripComments(repoFile("lib/processing-utils.ts"))
-    // A call, not a mention: a bare name match is satisfied by a comment or a string in a log line.
-    expect(source).toMatch(/recompute_processing_totals\s*\(/)
+  it("the application delegates to the database function, executed rather than grepped", async () => {
+    /**
+     * ⚠ THIS USED TO MATCH THE SOURCE TEXT, which cannot tell a live call from a dead one. The
+     * string `recompute_processing_totals(` sitting in an unreachable branch, a template literal
+     * or a log line satisfies a regex exactly as well as the real thing -- and this file's whole
+     * subject is a fix that looked applied and was not. Raised in review on #128.
+     *
+     * So the function is actually called, with runTenantQuery and sql.query mocked, and the
+     * statement and parameters are asserted on what the code really passed.
+     */
+    const runTenantQuery = vi.fn(async (_sql: unknown, _ctx: unknown, result: unknown) => result)
+    vi.doMock("@/lib/server/tenant-db", () => ({ runTenantQuery }))
+
+    const { recomputeProcessingTotals } = await import("@/lib/processing-utils")
+
+    const sentinel = Symbol("query result")
+    const query = vi.fn(() => sentinel)
+    const sql = { query } as never
+
+    await recomputeProcessingTotals(
+      sql,
+      { tenantId: "11111111-1111-1111-1111-111111111111", role: "admin" },
+      "22222222-2222-2222-2222-222222222222",
+      "Arabica",
+    )
+
+    expect(query).toHaveBeenCalledTimes(1)
+    const [statement, params] = query.mock.calls[0] as unknown as [string, unknown[]]
+    expect(statement).toMatch(/recompute_processing_totals\s*\(/)
+    expect(params).toEqual([
+      "11111111-1111-1111-1111-111111111111",
+      "22222222-2222-2222-2222-222222222222",
+      "Arabica",
+    ])
+
+    // And the result of that query is what gets handed to runTenantQuery, rather than a second
+    // statement built somewhere else.
+    expect(runTenantQuery).toHaveBeenCalledTimes(1)
+    expect(runTenantQuery.mock.calls[0][2]).toBe(sentinel)
+
+    vi.doUnmock("@/lib/server/tenant-db")
+    vi.resetModules()
   })
 
   it("the denominator follows the estate's route rather than assuming green plus float", () => {
@@ -114,8 +161,21 @@ describe("the dry cherry ratio has exactly one server-side definition", () => {
      * columns appearing together inside the ratio's own CASE arm rather than anywhere in the file,
      * because `green_today` and `float_today` legitimately appear six other times computing
      * green_percent, float_percent and their running totals.
+     *
+     * ⚠ BOTH ANCHORS ARE VALIDATED BEFORE SLICING, and that is the whole reason this is not two
+     * lines. `indexOf` returns -1 when it misses, and `slice(-1, n)` yields a one-character string
+     * that matches nothing -- so renaming either anchor would make the negative assertion below
+     * pass over an empty string while reading exactly like a clean run. Raised in review on #128,
+     * and it is the same vacuity shape as the glob bug this file already carries a warning about.
      */
-    const ratioArm = sql.slice(sql.indexOf("AS wp_dp_percent"), sql.indexOf("AS dry_cherry_percent"))
-    expect(ratioArm).not.toMatch(/green_today[^\n]*\+[^\n]*float_today/)
+    const armStart = sql.indexOf("AS wp_dp_percent")
+    const armEnd = sql.indexOf("AS dry_cherry_percent")
+    expect(armStart, "the wp_dp_percent anchor moved; this slice no longer finds the ratio").toBeGreaterThan(-1)
+    expect(armEnd, "the dry_cherry_percent anchor must follow wp_dp_percent").toBeGreaterThan(armStart)
+
+    const ratioArm = sql.slice(armStart, armEnd)
+    // Either operand order, across newlines: `float_today + green_today` is the same mistake.
+    expect(ratioArm).not.toMatch(/green_today[\s\S]*?\+[\s\S]*?float_today/)
+    expect(ratioArm).not.toMatch(/float_today[\s\S]*?\+[\s\S]*?green_today/)
   })
 })
