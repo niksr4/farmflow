@@ -316,6 +316,13 @@ Three failure modes, each of which has actually happened here:
 
 - **Asserting a mention, not a call.** `toContain("helperName")` is satisfied by the import. Strip
   import lines and match `helperName\s*\(`.
+- **A scan that trips on its own documentation.** ⚠ **THIS HAS NOW FIRED FOUR TIMES**, which is
+  why it gets a count rather than a sentence: `a-failed-read-is-not-a-zero` (2026-10-14),
+  `seeding-cannot-wipe-a-real-estate`, `every-error-boundary-reports`, and
+  `aggregate-reads-do-not-swallow-failures` (2026-10-19, found while merging #92 into a `main`
+  that already carried #88). Every time, the FIX documented the forbidden pattern verbatim and the
+  raw scan matched its own explanation, failing over correct code. **Strip comments before
+  scanning source.** Writing the lesson down once has demonstrably not been enough.
 - **A hand-kept list of files.** A list of two or three is how the next instance hides. Derive the
   set instead — `tests/pay-records-are-editable.test.ts` finds every field a route declares
   `.nullable()` and checks *that route* does not `COALESCE` it, so a field added tomorrow is covered
@@ -356,6 +363,14 @@ Also: `cp` your backup **before** tampering and restore from that. `git checkout
 
 CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 
+⚠ **THE RUNNER IS PINNED TO `ubuntu-24.04`, AND IT HAS TO BE.** On 2026-10-19 `ubuntu-latest`
+rolled to Ubuntu 26.04, Playwright 1.58.2 could not install chromium there
+(`ERROR: Playwright does not support chromium on ubuntu26.04-x64`), and both jobs died at the
+browser-install step — failing the gated `quality` check on **all nine open pull requests at
+once**. It reads exactly like "my change broke CI" and is not. `ubuntu-latest` means "whatever
+GitHub ships this week", which is an undeclared dependency nobody can test before it lands. Bump
+the pin deliberately when Playwright supports the next LTS.
+
 ---
 
 ## Database Migrations
@@ -370,16 +385,40 @@ This line said `130-*` and "as of 2026-08-20" for four weeks after that stopped 
 ls scripts/*.sql | sed 's#scripts/##' | sort -t- -k1 -n | tail -1   # highest file
 ```
 
-⚠ **PROD IS AT 152 AND `main` HAS NO 152 FILE.** Read that twice, because it is not a mistake.
-`ls scripts/` on `main` jumps 151 → 153, while prod's ledger reads …151, **152**…. 152 lives on PR
-#55's branch and was applied to prod on 2026-10-09 out of order, because the day-cap it installs is
-only a schema change while `picking_records` has zero rows; after the first real pick it becomes a
-wage reconciliation. So **neither "highest file on main" nor "highest row in prod" is a reliable
-statement about the other.** Query the ledger, and sort numerically.
+⚠ **THIS BLOCK SAID "PROD IS AT 152 AND `main` HAS NO 152 FILE" UNTIL 2026-10-19, IN BOLD, AND IT
+WAS TRUE FOR TEN DAYS.** It is not now: `scripts/152-picking-shares-the-day-budget.sql` and
+`scripts/154-picking-pay-modes.sql` are both on `main`, the highest file is **154**, and both prod
+and dev top out at 154. The out-of-order application from PR #55's branch resolved itself when that
+branch merged.
+
+Keep the *lesson*, which outlived the fact: 152 really was applied to prod from a feature branch
+before its file existed on `main`, so **"highest file on main" and "highest row in prod" are
+independent statements** and neither implies the other.
+
+**Measured against both ledgers 2026-10-20.** Prod has 152 rows, dev 153, and both top out at
+**154**. The single difference is a **stale row in dev naming a file that no longer exists**:
+`102-biometric-attendance.sql`. The biometric migration lives at `106-biometric-attendance.sql`
+now and is recorded under that name in *both* ledgers, with the tables present in both — so the
+102 row is a harmless remnant of a rename, not a pending migration. `scripts/102-*.sql` is
+`102-laxmi-restock-type-repair.sql`, which is a different thing entirely.
+
+⚠ **I wrote `102-biometric-attendance.sql` into this file as a FILENAME on 2026-10-19, copied out
+of a handoff without checking it against `ls scripts/`.** CodeRabbit caught it on PR #125. The
+handoff was quoting the ledger correctly and the objection was right about the file; both were
+true of different things, which is exactly why a version string in `schema_migrations` must not be
+read as a path. Count both, sort numerically, and do not trust this paragraph either.
+
+Two files on `main` are in neither ledger — `app-runtime-role.sql` and `create-sales-table.sql` —
+and that is fine: `migrate.mjs` filters on `/^\d{2,}-.*\.sql$/`, so a non-numeric name is never
+a candidate. A naive "files minus ledger" diff reports them as pending; apply the runner's filter
+before believing it.
 
 ⚠ **THE RUNNER HAS NO SINGLE-FILE OPTION.** `pnpm migrate:prod` applies *everything* pending in
 whatever `scripts/` the working tree currently holds — there is no `--only`. So running it from
-`main` right now applies **153**, not 152. Applying one specific migration means checking out a
+`main` **at that time** applied 153 rather than 152 — kept as the worked example, and no longer
+the current state: `main` tops out at 154 and both databases are at 154, so there is nothing
+pending. What is pending always depends on the target database's ledger *and* the checked-out
+branch, never on this sentence. Applying one specific migration means checking out a
 branch whose `scripts/` contains it and nothing later; 152 was applied from
 `feat/picking-shares-the-day-budget`, which carries 148–152 and no 153. **Check which branch you are
 on before pointing the runner at prod.**
@@ -803,6 +842,28 @@ a push to `main` must NOT produce a deployment, and `pnpm go-live -- --yes` must
 The CLI uploads source directly rather than going through the Git integration, which is why it is
 unaffected — but confirm it rather than trusting this sentence.
 
+⚠ **AND NOW THE REASON: THIS REPO HAS 0 STARS, AND CODERABBIT DOES NOT AUTO-REVIEW A REPOSITORY
+UNDER 10 STARS.** Its own comment says so. That single fact explains every confused hour anybody
+has spent on this: automatic review has never once run here, so a green check has never meant a
+review, and it never will until the repo has stars or the plan changes. Every review this project
+has ever received was requested by hand.
+
+Manual `@coderabbitai review` from the **niksr4** account works and answers in about fifteen
+seconds. It is rate-limited to roughly one an hour and returns a plain `Review rate limited`
+comment past that — which is a refusal, not a pass.
+
+`.github/workflows/coderabbit-retry.yml` needs `CODERABBIT_RETRY_TOKEN` (set since 2026-10-14) and
+is honest when it is missing. **It runs on GitHub's infrastructure, so it keeps working with the
+laptop shut** — confirmed 2026-10-20, five successful scheduled runs overnight, which delivered
+reviews to both then-open PRs without anybody present.
+
+⚠ **BUT IT IS NOT HOURLY, WHATEVER THE CRON SAYS.** Observed firing times on 2026-10-19/20:
+`07:46 → 15:36 → 21:03 → 00:20 → 06:01 → 11:38`. That is roughly every five to six hours. GitHub
+throttles scheduled workflows on low-activity repositories, so the real throughput is **four or
+five reviews a day, not twenty-four**. Plan a backlog around that number, and do not read a gap as
+a broken workflow — on 2026-10-19 a gap between 07:46 and a manual trigger at 12:20 looked like
+failure and was ordinary throttling.
+
 ⚠ **A GREEN `CodeRabbit` CHECK DOES NOT MEAN IT REVIEWED ANYTHING.** On PR #68 the check read
 `pass` while its own detail said *"Review skipped: manual review required for this OSS repository"*
 — and a hand-triggered review then produced **5 findings**, one of which was a real hole in a guard
@@ -828,8 +889,10 @@ file and never was one on `main`. Checked 2026-10-13: `.github/workflows/` conta
 `coderabbit-retry.yml`, nothing else. Reading this line as fact cost a turn. Run
 `ls .github/workflows/`.
 
-**The retry is automated now: `.github/workflows/coderabbit-retry.yml`.** Hourly, one request per
-run, longest-waiting pull request first.
+**The retry is automated now: `.github/workflows/coderabbit-retry.yml`.** One request per run,
+longest-waiting pull request first. The cron is written hourly and **GitHub does not honour that**
+— see the measured cadence above: roughly every five to six hours, so four or five reviews a day.
+Hourly is the schedule, not the throughput.
 
 ⚠ **THE REVIEW QUEUE IS FED BY FIXING FINDINGS, NOT BY NEW PULL REQUESTS.** A review produces
 findings, the fix is pushed, and the PR is back to "no review at this head" — so working through
@@ -870,6 +933,14 @@ rather than trusting it — which is the right instruction, and the reason it wa
 that; also `gh api repos/niksr4/farmflow/rulesets --jq '.[] | {name, enforcement}'`. A prose claim
 about infrastructure state is a snapshot, and this file has now been wrong about two of them in
 one section.
+
+⚠ **WHEN YOU CORRECT A CLAIM IN HERE, GREP FOR EVERY OTHER COPY OF IT FIRST.** On PR #125 I fixed
+three stale facts and left an older line contradicting each one: the migration section said "at
+154" above and "applies 153 right now" below; the CodeRabbit section said "every five to six
+hours" above and "Hourly, one request per run" below; STATUS.md said "Last reviewed 2026-10-19"
+and "Right now (2026-10-14)" six lines apart. Every one was caught by review rather than by me,
+and a half-corrected document is worse than an uncorrected one because the contradiction makes
+both halves untrustworthy. `rg -n "<the number>" CLAUDE.md STATUS.md` costs a second.
 
 ✅ **`gh` writes here now — RESOLVED 2026-09-15.** The active account is **niksr4** with
 `{"admin":true,"maintain":true,"push":true,"triage":true,"pull":true}`. `gh pr create` works
@@ -935,6 +1006,38 @@ classification, so it does not suffer the Preview-tier problem that caused the o
 3. `vercel alias set <deployment-id> www.thefarmflow.in` (or `vercel promote <deployment-url-or-id>`)
    — this is the moment it actually goes live *and* the first moment you can browse it.
 
+### Verify BEFORE you alias — the SSO wall has a documented bypass
+
+⚠ **THE OLD SEQUENCE ALIASED AND THEN SMOKED, SO A BAD BUILD REACHED REAL ESTATES FOR A MINUTE.**
+That happened on 2026-10-19 at about 17:26 IST: the build went READY, both domains moved, roughly
+forty DB-backed routes answered 500, the smoke caught it and the auto-revert worked — but the live
+window was the length of an 80-route smoke on a working day.
+
+A **protection-bypass secret** closes that window entirely. `ssoProtection.deploymentType` is
+`all_except_custom_domains`, which is why a `--skip-domain` build could not be smoked; a bypass
+secret makes it callable without touching the domain:
+
+```bash
+vercel --prod --skip-domain --token "$VT"                      # build, domain untouched
+curl -H "x-vercel-protection-bypass: $BYPASS" "$URL/api/locations"   # 401 = alive and gating
+vercel alias set "$URL" www.thefarmflow.in --token "$VT"       # only once it smokes clean
+vercel alias set "$URL" thefarmflow.in     --token "$VT"       # BOTH domains, always
+```
+
+The secret lives in `.vercel-bypass` locally (gitignored via `.git/info/exclude`) and was created
+with `PATCH /v1/projects/:id/protection-bypass`. **The MCP credential gets 403 on that endpoint;
+the CLI with `Vercel_token` works.** A healthy build answers 200 on pages and **401** on every API
+— 401 is the gate working, and anything 5xx is the failure.
+
+⚠ **DEPLOY FROM THE PRIMARY CHECKOUT, NOT A LINKED WORKTREE, AND NOBODY KNOWS WHY.** The 17:26
+failure came from the `farmflow-main` worktree; the same commit from the primary checkout was
+clean minutes later. Four explanations were proposed and all four disproved — an uploaded
+`.env.local` (the primary has one too and deploys fine), an unlinked project (the worktree has
+`.vercel/`), an incomplete install (the two missing packages were `@testing-library` and `jsdom`,
+devDependencies absent from any production bundle), and a broken smoke harness (it passes against
+live prod). `scripts/dev/go-live.mjs` now **refuses** to run from a linked worktree: that is
+refusing the condition, not the cause, and it is deliberate. If you find the cause, replace it.
+
 ### The whole sequence is now one command, with a net under it
 
 ```bash
@@ -992,9 +1095,10 @@ deleting it would cost a multi-table migration to reclaim no runtime cost.
 
 | Surface | Adoption |
 |---|---|
-| Lot traceability (`lot_id` on processing/dispatch/sales/curing/quality/documents, `app/lot/[lotId]`, `app/api/lots/[lotId]`) | **0** lot_ids in `processing_records` across all tenants; 1 stray on a dispatch row |
+| Lot traceability (`lot_id` on processing/dispatch/sales/curing/quality/documents, `app/lot/[lotId]`, `app/api/lots/[lotId]`) | **2** lot_ids in `processing_records` and 1 on a dispatch row (re-counted 2026-10-19; this line said 0 for processing). Still effectively unadopted, and `app/api/lots/[lotId]` 404s for every input |
 | `curing`, `quality`, `receivables`, `billing` modules | enterprise-only; **0** tenants on the `enterprise` plan — all 6 are `core` |
-| `compliance`, `documents`, `market-pricing`, `plant-health`, `yield-forecast` | same — enterprise-only, no tenant has them |
+| `compliance`, `documents`, `market-pricing`, `yield-forecast` | same — enterprise-only, no tenant has them |
+| `plant-health` | ⚠ **Seshagiri HAS this one**, via a `tenant_modules` override. `lib/module-access.ts` passes `{ allowPlanOverrides: true }`, so the tab really renders for them even on the `core` plan. "No tenant has the enterprise modules" is wrong for exactly this one — checked 2026-10-19 |
 
 **Why this matters when triaging:** an endpoint here returning nothing is almost always
 "no data exists" rather than "broken." A 2026-07-28 QA cycle raised `app/api/lots/[lotId]`
