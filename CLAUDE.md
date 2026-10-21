@@ -889,8 +889,10 @@ file and never was one on `main`. Checked 2026-10-13: `.github/workflows/` conta
 `coderabbit-retry.yml`, nothing else. Reading this line as fact cost a turn. Run
 `ls .github/workflows/`.
 
-**The retry is automated now: `.github/workflows/coderabbit-retry.yml`.** Hourly, one request per
-run, longest-waiting pull request first.
+**The retry is automated now: `.github/workflows/coderabbit-retry.yml`.** One request per run,
+longest-waiting pull request first. The cron is written hourly and **GitHub does not honour that**
+— see the measured cadence above: roughly every five to six hours, so four or five reviews a day.
+Hourly is the schedule, not the throughput.
 
 ⚠ **THE REVIEW QUEUE IS FED BY FIXING FINDINGS, NOT BY NEW PULL REQUESTS.** A review produces
 findings, the fix is pushed, and the PR is back to "no review at this head" — so working through
@@ -931,6 +933,14 @@ rather than trusting it — which is the right instruction, and the reason it wa
 that; also `gh api repos/niksr4/farmflow/rulesets --jq '.[] | {name, enforcement}'`. A prose claim
 about infrastructure state is a snapshot, and this file has now been wrong about two of them in
 one section.
+
+⚠ **WHEN YOU CORRECT A CLAIM IN HERE, GREP FOR EVERY OTHER COPY OF IT FIRST.** On PR #125 I fixed
+three stale facts and left an older line contradicting each one: the migration section said "at
+154" above and "applies 153 right now" below; the CodeRabbit section said "every five to six
+hours" above and "Hourly, one request per run" below; STATUS.md said "Last reviewed 2026-10-19"
+and "Right now (2026-10-14)" six lines apart. Every one was caught by review rather than by me,
+and a half-corrected document is worse than an uncorrected one because the contradiction makes
+both halves untrustworthy. `rg -n "<the number>" CLAUDE.md STATUS.md` costs a second.
 
 ✅ **`gh` writes here now — RESOLVED 2026-09-15.** The active account is **niksr4** with
 `{"admin":true,"maintain":true,"push":true,"triage":true,"pull":true}`. `gh pr create` works

@@ -9,7 +9,7 @@ before you act on it — `node scripts/dev/referential-audit.mjs prod` and the q
 
 ---
 
-## Right now (2026-10-14)
+## Right now (2026-10-19)
 
 **Production is `dpl_TnqfwgEeQxCM9kLZtfDsPFdpGU4Z`, built from `7386242`** (#87). Verified live:
 both `www.thefarmflow.in` **and** the apex `thefarmflow.in` resolve to that deployment id, and the
