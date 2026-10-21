@@ -8,6 +8,8 @@ import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { isLocationAccessError } from "@/lib/server/location-access"
 import { logServerError } from "@/lib/server/safe-logging"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { dayCapRefusal, DAY_CAP_STATUS } from "@/lib/server/day-cap-refusal"
@@ -284,6 +286,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Worker not found" }, { status: 404 })
     }
 
+    // picking_records.location_id has no foreign key, so nothing downstream would notice a block
+    // that belongs to another tenant, or one this user is restricted away from. Check it here.
+    if (locationId) {
+      const validLocationId = await validateLocationForTenant(accountsSql, tenantContext, sessionUser, locationId)
+      if (!validLocationId) {
+        return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+      }
+    }
+
     /**
      * HEADCOUNT COMES FROM THE ROSTER, NOT THE REQUEST. scripts/154 says this column mirrors
      * labour_assignments.headcount "including the copied at entry time rule" -- and copying it
@@ -339,6 +350,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     /**
      * The shared worker-day budget (scripts/152) refuses a booking that would take somebody past a

@@ -46,6 +46,11 @@ export async function GET(request: NextRequest) {
      */
     const start = searchParams.get("start") || getCurrentFiscalYear().startDate
     const end = searchParams.get("end") || todayIso()
+    // Each check below swallows its own errors into a "could not run" warning, so a malformed date
+    // used to come back as six identical warnings instead of one clear message.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+      return NextResponse.json({ success: false, error: "start and end must be YYYY-MM-DD" }, { status: 400 })
+    }
 
     const checks: ReconciliationCheck[] = []
 

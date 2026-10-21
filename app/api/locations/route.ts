@@ -147,8 +147,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const name = (body.name || "").trim()
-    const code = body.code ? normalizeCode(body.code) : normalizeCode(name)
+    const name = String(body.name || "").trim()
+    const code = body.code ? normalizeCode(String(body.code)) : normalizeCode(name)
     const estate = typeof body.estate === "string" && body.estate.trim() ? body.estate.trim() : null
     // A store is where stock sits; a block is where work happens (scripts/128). Defaults to block,
     // which is what almost all of these are and keeps every existing caller behaving as before.

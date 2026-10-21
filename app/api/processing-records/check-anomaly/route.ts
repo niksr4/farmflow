@@ -23,10 +23,16 @@ export async function POST(req: Request) {
     const cropToday = Number(body?.cropToday)
     const dryParch = Number(body?.dryParch)
     const coffeeType = typeof body?.coffeeType === "string" ? body.coffeeType.trim() : null
-    const locationId = typeof body?.locationId === "string" ? body.locationId.trim() : null
+    // A malformed id would make the uuid comparison throw and turn a harmless hint into a 500.
+    const rawLocationId = typeof body?.locationId === "string" ? body.locationId.trim() : ""
+    const locationId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawLocationId)
+      ? rawLocationId
+      : null
 
     // Need valid positive values to compute a conversion rate
-    if (!cropToday || cropToday <= 0 || dryParch == null || dryParch < 0) {
+    // Number(undefined) is NaN and NaN < 0 is false, so a missing dryParch used to slip through and
+    // come back as an "anomaly" whose message read "NaN%".
+    if (!Number.isFinite(cropToday) || cropToday <= 0 || !Number.isFinite(dryParch) || dryParch < 0) {
       return Response.json({ success: true, anomaly: false })
     }
 

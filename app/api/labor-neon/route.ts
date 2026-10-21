@@ -68,6 +68,18 @@ async function tableHasLaborEntriesColumn(tableName: string) {
   return Array.isArray(rows) && rows.length > 0
 }
 
+/**
+ * A body that cannot be saved, named in words. Without this a missing date or a missing/non-array
+ * laborEntries list reached aggregateLaborEntries (entries.find on undefined) or the ::date cast
+ * and came back as a generic 500, which the form shows as "Failed to process labour record" with
+ * nothing to correct.
+ */
+const invalidLabourBody = (date: unknown, laborEntries: unknown): string | null => {
+  if (!String(date ?? "").trim()) return "Date is required"
+  if (!Array.isArray(laborEntries)) return "Labour entries are required"
+  return null
+}
+
 // Moved to lib/server/activity-codes.ts so labour assignments run the identical check rather
 // than a second copy that can drift. Thin alias kept: this name appears at three call sites
 // below and renaming them adds diff noise to a route that handles money.
@@ -302,6 +314,10 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, laborEntries, notes } = body
+    const invalidBody = invalidLabourBody(date, laborEntries)
+    if (invalidBody) {
+      return NextResponse.json({ success: false, error: invalidBody }, { status: 400 })
+    }
     // A tenant who has moved to the muster must not be able to file labour here for a day the
     // totals now take from somewhere else -- it would save, and silently count for nothing.
     const cutoverBlock = await blockedByLabourCutover(tenantContext, body?.date)
@@ -530,7 +546,13 @@ export async function PUT(request: Request) {
     tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
-    const { id, date, code, laborEntries, notes } = body
+    const { id, date, code, laborEntries } = body
+    // POST stores "" for an absent note; PUT passed undefined straight to the driver, which refuses it.
+    const notes = String(body?.notes ?? "")
+    const invalidBody = invalidLabourBody(date, laborEntries)
+    if (invalidBody) {
+      return NextResponse.json({ success: false, error: invalidBody }, { status: 400 })
+    }
     // A tenant who has moved to the muster must not be able to file labour here for a day the
     // totals now take from somewhere else -- it would save, and silently count for nothing.
     const cutoverBlock = await blockedByLabourCutover(tenantContext, body?.date)

@@ -16,6 +16,8 @@ import {
 } from "@/lib/server/current-inventory-constraints"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { resolveStockCost, hasStockCost } from "@/lib/stock-cost"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { isLocationAccessError } from "@/lib/server/location-access"
 
 export const dynamic = "force-dynamic"
 
@@ -359,7 +361,15 @@ export async function POST(request: NextRequest) {
     const avg_price = quantityValue > 0 ? total_cost / quantityValue : 0
 
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
-    const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
+    const requestedLocationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
+    // A store id is a foreign key and those ignore row-level security: another tenant's store would
+    // be accepted, and a user restricted to some locations could stock any other.
+    const locationValue = requestedLocationValue
+      ? await validateLocationForTenant(inventorySql, tenantContext, sessionUser, requestedLocationValue)
+      : null
+    if (requestedLocationValue && !locationValue) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+    }
 
     // Creating the inventory slot and inserting the opening transaction are one unit of work.
     // Run separately, a failure between them leaves an item whose balance no ledger entry
@@ -468,6 +478,9 @@ export async function POST(request: NextRequest) {
     console.error("[SERVER] ❌ Error adding item:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, message: "You don't have access to this location" }, { status: 403 })
     }
     await logRouteMutationFailure({
       tenantId,

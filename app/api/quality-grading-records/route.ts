@@ -9,6 +9,8 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { isLocationAccessError } from "@/lib/server/location-access"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -196,6 +198,13 @@ export async function POST(request: Request) {
       )
     }
 
+    // A foreign-key check does not see row-level security, so another tenant's block id would be
+    // accepted; and a user restricted to some blocks could grade into any other. Check both here.
+    const validLocationId = await validateLocationForTenant(sql, tenantContext, sessionUser, String(locationId))
+    if (!validLocationId) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+    }
+
     const existing = await runTenantQuery(
       sql,
       tenantContext,
@@ -203,7 +212,7 @@ export async function POST(request: Request) {
         SELECT *
         FROM quality_grading_records
         WHERE tenant_id = ${tenantContext.tenantId}
-          AND location_id = ${locationId}
+          AND location_id = ${validLocationId}
           AND grade_date = ${record.grade_date}::date
           AND lot_id IS NOT DISTINCT FROM ${lotId}
         LIMIT 1
@@ -262,7 +271,7 @@ export async function POST(request: Request) {
             )
             VALUES (
               ${tenantContext.tenantId},
-              ${locationId},
+              ${validLocationId},
               ${record.lot_id},
               ${record.coffee_type},
               ${record.process_type},
@@ -296,6 +305,9 @@ export async function POST(request: Request) {
     console.error("Error saving quality grading record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     await logRouteMutationFailure({
       tenantId,

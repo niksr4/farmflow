@@ -5,6 +5,7 @@ import { sql } from "@/lib/server/db"
 import { requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -114,6 +115,14 @@ export async function GET(request: NextRequest) {
         LIMIT 6
       `),
     ])
+
+    // One source failing is a thinner result list; all three failing is an outage, and answering it
+    // with an empty 200 tells the user "nothing matches" about data that was never searched.
+    const settled = [inventoryRows, expenseRows, laborRows]
+    if (settled.every((r) => r.status === "rejected")) {
+      logServerError("Search failed in every source", (settled[0] as PromiseRejectedResult).reason)
+      return NextResponse.json({ error: "Search is unavailable right now. Try again in a moment." }, { status: 503 })
+    }
 
     const toRows = (r: PromiseSettledResult<unknown>): any[] => {
       if (r.status === "rejected") return []
