@@ -69,8 +69,23 @@ describe("the dry cherry ratio has exactly one server-side definition", () => {
    * Caught by tamper-testing, not by reading it back. CLAUDE.md documents this exact trap and I
    * still wrote it.
    */
+  /**
+   * ⚠ `components/` IS IN SCOPE, AND LEAVING IT OUT IS HOW THIS GUARD MISSED THE REAL OFFENDER.
+   *
+   * The first version scanned lib/ and app/ only -- "server files" -- on the reasoning that the
+   * rule is a server rule. But the defect is a figure the ESTATE READS, and
+   * components/processing-tab.tsx was recomputing it client-side with the old green+float
+   * denominator, so on a wet route the database stored 0 and the form displayed something else.
+   * The guard passed, the PR claimed the database owned the ratio, and the screen disagreed with
+   * it. Found by CodeRabbit on #128, not by me.
+   *
+   * There is exactly one definition of this ratio and it lives in the database. Anywhere in the
+   * app that computes it is a second one.
+   */
   const serverFiles = tracked("*.ts", "*.tsx").filter(
-    (path) => (path.startsWith("lib/") || path.startsWith("app/")) && !path.startsWith("tests/"),
+    (path) =>
+      (path.startsWith("lib/") || path.startsWith("app/") || path.startsWith("components/")) &&
+      !path.startsWith("tests/"),
   )
 
   it("has server files to scan, including the top-level ones", () => {
@@ -79,6 +94,8 @@ describe("the dry cherry ratio has exactly one server-side definition", () => {
     // makes every assertion below meaningless.
     expect(serverFiles).toContain("lib/processing-utils.ts")
     expect(serverFiles).toContain("app/api/processing-records/route.ts")
+    // The file the first version of this guard could not see.
+    expect(serverFiles).toContain("components/processing-tab.tsx")
   })
 
   it("is defined in a migration, not in application code", () => {
