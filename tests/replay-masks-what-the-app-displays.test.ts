@@ -29,9 +29,19 @@ const repoFile = (relativePath: string) =>
 /**
  * Comments in this repository explain the bugs they guard against, so a raw substring scan trips
  * on the explanation and passes over the defect. This has happened twice -- see CLAUDE.md.
+ *
+ * ⚠ THE FIRST VERSION OF THIS ONLY STRIPPED COMMENTS THAT BEGIN A LINE, which left the guard
+ * satisfiable by a trailing one:
+ *
+ *   maskTextSelector: ".limited", // maskTextSelector: "*"
+ *
+ * The narrowed value is what ships; the wildcard in the comment is what the assertion matched.
+ * Caught in review on #126. `(?<![:"'\\])` keeps `https://` and any other protocol inside a
+ * string intact -- note lookBEHIND is safe here because this file runs only in the test runner,
+ * unlike lib/observability.ts which ships to Safari.
  */
 const stripComments = (source: string) =>
-  source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
+  source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(?<![:"'\\])\/\/.*$/gm, "")
 
 /**
  * Every tracked file that initialises PostHog, derived rather than listed. A hand-kept list of one
@@ -49,6 +59,29 @@ const posthogInitFiles = () => {
   return tracked.filter((path) => /posthog\s*\.\s*init\s*\(/.test(stripComments(repoFile(path))))
 }
 
+/**
+ * The stripper gets its own tests, because it is the part that made the first version of this
+ * guard satisfiable by a comment. A scan is only as good as what it reads.
+ */
+describe("the comment stripper this guard depends on", () => {
+  it("strips a trailing comment, which is how a narrowed selector hid behind a wildcard", () => {
+    const stripped = stripComments('maskTextSelector: ".limited", // maskTextSelector: "*"')
+    expect(stripped).toContain('".limited"')
+    expect(stripped).not.toContain('"*"')
+  })
+
+  it("strips block and whole-line comments", () => {
+    expect(stripComments('/* maskTextSelector: "*" */ a')).not.toContain('"*"')
+    expect(stripComments('  // maskTextSelector: "*"\nb')).not.toContain('"*"')
+  })
+
+  it("leaves a protocol in a string alone", () => {
+    // `https://…` is two slashes mid-line. Stripping from there would eat the rest of the line
+    // and could silently delete real configuration that follows a URL.
+    expect(stripComments('const u = "https://eu.i.posthog.com"')).toContain("eu.i.posthog.com")
+  })
+})
+
 describe("session replay masks what the app displays, not just what gets typed", () => {
   it("finds the PostHog initialisation", () => {
     const files = posthogInitFiles()
@@ -57,10 +90,22 @@ describe("session replay masks what the app displays, not just what gets typed",
     expect(files).toContain("instrumentation-client.ts")
   })
 
-  it("masks every text node wherever replay is configured", () => {
+  it("masks every text node at every PostHog initialisation", () => {
     for (const path of posthogInitFiles()) {
       const source = stripComments(repoFile(path))
-      if (!/session_recording\s*:/.test(source)) continue
+
+      /**
+       * ⚠ THIS USED TO `continue` WHEN A FILE HAD NO `session_recording` BLOCK, which skipped the
+       * one case that matters most. PostHog does not mask displayed text by default, and recording
+       * is enabled project-wide in the dashboard -- so a second `posthog.init` that configures
+       * nothing records everything, and the guard passed because instrumentation-client.ts was
+       * still correct. Caught in review on #126.
+       *
+       * Every initialisation must either configure masking or say outright that it is not
+       * recording. `disable_session_recording: true` is a legitimate answer for, say, a
+       * marketing-only init; silence is not.
+       */
+      if (/disable_session_recording\s*:\s*true/.test(source)) continue
 
       /**
        * `maskTextSelector: "*"` is rrweb's deny-by-default. The alternative -- a selector list
