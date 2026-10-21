@@ -4774,13 +4774,13 @@ export default function InventorySystem() {
 
           {canShowBalanceSheet && (
             <TabPanel value="balance-sheet" className="space-y-6" forceMount={isTabLoaded("balance-sheet") ? true : undefined}>
-              <BalanceSheetTab key={estateRemountKey} />
+              <BalanceSheetTab key={estateRemountKey} estateName={tenantSettings.estateName} />
             </TabPanel>
           )}
 
           {canShowSeasonPl && (
             <TabPanel value="season-pl" className="space-y-6" forceMount={isTabLoaded("season-pl") ? true : undefined}>
-              <SeasonPlTab key={estateRemountKey} />
+              <SeasonPlTab key={estateRemountKey} estateName={tenantSettings.estateName} />
             </TabPanel>
           )}
 
@@ -4843,7 +4843,7 @@ export default function InventorySystem() {
           )}
           {canShowActivityLog && (
             <TabPanel value="activity-log" className="space-y-6" forceMount={isTabLoaded("activity-log") ? true : undefined}>
-              <ActivityLogTab tenantId={activityTenantId} />
+              <ActivityLogTab tenantId={activityTenantId} estateName={tenantSettings.estateName} />
             </TabPanel>
           )}
           {canShowRainfallSection && (

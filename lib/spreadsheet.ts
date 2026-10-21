@@ -7,8 +7,15 @@ const sanitizeSheetName = (value: string) => {
   return (normalized || "Sheet1").slice(0, 31)
 }
 
-// Quote-aware CSV parser (handles "" escapes and newlines inside quotes)
-const parseCsv = (csv: string): string[][] => {
+/**
+ * Quote-aware CSV parser (handles "" escapes and newlines inside quotes).
+ *
+ * Exported because `lib/report-pdf.ts` renders the SAME csv text to PDF. Two parsers would be two
+ * CSV dialects, and the first row that quoted an embedded comma would put a column break in one
+ * format and not the other -- a report that disagrees with itself depending on which button you
+ * pressed.
+ */
+export const parseCsv = (csv: string): string[][] => {
   const rows: string[][] = []
   let row: string[] = []
   let cell = ""

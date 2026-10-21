@@ -1,7 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ReportMenu } from "@/components/ui/report-menu"
+import type { ReportDefinition } from "@/lib/reports/report-definition"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -27,6 +29,7 @@ type ActivityRecord = {
 
 type ActivityLogTabProps = {
   tenantId: string | null
+  estateName?: string
 }
 
 const PAGE_SIZE = 50
@@ -59,7 +62,7 @@ const formatAmount = (amount: number | null) => {
   return `₹${Number(amount).toLocaleString("en-IN")}`
 }
 
-export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
+export default function ActivityLogTab({ tenantId, estateName }: ActivityLogTabProps) {
   const [records, setRecords] = useState<ActivityRecord[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
@@ -145,6 +148,109 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
   })
   const filteredRecords = recordControls.items
 
+  /**
+   * The audit log as a document, which is the one report somebody else asks the estate for.
+   *
+   * ⚠ IT FETCHES THE WHOLE LOG RATHER THAN REPORTING WHAT IS ON SCREEN. The table paginates at
+   * fifty rows, so a report built from `filteredRecords` would hand over the most recent fifty
+   * entries under a title saying "Audit Log" -- complete-looking and wrong, which is worse than no
+   * report at all for the only artefact anybody audits.
+   *
+   * The route caps `all=true` at 2000 rows, so when there are more than that the subtitle SAYS the
+   * report is the most recent 2000 of N. A truncated report that admits it is usable; one that
+   * does not is a false statement about the estate's records.
+   */
+  const reportDefinition = useMemo<ReportDefinition>(() => {
+    const REPORT_ROW_CAP = 2000
+    const scope = sourceFilter === "all" ? "All modules" : formatSourceLabel(sourceFilter)
+    return {
+      slug: "audit-log",
+      title: "Audit Log",
+      estateName,
+      period: scope,
+      orientation: "landscape",
+      /**
+       * ⚠ THE ENDPOINT TAKES NO DATE RANGE, so the period is applied HERE by filtering
+       * `event_date` on the rows that come back. That is honest for an audit log -- the rows carry
+       * their own date and the filter is exact -- but it is only sound because the whole log is
+       * fetched first. Narrowing a paginated page would quietly report one page of the chosen
+       * month and call it the month.
+       */
+      periods: ["current", "day", "week", "month", "year"],
+      buildRows: async (reportPeriod) => {
+        const headers = ["Date", "Module", "Entry", "Detail", "Amount", "Recorded by"]
+        if (!tenantId) return { headers, rows: [] }
+
+        const params = new URLSearchParams({
+          tenantId,
+          all: "true",
+          limit: String(REPORT_ROW_CAP),
+          offset: "0",
+        })
+        if (sourceFilter !== "all") params.set("source", sourceFilter)
+
+        const response = await fetch(`/api/admin/tenant-activity?${params.toString()}`)
+        const payload = await response.json()
+        if (!response.ok || !payload.success) {
+          // Thrown, not swallowed into an empty report. ReportMenu surfaces it as a toast; an
+          // empty audit log would read as "nothing ever happened here".
+          throw new Error(payload?.error || "Could not load the activity log")
+        }
+
+        const fetched: ActivityRecord[] = Array.isArray(payload.records) ? payload.records : []
+        const total = Number(payload.totalCount) || fetched.length
+
+        /**
+         * `event_date` is already a YYYY-MM-DD wall-clock date, so the bounds are compared as
+         * STRINGS. Parsing it into a Date to compare would re-anchor it at UTC midnight and drop
+         * the first day of the range for any reader west of IST -- the same mistake the season
+         * range made, and the reason lib/date-utils has formatDateOnly.
+         */
+        const inPeriod = (rec: ActivityRecord) => {
+          if (!reportPeriod.start || !reportPeriod.end) return true
+          const day = String(rec.event_date || "").slice(0, 10)
+          return day >= reportPeriod.start && day <= reportPeriod.end
+        }
+
+        const all = fetched.filter(inPeriod)
+        const rows: Array<Array<string | number | null>> = all.map((rec) => [
+          String(rec.event_date || "").slice(0, 10),
+          formatSourceLabel(rec.source),
+          rec.title,
+          rec.subtitle,
+          rec.amount,
+          rec.username,
+        ])
+
+        /**
+         * The cap note is only truthful when NO period filter was applied. Once rows are filtered,
+         * `total` counts the whole log and `all.length` counts the month, so "showing 40 of 2500"
+         * would be comparing two different things and reading as truncation that did not happen.
+         */
+        if (!reportPeriod.start && total > fetched.length) {
+          rows.push([
+            "",
+            "",
+            `Showing the most recent ${fetched.length} of ${total} entries.`,
+            "",
+            null,
+            "",
+          ])
+        } else if (reportPeriod.start && total > fetched.length) {
+          rows.push([
+            "",
+            "",
+            `Taken from the most recent ${fetched.length} of ${total} entries, so earlier activity in this period may be missing.`,
+            "",
+            null,
+            "",
+          ])
+        }
+        return { headers, rows }
+      },
+    }
+  }, [estateName, sourceFilter, tenantId])
+
   const resolvedCountLabel =
     totalCount > records.length ? `Showing ${records.length} of ${totalCount}` : `${records.length} record(s)`
 
@@ -196,6 +302,12 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
               <RefreshCw className={cn("mr-2 h-4 w-4", isLoading ? "animate-spin" : "")} />
               Refresh
             </Button>
+            <ReportMenu
+              definition={reportDefinition}
+              disabled={isLoading || !tenantId}
+              emptyReason="Nothing recorded yet"
+              className="h-11 shrink-0 rounded-xl bg-white"
+            />
           </FilterBar>
 
           <p className="text-xs text-muted-foreground">{resolvedCountLabel}</p>
