@@ -1,8 +1,23 @@
+import { parseProcessingRoute, type ProcessingRoute } from "@/lib/crop-config"
+
 export type TenantEstateProfile = {
   acreageAcres: number | null
   weatherLocationLabel: string
   weatherLatitude: number | null
   weatherLongitude: number | null
+  /**
+   * Whether this estate pulps its cherry, dries it whole, or both. See crop-config for the values.
+   *
+   * ⚠ NULL IS A DISTINCT STATE AND IS LOAD-BEARING: it means nobody has been asked yet, which is
+   * not the same as somebody choosing `both`. Every *reader* resolves null to `both` through
+   * `resolveProcessingRoute`, so behaviour is unchanged and nothing is hidden from an estate that
+   * never answered. But the onboarding checklist has to be able to tell the two apart, or the step
+   * is born green and the question never gets asked.
+   *
+   * This is the same mistake bag weight would make if it were a step: a default that is already
+   * correct cannot be distinguished from a confirmation, so a checkmark would mean nothing.
+   */
+  processingRoute: ProcessingRoute | null
 }
 
 export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
@@ -10,6 +25,7 @@ export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
   weatherLocationLabel: "",
   weatherLatitude: null,
   weatherLongitude: null,
+  processingRoute: null,
 }
 
 const MAX_ACREAGE = 100_000
@@ -32,6 +48,10 @@ export const mergeTenantEstateProfile = (input?: Partial<TenantEstateProfile> | 
   weatherLocationLabel: String(input?.weatherLocationLabel || "").trim(),
   weatherLatitude: input?.weatherLatitude ?? DEFAULT_TENANT_ESTATE_PROFILE.weatherLatitude,
   weatherLongitude: input?.weatherLongitude ?? DEFAULT_TENANT_ESTATE_PROFILE.weatherLongitude,
+  // parse, NOT resolve. Resolving here would turn "never asked" into "chose both" on the first
+  // read, and the onboarding step would be permanently complete without anybody answering it.
+  // Readers that need a behaviour call resolveProcessingRoute themselves.
+  processingRoute: parseProcessingRoute(input?.processingRoute),
 })
 
 /**
@@ -73,6 +93,15 @@ export const sanitizeTenantEstateProfile = (input: unknown): Partial<TenantEstat
     } else {
       return null
     }
+  }
+
+  // Strict on write, lenient on read -- the same split as parseCoffeeForm vs displayCoffeeForm.
+  // Saving an unrecognised route is how a column acquires an eighth spelling, so this refuses the
+  // whole payload rather than quietly storing it or quietly substituting the default.
+  if ("processingRoute" in value) {
+    const route = parseProcessingRoute(value.processingRoute)
+    if (!route) return null
+    cleaned.processingRoute = route
   }
 
   if ("weatherLongitude" in value) {

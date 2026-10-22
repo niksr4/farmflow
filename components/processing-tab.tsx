@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, useRef, type ChangeEvent, type KeyboardEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef, type ChangeEvent, type KeyboardEvent } from "react"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import InPageNav from "@/components/in-page-nav"
 import FilterBar from "@/components/filter-bar"
@@ -20,7 +20,8 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
+import { DEFAULT_COFFEE_VARIETIES, resolveProcessingRoute } from "@/lib/crop-config"
+import { bagsProducedOnRoute, dayOutturnPercent, deriveProcessingFigures } from "@/lib/processing-ratios"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -140,6 +141,14 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const { settings } = useTenantSettings()
   const searchParams = useSearchParams()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
+  /**
+   * Whether this estate pulps, dries whole, or both. Decides which cards below are rendered and
+   * which denominator every ratio uses. `both` for anyone who has not said, which shows everything
+   * and is what the screen did before the setting existed.
+   */
+  const processingRoute = resolveProcessingRoute(settings.estateProfile?.processingRoute)
+  const showsWetLine = processingRoute !== "natural"
+  const showsCherryLine = processingRoute !== "wet"
   // Mirrors inventory-system.tsx's own preview-mode computation: an owner previewing another
   // tenant's workspace should see the same read-only surface everywhere. user.role stays "owner"
   // for the whole duration of a preview (it's the raw, real session role), so checking it directly
@@ -162,15 +171,47 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [coffeeType, setCoffeeType] = useState<string>(COFFEE_TYPES[0])
   const [record, setRecord] = useState<Omit<ProcessingRecord, "id">>(emptyRecord)
+  // Null until the day has something to divide, which is what keeps the card off the screen.
+  const dayOutturn = dayOutturnPercent({ entry: record, route: processingRoute })
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
   const [previousRecord, setPreviousRecord] = useState<ProcessingRecord | null>(null)
   const [recentRecords, setRecentRecords] = useState<ProcessingRecord[]>([])
-  const recentControls = useListControls(recentRecords, {
+
+  /**
+   * ⚠ THE BAG FIGURE IS RESOLVED HERE, NOT INSIDE THE SORTER, AND THAT IS THE WHOLE POINT.
+   *
+   * useListControls memoises on [items, search, sortValue, sortDirection, facetValues] with an
+   * eslint-disable whose comment reads "sorters are stable config". That was true of all 21
+   * callers until the bags sorter started closing over `processingRoute` -- then changing the
+   * route left the list ordered by the OLD route's figure, because nothing in the deps had
+   * changed. Raised on #66.
+   *
+   * Fixing the hook would mean adding `sorters` to its deps, and every caller passes an inline
+   * object literal, so 20 other screens would recompute their sort on every render to fix a
+   * problem that exists in one. Instead the route-dependence is threaded through `items`, which
+   * the memo DOES track: a new route produces a new array, the memo invalidates, and the sorter
+   * closes over nothing.
+   */
+  const recentForList = useMemo<Array<ProcessingRecord & { bagsOnRoute: number }>>(
+    () =>
+      recentRecords.map((record) => ({
+        ...record,
+        bagsOnRoute: bagsProducedOnRoute(
+          { dryParchBags: record.dry_p_bags, dryCherryBags: record.dry_cherry_bags },
+          processingRoute,
+        ).total,
+      })),
+    [recentRecords, processingRoute],
+  )
+
+  const recentControls = useListControls(recentForList, {
     searchFields: (r) => [r.lot_id, r.quality_grade, String(r.process_date || "").slice(0, 10)],
     sorters: {
       date: (r) => String(r.process_date || "").slice(0, 10),
       crop: (r) => Number(r.crop_today) || 0,
-      bags: (r) => Number(r.dry_p_bags) || 0,
+      // Precomputed above, so this closes over nothing mutable and the hook's "sorters are
+      // stable config" contract holds.
+      bags: (r) => r.bagsOnRoute,
     },
     defaultSort: "date",
   })
@@ -223,95 +264,22 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     }
   }, [toast])
 
+  /**
+   * All of this used to be eighty lines of inline arithmetic here, including the one line that
+   * assumed cherry is always made from green and float. It now lives in lib/processing-ratios.ts
+   * where it can be tested against a route; see the header there for what was wrong and why.
+   */
   const autoCalculateFields = useCallback(() => {
-    setRecord((prev) => {
-      const updated = { ...prev }
-
-      const cropToday = Number(prev.crop_today) || 0
-      const ripeToday = Number(prev.ripe_today) || 0
-      const greenToday = Number(prev.green_today) || 0
-      const floatToday = Number(prev.float_today) || 0
-      const wetParchment = Number(prev.wet_parchment) || 0
-      const dryParch = Number(prev.dry_parch) || 0
-      const dryCherry = Number(prev.dry_cherry) || 0
-
-      if (previousRecord) {
-        const prevCropTodate = Number(previousRecord.crop_todate) || 0
-        const prevRipeTodate = Number(previousRecord.ripe_todate) || 0
-        const prevGreenTodate = Number(previousRecord.green_todate) || 0
-        const prevFloatTodate = Number(previousRecord.float_todate) || 0
-        const prevDryPTodate = Number(previousRecord.dry_p_todate) || 0
-        const prevDryCherryTodate = Number(previousRecord.dry_cherry_todate) || 0
-        const prevDryPBagsTodate = Number(previousRecord.dry_p_bags_todate) || 0
-        const prevDryCherryBagsTodate = Number(previousRecord.dry_cherry_bags_todate) || 0
-
-        updated.crop_todate = Number.parseFloat((prevCropTodate + cropToday).toFixed(2))
-        updated.ripe_todate = Number.parseFloat((prevRipeTodate + ripeToday).toFixed(2))
-        updated.green_todate = Number.parseFloat((prevGreenTodate + greenToday).toFixed(2))
-        updated.float_todate = Number.parseFloat((prevFloatTodate + floatToday).toFixed(2))
-        updated.dry_p_todate = Number.parseFloat((prevDryPTodate + dryParch).toFixed(2))
-        updated.dry_cherry_todate = Number.parseFloat((prevDryCherryTodate + dryCherry).toFixed(2))
-
-        const dryPBags = Number.parseFloat((dryParch / bagWeightKg).toFixed(2))
-        const dryCherryBags = Number.parseFloat((dryCherry / bagWeightKg).toFixed(2))
-
-        updated.dry_p_bags = dryPBags
-        updated.dry_cherry_bags = dryCherryBags
-        updated.dry_p_bags_todate = Number.parseFloat((prevDryPBagsTodate + dryPBags).toFixed(2))
-        updated.dry_cherry_bags_todate = Number.parseFloat((prevDryCherryBagsTodate + dryCherryBags).toFixed(2))
-      } else {
-        updated.crop_todate = cropToday
-        updated.ripe_todate = ripeToday
-        updated.green_todate = greenToday
-        updated.float_todate = floatToday
-        updated.dry_p_todate = dryParch
-        updated.dry_cherry_todate = dryCherry
-
-        updated.dry_p_bags = Number.parseFloat((dryParch / bagWeightKg).toFixed(2))
-        updated.dry_cherry_bags = Number.parseFloat((dryCherry / bagWeightKg).toFixed(2))
-        updated.dry_p_bags_todate = updated.dry_p_bags
-        updated.dry_cherry_bags_todate = updated.dry_cherry_bags
-      }
-
-      if (cropToday > 0) {
-        updated.ripe_percent = Number.parseFloat(((ripeToday / cropToday) * 100).toFixed(2))
-        updated.green_percent = Number.parseFloat(((greenToday / cropToday) * 100).toFixed(2))
-        updated.float_percent = Number.parseFloat(((floatToday / cropToday) * 100).toFixed(2))
-        /**
-         * ⚠ `dry_cherry_percent` IS NOT COMPUTED HERE, AND THAT IS THE POINT OF MIGRATION 155.
-         *
-         * Its denominator depends on how the estate processes -- 0 on a wet route, crop on a
-         * natural one, crop minus ripe on both -- and only the server knows the route. This form
-         * used to compute it as `dryCherry / (green + float)`, so on a wet route the database
-         * stored 0 while the screen showed a non-zero figure, and on the others it disagreed with
-         * the stored value the moment anybody edited an input.
-         *
-         * The value shown comes from the record the server returns (see the save handler's
-         * `data.record` branch) and from the row loaded for an edit. Nothing on the client may
-         * recompute it. Caught in review on #128, in the one file my own guard did not scan --
-         * it covered lib/ and app/ while the offender sat in components/.
-         */
-      } else {
-        updated.ripe_percent = 0
-        updated.green_percent = 0
-        updated.float_percent = 0
-      }
-
-      if (ripeToday > 0) {
-        updated.fr_wp_percent = Number.parseFloat(((wetParchment / ripeToday) * 100).toFixed(2))
-      } else {
-        updated.fr_wp_percent = 0
-      }
-
-      if (wetParchment > 0) {
-        updated.wp_dp_percent = Number.parseFloat(((dryParch / wetParchment) * 100).toFixed(2))
-      } else {
-        updated.wp_dp_percent = 0
-      }
-
-      return updated
-    })
-  }, [bagWeightKg, previousRecord])
+    setRecord((prev) => ({
+      ...prev,
+      ...deriveProcessingFigures({
+        entry: prev,
+        previous: previousRecord,
+        bagWeightKg,
+        route: processingRoute,
+      }),
+    }))
+  }, [bagWeightKg, previousRecord, processingRoute])
 
   const loadRecentRecords = useCallback(async (pageIndex = 0, append = false, fetchAll = false) => {
     if (!selectedLocationId) {
@@ -671,19 +639,18 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         setAnomalyWarning(null)
 
         /**
-         * ⚠ RE-READ THE SAVED ROW, because the DATABASE owns the computed columns.
+         * ⚠ RE-READ THE SAVED ROW. The DATABASE owns the computed columns.
          *
-         * A trigger on processing_records recomputes dry_cherry_percent, fr_wp_percent,
-         * wp_dp_percent and every to-date column, and migration 155 makes the dry cherry
-         * denominator depend on the estate's processing route. The client therefore cannot know
-         * those values and no longer guesses at them.
+         * Carried over from #128 (75db67f) through this merge. The trigger on processing_records
+         * recomputes dry_cherry_percent, fr_wp_percent, wp_dp_percent and every to-date column,
+         * and migration 155 makes the dry cherry denominator follow the estate's route - so what
+         * is stored can differ from what the form derived while typing, and the stored value is
+         * the authority.
          *
-         * Without this reload the form keeps the values it had before the save -- 0 on a fresh
-         * record -- under a label reading "Auto-calculated". For a natural-route estate entering
-         * 100 kg of crop and 10 kg of dry cherry the screen would read 0% while the database held
-         * 10%, until somebody navigated away and back. Caught in review on #128; the earlier commit
-         * claimed the save handler already applied `data.record`, which is the LOAD handler at
-         * loadRecordForDate, not this one.
+         * `git checkout --ours` during the merge with main dropped this line, because it lives in
+         * the same file as the conflict. The guard in
+         * tests/dry-cherry-ratio-has-one-server-definition.test.ts caught it within the minute,
+         * which is the only reason it is here.
          */
         await loadRecordForDate(date)
         await loadRecentRecords(0, false)
@@ -1467,7 +1434,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-white/80">
+              {showsWetLine && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Wet parchment</CardTitle>
                 </CardHeader>
@@ -1480,12 +1447,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   {showAutoCalc && <div>
                     <Label htmlFor="processing-fr-wp-percent">FR-WP %</Label>
                     <Input id="processing-fr-wp-percent" type="number" inputMode="decimal" step="0.01" value={record.fr_wp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
-                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated (WP/Ripe Today)</p>
+                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated (WP / ripe cherry pulped)</p>
                   </div>}
                 </CardContent>
-              </Card>
+              </Card>}
 
-              <Card className="border-border/60 bg-white/80">
+              {showsWetLine && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Dry parchment</CardTitle>
                 </CardHeader>
@@ -1505,9 +1472,9 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (DP/WP)</p>
                   </div>}
                 </CardContent>
-              </Card>
+              </Card>}
 
-              <Card className="border-border/60 bg-white/80">
+              {showsCherryLine && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Dry cherry</CardTitle>
                 </CardHeader>
@@ -1524,36 +1491,63 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   {showAutoCalc && <div>
                     <Label htmlFor="processing-dry-cherry-percent">Dry Cherry %</Label>
                     <Input id="processing-dry-cherry-percent" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
-                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
+                    {/* Naming the denominator, because it is the thing that differs between estates
+                        and a bare "Auto-calculated" is how the old assumption stayed invisible. */}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {processingRoute === "natural"
+                        ? "Auto-calculated (cherry / whole crop)"
+                        : "Auto-calculated (cherry / crop not pulped)"}
+                    </p>
                   </div>}
                 </CardContent>
-              </Card>
+              </Card>}
 
               {showAutoCalc && <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Bag output</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
-                  <div>
+                  {showsWetLine && <div>
                     <Label htmlFor="processing-dry-p-bags">Dry Parchment Bags</Label>
                     <Input id="processing-dry-p-bags" type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
-                  </div>
-                  <div>
+                  </div>}
+                  {showsWetLine && <div>
                     <Label htmlFor="processing-dry-p-bags-todate">Dry Parchment Bags To Date</Label>
                     <Input id="processing-dry-p-bags-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
-                  </div>
-                  <div>
+                  </div>}
+                  {showsCherryLine && <div>
                     <Label htmlFor="processing-dry-cherry-bags">Dry Cherry Bags</Label>
                     <Input id="processing-dry-cherry-bags" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
-                  </div>
-                  <div>
+                  </div>}
+                  {showsCherryLine && <div>
                     <Label htmlFor="processing-dry-cherry-bags-todate">Dry Cherry Bags To Date</Label>
                     <Input id="processing-dry-cherry-bags-todate" type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
-                  </div>
+                  </div>}
+                </CardContent>
+              </Card>}
+
+              {/* The number a planter is judged on, which the screen never showed. Omitted rather
+                  than shown as 0% when the day has nothing to divide, so an in-progress entry does
+                  not flash a terrible outturn at somebody mid-typing. */}
+              {showAutoCalc && dayOutturn && <Card className="border-primary/30 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="text-lg">{dayOutturn.label}</CardTitle>
+                  <CardDescription>
+                    {processingRoute === "natural"
+                      ? "Dry cherry against the fresh fruit that went to the yard."
+                      : processingRoute === "wet"
+                        ? "Dry parchment against the ripe cherry that went through the pulper."
+                        : "Everything dry today against everything picked today, both lines together."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-semibold tabular-nums text-foreground">
+                    {dayOutturn.percent.toFixed(2)}%
+                  </p>
                 </CardContent>
               </Card>}
               </div>
@@ -1644,7 +1638,11 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             sortOptions={[
               { value: "date", label: "Date" },
               { value: "crop", label: "Crop kg" },
-              { value: "bags", label: "Dry parchment bags" },
+              {
+                value: "bags",
+                // Naming parchment here was wrong on a natural-route estate, which produces none.
+                label: processingRoute === "natural" ? "Dry cherry bags" : processingRoute === "wet" ? "Dry parchment bags" : "Bags produced",
+              },
             ]}
             sortValue={recentControls.sortValue}
             onSortChange={recentControls.setSortValue}
@@ -1736,7 +1734,19 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                       </div>
                       <div className="text-right">
                         <p className="text-xl font-black text-stone-900">{rec.crop_today ?? 0}<span className="text-sm font-normal text-stone-400">kg</span></p>
-                        <p className="text-xs text-stone-400">{rec.dry_p_bags} bags</p>
+                        {(() => {
+                          // A day with 500 kg of dry cherry read "0 bags" here, because this
+                          // printed dry_p_bags and the parchment line is hidden on a natural route.
+                          const produced = bagsProducedOnRoute(
+                            { dryParchBags: rec.dry_p_bags, dryCherryBags: rec.dry_cherry_bags },
+                            processingRoute,
+                          )
+                          return (
+                            <p className="text-xs text-stone-400">
+                              {produced.total} {produced.label}
+                            </p>
+                          )
+                        })()}
                       </div>
                     </div>
                     {(rec.quality_grade || rec.moisture_pct) && (

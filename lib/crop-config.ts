@@ -81,6 +81,69 @@ export const COFFEE_FORMS = ["Dry Parchment", "Dry Cherry"] as const
 export type CoffeeForm = (typeof COFFEE_FORMS)[number]
 
 /**
+ * ────────────────────────────────────────────────────────────────────────────────────────────────
+ * A FOURTH AXIS: THE ROUTE. Which of the two forms an estate can even produce.
+ *
+ * The three axes above describe a row that already exists. This one describes the estate, and it is
+ * what DECIDES which forms are possible:
+ *
+ *   wet       pulps its cherry. Produces Dry Parchment only.
+ *   natural   never pulps. Dries fruit whole. Produces Dry Cherry only.
+ *   both      runs both lines, usually washing the ripe and drying the rest whole.
+ *
+ * Why this belongs here rather than next to the other estate settings: it is a statement about the
+ * form axis, and keeping it apart is how the form axis ended up with eight answers. `formsForRoute`
+ * is the only place allowed to say which forms a route yields.
+ *
+ * `both` is the default for every existing tenant on purpose. It is the only value that changes
+ * nothing: it shows every field and keeps every ratio exactly as it was before this axis existed.
+ * A default of `wet` would have silently hidden HoneyFarm's Robusta cherry, which is 13,980 kg.
+ */
+export const PROCESSING_ROUTES = ["wet", "natural", "both"] as const
+export type ProcessingRoute = (typeof PROCESSING_ROUTES)[number]
+
+/** The default, and the only value that is a no-op for an estate that never set one. */
+export const DEFAULT_PROCESSING_ROUTE: ProcessingRoute = "both"
+
+export const parseProcessingRoute = (value: unknown): ProcessingRoute | null => {
+  const normalized = String(value ?? "").trim().toLowerCase()
+  return (PROCESSING_ROUTES as readonly string[]).includes(normalized)
+    ? (normalized as ProcessingRoute)
+    : null
+}
+
+/** Lenient, for reading. An unrecognised route behaves as the one that hides nothing. */
+export const resolveProcessingRoute = (value: unknown): ProcessingRoute =>
+  parseProcessingRoute(value) ?? DEFAULT_PROCESSING_ROUTE
+
+/**
+ * Which forms a route can yield. The single source of truth for "does this estate make cherry?".
+ *
+ * Used by the processing form to decide which cards to render, and available to dispatch and sales
+ * so a wet-only estate is not offered a bag type it cannot have produced.
+ */
+export const formsForRoute = (route: unknown): readonly CoffeeForm[] => {
+  switch (resolveProcessingRoute(route)) {
+    case "wet":
+      return ["Dry Parchment"] as const
+    case "natural":
+      return ["Dry Cherry"] as const
+    default:
+      return COFFEE_FORMS
+  }
+}
+
+export const routeProducesForm = (route: unknown, form: CoffeeForm): boolean =>
+  formsForRoute(route).includes(form)
+
+/** How the route reads on screen. Estate vocabulary, not the stored token. */
+export const PROCESSING_ROUTE_LABELS: Record<ProcessingRoute, string> = {
+  wet: "Wet only, pulped to parchment",
+  natural: "Natural only, dried as cherry",
+  both: "Both, parchment and cherry",
+}
+
+/**
  * What a reader sees when a row's variety or form is missing or unrecognised.
  *
  * Deliberately NOT the raw value and NOT a guess. Echoing the raw value invents a category and

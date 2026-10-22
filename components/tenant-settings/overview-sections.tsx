@@ -19,6 +19,12 @@ import {
   type TenantUiVariant,
 } from "@/lib/tenant-experience"
 import type { TenantEstateProfile } from "@/lib/tenant-estate-profile"
+import {
+  DEFAULT_PROCESSING_ROUTE,
+  PROCESSING_ROUTE_LABELS,
+  PROCESSING_ROUTES,
+  parseProcessingRoute,
+} from "@/lib/crop-config"
 import type { AppLocale } from "@/lib/i18n"
 import type { SectionLink, UiPreferencesDraft } from "@/components/tenant-settings/types"
 import WorkspaceNavigatorBackButton from "@/components/workspace-navigator-back-button"
@@ -278,6 +284,47 @@ export function EstateProfileSection({
             <div className="rounded-xl border border-emerald-100 bg-white/85 p-3 text-xs leading-5 text-emerald-900">
               <span className="font-semibold">Why per block:</span> cost per acre is only comparable if each
               block carries its own area. One estate-wide number cannot tell you which block is expensive.
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50/70 via-white to-orange-50/50 dark:from-amber-950/25 dark:via-slate-900 dark:to-orange-950/15 p-4 shadow-sm">
+            <div className="space-y-1">
+              <Badge variant="outline" className="border-amber-200 bg-white text-amber-700">
+                How you process
+              </Badge>
+              <p className="text-base font-semibold text-foreground">
+                Tell FarmFlow whether you pulp your cherry, dry it whole, or both.
+              </p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                This decides which fields the pulping screen asks for, and what every yield
+                percentage is measured against. An estate that dries its crop whole is measuring a
+                different thing from one that washes it, so getting this right is what makes the
+                outturn figure mean anything.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="processing-route">Processing route</Label>
+              <Select
+                value={estateProfileDraft.processingRoute || DEFAULT_PROCESSING_ROUTE}
+                onValueChange={(value) => onEstateProfileChange({ processingRoute: parseProcessingRoute(value) ?? DEFAULT_PROCESSING_ROUTE })}
+              >
+                <SelectTrigger id="processing-route">
+                  <SelectValue placeholder="Choose how this estate processes" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROCESSING_ROUTES.map((route) => (
+                    <SelectItem key={route} value={route}>
+                      {PROCESSING_ROUTE_LABELS[route]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Pick <span className="font-medium text-foreground">Both</span> if you are not sure.
+                It shows every field and hides nothing, which is how the screen behaved before this
+                setting existed.
+              </p>
             </div>
           </div>
 
