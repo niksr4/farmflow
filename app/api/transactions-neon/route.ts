@@ -5,6 +5,8 @@ import { requireAnyModuleAccess, requireModuleAccess, isModuleAccessError } from
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -548,6 +550,17 @@ export async function POST(request: NextRequest) {
 
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
     const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
+    // location_id is bound to a uuid FK, and FK checks ignore RLS: without this a caller could stamp
+    // another tenant's location onto their own stock row.
+    if (locationValue) {
+      const validLocationId = await validateLocationForTenant(inventorySql, tenantContext, sessionUser, locationValue)
+      if (!validLocationId) {
+        return NextResponse.json(
+          { success: false, message: "Selected location is invalid for this tenant" },
+          { status: 400 },
+        )
+      }
+    }
     const requestedUsageLocationId = locationValue
     let stockLocationValue: string | null = locationValue
     let notesValue = typeof notes === "string" ? notes : ""
@@ -813,6 +826,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error("[SERVER] ❌ Error adding transaction:", error)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, message: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }

@@ -14,6 +14,7 @@ import { resolveRuleForDate, retentionForDay, type PayRule } from "@/lib/pay-rul
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 /**
@@ -61,6 +62,13 @@ export async function GET(request: Request) {
     const workerId = workerIdParam && UUID_PATTERN.test(workerIdParam) ? workerIdParam : null
     const startDate = searchParams.get("startDate") || null
     const endDate = searchParams.get("endDate") || null
+    // Bound to ::date casts below: a malformed value would throw (22P02) and read as a server error.
+    if ((startDate && !DATE_PATTERN.test(startDate)) || (endDate && !DATE_PATTERN.test(endDate))) {
+      return NextResponse.json(
+        { success: false, error: "startDate and endDate must be YYYY-MM-DD", entries: [] },
+        { status: 400 },
+      )
+    }
     const limit = Math.min(Math.max(Number.parseInt(searchParams.get("limit") || "200", 10) || 200, 1), 500)
     const offset = Math.max(Number.parseInt(searchParams.get("offset") || "0", 10) || 0, 0)
 

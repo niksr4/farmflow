@@ -30,6 +30,8 @@ const updateSchema = z.object({
  */
 const ADMIN_ONLY_ENTRY_TYPES = new Set<string>(["advance", "repayment", "retention_payout"])
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const needsAdmin = (...types: Array<string | null | undefined>) =>
   types.some((t) => t != null && ADMIN_ONLY_ENTRY_TYPES.has(String(t)))
 
@@ -39,6 +41,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const sessionUser = await requireModuleAccess("accounts")
     if (!canWriteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    // A malformed id would make the ::uuid cast throw (22P02) and surface as a 500.
+    if (!UUID_PATTERN.test(id)) {
+      return NextResponse.json({ success: false, error: "Entry not found" }, { status: 404 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json().catch(() => ({}))
@@ -104,6 +110,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const sessionUser = await requireModuleAccess("accounts")
     if (!canDeleteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    if (!UUID_PATTERN.test(id)) {
+      return NextResponse.json({ success: false, error: "Entry not found" }, { status: 404 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 

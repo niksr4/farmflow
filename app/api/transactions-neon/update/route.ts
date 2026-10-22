@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { inventorySql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { canWriteModule } from "@/lib/permissions"
@@ -206,6 +208,18 @@ export async function PUT(request: NextRequest) {
           ? resolvedLocationId
           : null
 
+    // Only a location the caller is changing needs checking; an unchanged one was validated when the
+    // row was written. FK checks ignore RLS, so an unchecked id could point at another tenant.
+    if (location_id !== undefined && nextStockLocationId) {
+      const validLocationId = await validateLocationForTenant(inventorySql, tenantContext, sessionUser, nextStockLocationId)
+      if (!validLocationId) {
+        return NextResponse.json(
+          { success: false, message: "Selected location is invalid for this tenant" },
+          { status: 400 },
+        )
+      }
+    }
+
     let notesValue =
       notes === undefined ? stripUsageLocationTag(existingRow?.notes ? String(existingRow.notes) : "") : String(notes || "")
     const normalizedTransactionDate =
@@ -365,6 +379,9 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error: any) {
     console.error("[SERVER] ❌ Error updating transaction:", error)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, message: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
