@@ -11,6 +11,8 @@ import { recomputeProcessingTotals } from "@/lib/server/processing-utils"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { isLocationAccessError } from "@/lib/server/location-access"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -399,6 +401,12 @@ export async function POST(request: NextRequest) {
     if (!isUuid(String(locationId))) {
       return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
     }
+    // processing_records.location_id is a foreign key, and foreign-key checks ignore row-level
+    // security: another tenant's block id would be accepted, and a user restricted to some blocks
+    // could write to any other. Confirm the block is this tenant's and this user's to write to.
+    if (!(await validateLocationForTenant(sql, tenantContext, sessionUser, String(locationId)))) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+    }
     const moistureValue =
       data.moisture_pct === null || data.moisture_pct === undefined || data.moisture_pct === ""
         ? null
@@ -517,6 +525,9 @@ export async function POST(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     console.error("Error saving processing record:", error)
     await logRouteMutationFailure({
       tenantId,
@@ -562,6 +573,9 @@ export async function DELETE(request: NextRequest) {
     }
     if (!isUuid(String(locationId))) {
       return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
+    }
+    if (!(await validateLocationForTenant(sql, tenantContext, sessionUser, String(locationId)))) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
 
     const existing = await runTenantQuery(
@@ -610,6 +624,9 @@ export async function DELETE(request: NextRequest) {
   } catch (error: any) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     console.error("Error deleting processing record:", error)
     await logRouteMutationFailure({

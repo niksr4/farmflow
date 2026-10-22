@@ -13,6 +13,33 @@ const sanitize = (value: unknown, limit: number) => String(value || "").trim().s
 const NOTIFICATION_WEBHOOK_URL =
   process.env.REGISTER_INTEREST_SLACK_WEBHOOK_URL || process.env.SUPPORT_SLACK_WEBHOOK_URL || ""
 
+/**
+ * Slack's own escaping for text it renders: & < > are the only characters that carry meaning.
+ * This endpoint is public and every field below is whatever a stranger typed, so without it a
+ * submission containing `<!channel>` pages the whole ops channel and `<https://evil|Click here>`
+ * posts a clickable link in what looks like a message from FarmFlow.
+ */
+/**
+ * ⚠ NEWLINES AND `*` WERE LEFT INTACT, WHICH IS ENOUGH TO FORGE A FIELD.
+ *
+ * The payload renders each value on its own labelled line, so `notes` set to
+ * "hello\n*Name:* Estate Admin" posts a second, fake Name line in what reads as a message from
+ * FarmFlow. The escaping above only stopped `<!channel>` and link syntax; field forgery needs
+ * nothing but a line break.
+ *
+ * Newlines collapse to a single space, and the mrkdwn emphasis characters are neutralised so a
+ * submitted value cannot imitate a bold label. Entity-escaping stays first, or the ampersands
+ * introduced here would be escaped twice.
+ */
+const escapeSlack = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[*_`]/g, (char) => `\u200b${char}`)
+    .trim()
+
 const buildSlackPayload = (payload: {
   source: string
   name: string
@@ -25,21 +52,21 @@ const buildSlackPayload = (payload: {
 }) => {
   const lines = [
     `*New Request Access Submission*`,
-    `*Source:* ${payload.source || "unknown"}`,
-    `*Name:* ${payload.name}`,
-    `*Email:* ${payload.email}`,
-    `*Estate / Organization:* ${payload.organization || "-"}`,
-    `*Estate Size / Segment:* ${payload.estateSize || "-"}`,
-    `*Region:* ${payload.region || "-"}`,
-    `*IP:* ${payload.ipAddress || "-"}`,
+    `*Source:* ${escapeSlack(payload.source || "unknown")}`,
+    `*Name:* ${escapeSlack(payload.name)}`,
+    `*Email:* ${escapeSlack(payload.email)}`,
+    `*Estate / Organization:* ${escapeSlack(payload.organization || "-")}`,
+    `*Estate Size / Segment:* ${escapeSlack(payload.estateSize || "-")}`,
+    `*Region:* ${escapeSlack(payload.region || "-")}`,
+    `*IP:* ${escapeSlack(payload.ipAddress || "-")}`,
   ]
 
   if (payload.notes) {
-    lines.push(`*Notes:* ${payload.notes}`)
+    lines.push(`*Notes:* ${escapeSlack(payload.notes)}`)
   }
 
   return {
-    text: `New request access submission from ${payload.name} (${payload.email})`,
+    text: `New request access submission from ${escapeSlack(payload.name)} (${escapeSlack(payload.email)})`,
     blocks: [
       {
         type: "section",

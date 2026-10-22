@@ -365,3 +365,38 @@ export function lastCompletedIstWeek(): { weekStart: string; weekEnd: string } {
   const sunday = new Date(monday.getTime() + 6 * 86_400_000)
   return { weekStart: monday.toISOString().slice(0, 10), weekEnd: sunday.toISOString().slice(0, 10) }
 }
+
+/**
+ * Is this string a real calendar date in YYYY-MM-DD form?
+ *
+ * ⚠ A SHAPE REGEX IS NOT ENOUGH, and two routes proved it independently. `/^\d{4}-\d{2}-\d{2}$/`
+ * accepts "2026-02-30" and "2026-13-01". app/api/reconciliation returned `success: true` with six
+ * identical "could not run" warnings for those, because every check swallowed its own SQL cast
+ * failure; app/api/labor-neon reached the ::date cast and answered 500, which the form shows as
+ * "Failed to process labour record" with nothing to correct. Both raised on #127.
+ *
+ * `Date.UTC` rather than `new Date(text)`: the latter also rolls "2026-02-30" to 2 March, so the
+ * round-trip below catches it either way, but `new Date` resolves some formats against the HOST's
+ * timezone and that is the bug class this module exists for. Defensive, not load-bearing.
+ *
+ * ⚠ THE THREE COMPARISONS ARE MUTUALLY REDUNDANT WHILE THE REGEX ABOVE STANDS, and that was
+ * measured rather than assumed: brute-forcing every `\d{4}-\d{2}-\d{2}` shape across 2020-2030,
+ * dropping ANY ONE of the year, month or day checks changes the answer for ZERO inputs. A
+ * two-digit month or day cannot roll far enough to fool the other two.
+ *
+ * They stay anyway, because the redundancy is a property of the REGEX, not of the arithmetic.
+ * Loosen the shape to accept "2026-2-30" or a five-digit year and the checks stop covering for
+ * each other. Do not "simplify" this on the strength of a green test: a tamper that removes one
+ * check passes, correctly, and tells you nothing about whether it is safe to remove permanently.
+ */
+export function isRealCalendarDate(value: unknown): boolean {
+  const text = String(value ?? "").trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false
+  const [year, month, day] = text.split("-").map(Number)
+  const anchored = new Date(Date.UTC(year, month - 1, day))
+  return (
+    anchored.getUTCFullYear() === year &&
+    anchored.getUTCMonth() === month - 1 &&
+    anchored.getUTCDate() === day
+  )
+}

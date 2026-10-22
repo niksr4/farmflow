@@ -9,6 +9,8 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { isLocationAccessError, requireLocationAccess } from "@/lib/server/location-access"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -116,7 +118,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, entries: [], totalCount: 0 })
     }
     console.error("Error fetching journal entries:", error)
-    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to process journal entry") }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load journal entries") }, { status: 500 })
   }
 }
 
@@ -161,6 +163,12 @@ export async function POST(request: Request) {
       ])
     ) {
       return NextResponse.json({ success: false, error: "Add notes or details before saving." }, { status: 400 })
+    }
+
+    // location_id is a foreign key and those ignore row-level security: another tenant's block id
+    // would be accepted, and a user restricted to some blocks could write to any other.
+    if (location_id && !(await validateLocationForTenant(sql, tenantContext, sessionUser, location_id))) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
 
     const result = await runTenantQuery(
@@ -210,6 +218,9 @@ export async function POST(request: Request) {
   } catch (error: any) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     console.error("Error creating journal entry:", error)
     await logRouteMutationFailure({
@@ -286,6 +297,22 @@ export async function PATCH(request: Request) {
     if (!existing?.length) {
       return NextResponse.json({ success: false, error: "Entry not found" }, { status: 404 })
     }
+    /**
+     * ⚠ AUTHORIZE THE EXISTING ENTRY'S LOCATION, not only the replacement.
+     *
+     * The lookup above is tenant-scoped, so a writer with a location allow-list who knows an entry
+     * id finds it regardless of which block it belongs to. Validating only the incoming location_id
+     * checks where the row is GOING and never where it already IS -- and when the payload omits
+     * location_id entirely, no check ran at all.
+     *
+     * PATCH only: POST is creating a row, so there is no existing location to authorize.
+     */
+    if (existing[0].location_id) {
+      await requireLocationAccess(String(existing[0].location_id), sessionUser)
+    }
+    if (location_id && !(await validateLocationForTenant(sql, tenantContext, sessionUser, location_id))) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+    }
 
     const result = await runTenantQuery(
       sql,
@@ -321,6 +348,9 @@ export async function PATCH(request: Request) {
   } catch (error: any) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     console.error("Error updating journal entry:", error)
     await logRouteMutationFailure({

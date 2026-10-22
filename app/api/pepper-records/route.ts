@@ -9,12 +9,20 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { isLocationAccessError, requireLocationAccess } from "@/lib/server/location-access"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 const LOCATION_ALL = "all"
 const LOCATION_UNASSIGNED = "unassigned"
+
+/** A kilogram or percentage figure: finite and not negative. Null means "reject the request". */
+const readQuantity = (value: unknown): number | null => {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
 
 export async function GET(request: Request) {
   try {
@@ -186,12 +194,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Location is required" }, { status: 400 })
     }
 
+    // Without these a missing date, or a figure typed as text or negative, reached the database and
+    // came back as a generic 500 -- or, for a negative, was saved and skewed every pepper total.
+    if (!String(data.process_date ?? "").trim()) {
+      return NextResponse.json({ success: false, error: "process_date is required" }, { status: 400 })
+    }
+    const kgPicked = readQuantity(data.kg_picked)
+    const greenPepper = readQuantity(data.green_pepper)
+    const dryPepper = readQuantity(data.dry_pepper)
+    if (kgPicked === null || greenPepper === null || dryPepper === null) {
+      return NextResponse.json(
+        { success: false, error: "kg_picked, green_pepper and dry_pepper must be zero or more" },
+        { status: 400 },
+      )
+    }
+
     const record = {
       process_date: data.process_date,
-      kg_picked: data.kg_picked ?? 0,
-      green_pepper: data.green_pepper ?? 0,
+      kg_picked: kgPicked,
+      green_pepper: greenPepper,
       green_pepper_percent: Number(data.green_pepper_percent) || 0,
-      dry_pepper: data.dry_pepper ?? 0,
+      dry_pepper: dryPepper,
       dry_pepper_percent: Number(data.dry_pepper_percent) || 0,
       notes: data.notes || "",
       recorded_by: sessionUser.username || "system",
@@ -212,6 +235,10 @@ export async function POST(request: Request) {
 
       if (!existingById?.length) {
         return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+      }
+      // A user restricted to some blocks must not be able to rewrite another block's record by id.
+      if (existingById[0].location_id) {
+        await requireLocationAccess(String(existingById[0].location_id), sessionUser)
       }
 
       const updatedById = await runTenantQuery(
@@ -245,6 +272,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, record: updatedById?.[0] })
     }
 
+    // The block must be this tenant's, and one this user may write to. A foreign-key check does not
+    // see row-level security, so another tenant's location id would otherwise be accepted.
+    const validLocationId = await validateLocationForTenant(sql, tenantContext, sessionUser, String(locationId))
+    if (!validLocationId) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+    }
+
     const existing = await runTenantQuery(
       sql,
       tenantContext,
@@ -252,7 +286,7 @@ export async function POST(request: Request) {
         SELECT *
         FROM pepper_records
         WHERE tenant_id = ${tenantContext.tenantId}
-          AND location_id = ${locationId}
+          AND location_id = ${validLocationId}
           AND DATE(process_date) = ${record.process_date}::date
         LIMIT 1
       `,
@@ -268,7 +302,7 @@ export async function POST(request: Request) {
           dry_pepper, dry_pepper_percent, notes, recorded_by
         )
         VALUES (
-          ${tenantContext.tenantId}, ${locationId}, ${record.process_date}::date,
+          ${tenantContext.tenantId}, ${validLocationId}, ${record.process_date}::date,
           ${record.kg_picked}, ${record.green_pepper}, ${record.green_pepper_percent},
           ${record.dry_pepper}, ${record.dry_pepper_percent}, ${record.notes}, ${record.recorded_by}
         )
@@ -299,6 +333,9 @@ export async function POST(request: Request) {
     console.error("Error saving pepper record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     await logRouteMutationFailure({
       tenantId,
@@ -345,6 +382,9 @@ export async function DELETE(request: Request) {
 
       if (!existingById?.length) {
         return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+      }
+      if (existingById[0].location_id) {
+        await requireLocationAccess(String(existingById[0].location_id), sessionUser)
       }
 
       await runTenantQuery(
@@ -399,6 +439,22 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
     }
 
+    /**
+     * ⚠ AUTHORIZE THE ROW THIS SELECTOR FOUND, not just the location that was asked for.
+     *
+     * The id branch above already does this; this branch did not. The lookup is tenant-scoped
+     * only, so a `user` with a location allow-list could pass a date plus a locationId outside
+     * their list and delete the matching record. `pepper` is in USER_MUTATION_MODULES, so a writer
+     * reaches this handler.
+     *
+     * Checked against the ROW's own location rather than the requested one: they are the same here
+     * by construction, but reading it off the row is what stays correct if the selector ever
+     * widens.
+     */
+    if (existing[0].location_id) {
+      await requireLocationAccess(String(existing[0].location_id), sessionUser)
+    }
+
     if (isUnassigned) {
       await runTenantQuery(
         sql,
@@ -435,6 +491,9 @@ export async function DELETE(request: Request) {
     console.error("Error deleting pepper record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     await logRouteMutationFailure({
       tenantId,

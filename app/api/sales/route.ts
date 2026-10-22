@@ -391,7 +391,7 @@ export async function GET(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    if (rawMessage.includes("does not exist")) {
+    if (/relation "?sales_records"? does not exist/i.test(rawMessage)) {
       return NextResponse.json({ success: true, records: [] })
     }
     console.error("Error fetching sales records:", error)

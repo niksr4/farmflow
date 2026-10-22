@@ -14,6 +14,7 @@ import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { aggregateLaborEntries, computeLaborTotalCost } from "@/lib/labour-cost"
 import { activityCodeExistsForTenant } from "@/lib/server/activity-codes"
+import { isRealCalendarDate } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -66,6 +67,31 @@ async function tableHasLaborEntriesColumn(tableName: string) {
     LIMIT 1
   `
   return Array.isArray(rows) && rows.length > 0
+}
+
+/**
+ * A body that cannot be saved, named in words. Without this a missing date or a missing/non-array
+ * laborEntries list reached aggregateLaborEntries (entries.find on undefined) or the ::date cast
+ * and came back as a generic 500, which the form shows as "Failed to process labour record" with
+ * nothing to correct.
+ */
+const invalidLabourBody = (date: unknown, laborEntries: unknown): string | null => {
+  const trimmed = String(date ?? "").trim()
+  if (!trimmed) return "Date is required"
+  /**
+   * ⚠ "not-a-date" PASSED THIS CHECK AND DIED AT THE ::date CAST AS A 500.
+   *
+   * The form shows a 500 as "Failed to process labour record" with nothing to correct, which is
+   * the same dead end a missing date used to produce. A caller who sent a bad date gets told so.
+   *
+   * Shape first, then calendar validity: the regex accepts 2026-02-30, so the Date round-trip is
+   * what rejects it. Built from the literal parts rather than Date.parse, which accepts a great
+   * deal of nonsense and applies the host's timezone to it.
+   */
+  // Shape AND calendar validity, in one place both this route and reconciliation call.
+  if (!isRealCalendarDate(trimmed)) return "Date must be a real date in YYYY-MM-DD form"
+  if (!Array.isArray(laborEntries)) return "Labour entries are required"
+  return null
 }
 
 // Moved to lib/server/activity-codes.ts so labour assignments run the identical check rather
@@ -302,6 +328,10 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, laborEntries, notes } = body
+    const invalidBody = invalidLabourBody(date, laborEntries)
+    if (invalidBody) {
+      return NextResponse.json({ success: false, error: invalidBody }, { status: 400 })
+    }
     // A tenant who has moved to the muster must not be able to file labour here for a day the
     // totals now take from somewhere else -- it would save, and silently count for nothing.
     const cutoverBlock = await blockedByLabourCutover(tenantContext, body?.date)
@@ -530,7 +560,13 @@ export async function PUT(request: Request) {
     tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
-    const { id, date, code, laborEntries, notes } = body
+    const { id, date, code, laborEntries } = body
+    // POST stores "" for an absent note; PUT passed undefined straight to the driver, which refuses it.
+    const notes = String(body?.notes ?? "")
+    const invalidBody = invalidLabourBody(date, laborEntries)
+    if (invalidBody) {
+      return NextResponse.json({ success: false, error: invalidBody }, { status: 400 })
+    }
     // A tenant who has moved to the muster must not be able to file labour here for a day the
     // totals now take from somewhere else -- it would save, and silently count for nothing.
     const cutoverBlock = await blockedByLabourCutover(tenantContext, body?.date)

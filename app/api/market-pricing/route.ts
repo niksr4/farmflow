@@ -92,6 +92,18 @@ export async function POST(request: Request) {
       if (!payload.record_date) {
         return NextResponse.json({ success: false, error: "record_date is required" }, { status: 400 })
       }
+      // buyer_id is a foreign key, and foreign-key checks ignore row-level security: another
+      // tenant's buyer id would be accepted here and then read back as a blank buyer name.
+      if (payload.buyer_id) {
+        const buyer = await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`SELECT 1 FROM buyers WHERE id::text = ${String(payload.buyer_id)} AND tenant_id = ${tenantContext.tenantId} LIMIT 1`,
+        )
+        if (!buyer?.length) {
+          return NextResponse.json({ success: false, error: "Unknown buyer" }, { status: 400 })
+        }
+      }
       const result = await runTenantQuery(
         sql,
         tenantContext,

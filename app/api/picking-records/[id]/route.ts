@@ -5,6 +5,8 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { isLocationAccessError, requireLocationAccess } from "@/lib/server/location-access"
 import { logServerError } from "@/lib/server/safe-logging"
 import { pickingRowProblem, type PayMode } from "@/lib/picking-pay"
 import { dayCapRefusal, DAY_CAP_STATUS } from "@/lib/server/day-cap-refusal"
@@ -123,6 +125,27 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: problem }, { status: 400 })
     }
 
+    /**
+     * ⚠ AUTHORIZE THE ROW BEING CHANGED, BEFORE CHECKING WHERE IT IS GOING.
+     *
+     * The lookup that produced `existing` is tenant-scoped only. A location-restricted writer who
+     * knows a row id could therefore edit a row belonging to a block they cannot write to -- and
+     * if they omit locationId from the payload, the check below never runs at all, so nothing
+     * stopped them. This row carries wages, so the edit changes what somebody is paid.
+     */
+    if (existing.location_id) {
+      await requireLocationAccess(String(existing.location_id), sessionUser)
+    }
+
+    // Moving a row to another block must land on one of this tenant's own, and one this user may
+    // write to -- the column carries no foreign key, so the database will not say otherwise.
+    if (d.locationId) {
+      const validLocationId = await validateLocationForTenant(accountsSql, tenantContext, sessionUser, d.locationId)
+      if (!validLocationId) {
+        return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+      }
+    }
+
     await runTenantQuery(
       accountsSql, tenantContext,
       accountsSql`
@@ -162,6 +185,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ success: true, record: (after as any[])[0] ?? null })
   } catch (error) {
     if (isModuleAccessError(error)) return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     /**
      * The day cap (scripts/152) raises from a trigger when an edit would push a worker past a full
      * day across picking and day-work together. That is a refusal the writer can act on, not a

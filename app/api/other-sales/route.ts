@@ -275,7 +275,10 @@ export async function GET(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    if (String(error?.message || "").includes("does not exist")) {
+    // Only the table being absent (a tenant schema that predates the module) means "no sales yet".
+    // A bare "does not exist" also matches a missing COLUMN, which is a broken deploy and must
+    // surface as an error rather than as an empty ledger.
+    if (/relation "?other_sales_records"? does not exist/i.test(String(error?.message || ""))) {
       return NextResponse.json({
         success: true,
         records: [],
