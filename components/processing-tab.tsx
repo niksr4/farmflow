@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, useRef, type ChangeEvent, type KeyboardEvent } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef, type ChangeEvent, type KeyboardEvent } from "react"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import InPageNav from "@/components/in-page-nav"
 import FilterBar from "@/components/filter-bar"
@@ -176,18 +176,42 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
   const [previousRecord, setPreviousRecord] = useState<ProcessingRecord | null>(null)
   const [recentRecords, setRecentRecords] = useState<ProcessingRecord[]>([])
-  const recentControls = useListControls(recentRecords, {
+
+  /**
+   * ⚠ THE BAG FIGURE IS RESOLVED HERE, NOT INSIDE THE SORTER, AND THAT IS THE WHOLE POINT.
+   *
+   * useListControls memoises on [items, search, sortValue, sortDirection, facetValues] with an
+   * eslint-disable whose comment reads "sorters are stable config". That was true of all 21
+   * callers until the bags sorter started closing over `processingRoute` -- then changing the
+   * route left the list ordered by the OLD route's figure, because nothing in the deps had
+   * changed. Raised on #66.
+   *
+   * Fixing the hook would mean adding `sorters` to its deps, and every caller passes an inline
+   * object literal, so 20 other screens would recompute their sort on every render to fix a
+   * problem that exists in one. Instead the route-dependence is threaded through `items`, which
+   * the memo DOES track: a new route produces a new array, the memo invalidates, and the sorter
+   * closes over nothing.
+   */
+  const recentForList = useMemo<Array<ProcessingRecord & { bagsOnRoute: number }>>(
+    () =>
+      recentRecords.map((record) => ({
+        ...record,
+        bagsOnRoute: bagsProducedOnRoute(
+          { dryParchBags: record.dry_p_bags, dryCherryBags: record.dry_cherry_bags },
+          processingRoute,
+        ).total,
+      })),
+    [recentRecords, processingRoute],
+  )
+
+  const recentControls = useListControls(recentForList, {
     searchFields: (r) => [r.lot_id, r.quality_grade, String(r.process_date || "").slice(0, 10)],
     sorters: {
       date: (r) => String(r.process_date || "").slice(0, 10),
       crop: (r) => Number(r.crop_today) || 0,
-      // The bags the route actually produced. Sorting on dry_p_bags ordered every row by zero
-      // on a natural-route estate, because the parchment line is hidden there.
-      bags: (r) =>
-        bagsProducedOnRoute(
-          { dryParchBags: r.dry_p_bags, dryCherryBags: r.dry_cherry_bags },
-          processingRoute,
-        ).total,
+      // Precomputed above, so this closes over nothing mutable and the hook's "sorters are
+      // stable config" contract holds.
+      bags: (r) => r.bagsOnRoute,
     },
     defaultSort: "date",
   })
