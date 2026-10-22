@@ -19,15 +19,15 @@ export const quickJumpSections = [
 export const firstWeekLessons = [
   {
     number: 1,
-    title: "Set up activity codes",
+    title: "Check your activity codes",
     duration: "5 min",
-    goal: "Create the codes your team uses to label what each labour or expense is for.",
+    goal: "Make sure the codes you label work and spending with match how your estate talks about them.",
     how: [
-      "Open the Accounts tab from the sidebar.",
+      "Open the Costs tab from the sidebar.",
       "Go to the Cost Codes section.",
-      "Add LABOR, SUPPLIES, MAINTENANCE, and ADMIN, or use the starter codes button in the setup checklist.",
+      "Your estate already has a full set, taken from a real coffee and pepper estate. Rename anything that does not match your words, add what is missing, and remove what you will never use.",
     ],
-    doneLooksLike: "At least three codes appear in the Cost Codes list. You can now select them when recording labour or expenses.",
+    doneLooksLike: "The codes you see are ones you recognise. You will pick from this list every time you record work or a cost.",
   },
   {
     number: 2,
@@ -35,7 +35,7 @@ export const firstWeekLessons = [
     duration: "5–10 min",
     goal: "Log a real cost: wages paid, materials bought, or anything the estate spent money on.",
     how: [
-      "Open Accounts → Expenses.",
+      "Open Costs → Non-Labour Expenses.",
       "Enter the amount, date, and select an activity code (e.g. LABOR or SUPPLIES).",
       "Add a short note so you remember what this was for.",
       "Save the record.",
@@ -44,16 +44,17 @@ export const firstWeekLessons = [
   },
   {
     number: 3,
-    title: "Log your first labour deployment",
+    title: "Mark your first muster",
     duration: "5–10 min",
-    goal: "Track the workers who showed up for one activity: picking, pruning, irrigation, or any task.",
+    goal: "Record who turned up today and what they worked on, which is how every labour cost reaches your reports.",
     how: [
-      "Open Accounts → Daily Labour.",
-      "Choose the date, number of workers, hours worked, and the activity code.",
-      "Enter the total wages paid.",
-      "Save the record.",
+      "Open the Muster tab and pick today's date.",
+      "Tick the people who came in. Anyone missing from the list needs adding under Workers first, with their daily rate.",
+      "For each person or gang, choose what work they did and which block they did it on.",
+      "The day rate comes from the worker's record. For a contract job, enter the price for the whole job instead.",
+      "Save the muster.",
     ],
-    doneLooksLike: "A labour record appears in the list. You can see the cost per worker and hours tracked.",
+    doneLooksLike: "The day shows a cost for each person, and that cost appears in Costs and in the P&L without you entering it twice.",
   },
   {
     number: 4,
@@ -73,7 +74,7 @@ export const firstWeekLessons = [
     duration: "5 min",
     goal: "Check that costs are being captured correctly before the week ends.",
     how: [
-      "Open Accounts and tap Cost Patterns.",
+      "Open Costs and open the Smart Cost Patterns panel.",
       "Look at the cost breakdown by activity code.",
       "Check that labour and expense totals make sense for the work done this week.",
     ],
