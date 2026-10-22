@@ -372,7 +372,7 @@ means **no data exists**, not that it is broken. Check adoption before ranking a
 
 <!-- BEGIN GENERATED: node scripts/dev/refresh-domain-figures.mjs -->
 
-**Generated 2026-10-22 (IST) from PRODUCTION by `node scripts/dev/refresh-domain-figures.mjs`.**
+**Generated 2026-10-23 (IST) from PRODUCTION by `node scripts/dev/refresh-domain-figures.mjs`.**
 Do not hand-edit anything between these markers; re-run the script instead. Everything here
 is a count or a ratio, and counts are the only part of this brief that has ever rotted.
 
@@ -397,41 +397,41 @@ Rs 0 in payroll and in every cost report, silently.
 
 ### Crop and processing
 
-**Processing records by tenant:** HoneyFarm 76, Estate Mock 4.
+**Processing records by tenant:** HoneyFarm 77, Estate Mock 4.
 
-**Coffee type across all records:** Robusta 43, Arabica 37.
+**Coffee type across all records:** Robusta 43, Arabica 38.
 
 ⚠ Read that split as ONE estate's habit, not the market's. Almost every processing row on
 production belongs to a single tenant, so this is their varietal mix and nothing more. The
 hand-written brief previously quoted a 271/217 split from DEV, where simulation tenants
 dominate, and called the customer base Robusta-leaning on that basis.
 
-**Outturn — HoneyFarm, 76 records, 2025-10-30 to 2026-10-17, 1,84,732 kg of cherry.**
+**Outturn — HoneyFarm, 77 records, 2025-10-30 to 2026-10-20, 1,85,093 kg of cherry.**
 
 | Conversion | Aggregate (volume-weighted) | Stored per-record average |
 |---|---|---|
 | Fresh fruit to wet parchment | **35.7%** | `fr_wp_percent` **42.9%** |
-| Wet parchment to dry parchment | **54.9%** | `wp_dp_percent` **54.7%** |
+| Wet parchment to dry parchment | **54.8%** | `wp_dp_percent` **54.7%** |
 | Cherry to dry parchment | **19.6%** | — |
 | Cherry to dry cherry | **7.6%** | — |
-| Ripe share of intake | — | **91.3%** |
+| Ripe share of intake | — | **91.4%** |
 | Float share | — | **7.0%** |
 
 The two fresh-to-wet figures differ because they use different denominators, and both are
 right. See the hand-written section on which to quote.
 
-**Moisture:** 0 of 80 processing rows carry `moisture_pct`.
+**Moisture:** 0 of 81 processing rows carry `moisture_pct`.
 
 ### Row counts worth knowing
 
 | What | Rows |
 |---|---|
 | `picking_records` | 34 |
-| `biometric_punches` | 1,991 |
+| `biometric_punches` | 2,042 |
 | `biometric_enrollments` | 7 |
 | `rainfall_records` | 558 |
-| `audit_logs` | 9,491 |
-| `transaction_history` by type | deplete 391, restock 162 |
+| `audit_logs` | 9,598 |
+| `transaction_history` by type | deplete 391, restock 163 |
 
 **Stock:** 59 of 63 items have no `kg_per_bag`. 249 depletions are valued at Rs 0 because the item was never priced.
 
@@ -439,10 +439,10 @@ right. See the hand-written section on which to quote.
 
 | Estate | Muster rows | Muster unattributed | Legacy rows | Legacy unattributed | Blocks used | Top block's share |
 |---|---|---|---|---|---|---|
-| HoneyFarm | 1,304 | 0 (0.0%) | 1,024 | 0 (0.0%) | 5 | 56.3% |
-| Laxmi | 585 | 1 (0.2%) | 239 | 179 (74.9%) | 7 | 26.8% |
-| Medappa Estates | 1,559 | 0 (0.0%) | 14 | 0 (0.0%) | 23 | 17.0% |
-| Seshagiri | 1,143 | 0 (0.0%) | 5 | 5 (100.0%) | 16 | 13.8% |
+| HoneyFarm | 1,334 | 0 (0.0%) | 1,024 | 0 (0.0%) | 5 | 55.9% |
+| Laxmi | 599 | 1 (0.2%) | 239 | 179 (74.9%) | 7 | 26.1% |
+| Medappa Estates | 1,586 | 0 (0.0%) | 14 | 0 (0.0%) | 23 | 17.0% |
+| Seshagiri | 1,168 | 0 (0.0%) | 5 | 5 (100.0%) | 16 | 13.5% |
 
 ⚠ **Read the two arms separately, and do not quote the legacy one as the current state.**
 The legacy arm is history recorded before each tenant's cutover, when block attribution was
