@@ -23,11 +23,25 @@ export async function POST(req: Request) {
     const cropToday = Number(body?.cropToday)
     const dryParch = Number(body?.dryParch)
     const coffeeType = typeof body?.coffeeType === "string" ? body.coffeeType.trim() : null
-    // A malformed id would make the uuid comparison throw and turn a harmless hint into a 500.
+    /**
+     * ⚠ A MALFORMED ID USED TO BECOME null, WHICH DROPS THE FILTER RATHER THAN NARROWING IT.
+     *
+     * Nulling it does avoid the 500 the uuid cast would throw, which is why it was written that
+     * way. But the history query below compares this day's rate against rows matching
+     * `location_id = $1 OR $1 IS NULL`, so a null does not mean "this block" -- it means EVERY
+     * block. The estate then gets an anomaly verdict computed against a different block's
+     * history, which is a confident wrong answer rather than a crash.
+     *
+     * So the two cases are separated: no locationId sent is a deliberate estate-wide comparison
+     * and stays null; a locationId that was sent and is not a uuid is a bad request.
+     */
+    const sentLocation = body?.locationId !== undefined && body?.locationId !== null
     const rawLocationId = typeof body?.locationId === "string" ? body.locationId.trim() : ""
-    const locationId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawLocationId)
-      ? rawLocationId
-      : null
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawLocationId)
+    if (sentLocation && !isUuid) {
+      return Response.json({ success: false, error: "locationId must be a uuid" }, { status: 400 })
+    }
+    const locationId = isUuid ? rawLocationId : null
 
     // Need valid positive values to compute a conversion rate
     // Number(undefined) is NaN and NaN < 0 is false, so a missing dryParch used to slip through and

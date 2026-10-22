@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatDateOnly, formatDateForDisplay } from "../lib/date-utils"
+import { formatDateOnly, formatDateForDisplay, isRealCalendarDate } from "../lib/date-utils"
 
 describe("formatDateOnly", () => {
   it("formats ISO date string to readable format", () => {
@@ -82,5 +82,45 @@ describe("a time is shown only when the value has one", () => {
 
   it("formatDateOnly never shows a time, whatever it is given", () => {
     expect(formatDateOnly(new Date(2026, 7, 29, 11, 59))).toBe("29-Aug-2026")
+  })
+})
+
+describe("isRealCalendarDate", () => {
+  /**
+   * ⚠ A SHAPE REGEX IS NOT A DATE CHECK, and two routes proved it independently on #127.
+   * `/^\d{4}-\d{2}-\d{2}$/` accepts 2026-02-30: app/api/reconciliation answered `success: true`
+   * with six identical "could not run" warnings, and app/api/labor-neon answered 500, which the
+   * form shows as "Failed to process labour record" with nothing to correct.
+   */
+  it("accepts real dates", () => {
+    expect(isRealCalendarDate("2026-10-22")).toBe(true)
+    expect(isRealCalendarDate("2024-02-29")).toBe(true) // a real leap day
+    expect(isRealCalendarDate("2026-01-01")).toBe(true)
+    expect(isRealCalendarDate("2026-12-31")).toBe(true)
+  })
+
+  it("rejects dates that passed the old shape regex but do not exist", () => {
+    expect(isRealCalendarDate("2026-02-30")).toBe(false)
+    expect(isRealCalendarDate("2026-02-29")).toBe(false) // 2026 is not a leap year
+    expect(isRealCalendarDate("2026-13-01")).toBe(false)
+    expect(isRealCalendarDate("2026-00-10")).toBe(false)
+    expect(isRealCalendarDate("2026-04-31")).toBe(false)
+  })
+
+  it("rejects anything that is not YYYY-MM-DD", () => {
+    expect(isRealCalendarDate("22-10-2026")).toBe(false)
+    expect(isRealCalendarDate("2026-10-22T00:00:00Z")).toBe(false)
+    expect(isRealCalendarDate("not-a-date")).toBe(false)
+    expect(isRealCalendarDate("")).toBe(false)
+    expect(isRealCalendarDate(null)).toBe(false)
+    expect(isRealCalendarDate(undefined)).toBe(false)
+    expect(isRealCalendarDate(20261022)).toBe(false)
+  })
+
+  it("does not lean on Date.parse, which rolls a bad date over instead of refusing it", () => {
+    // Date.parse("2026-02-30") resolves to 2 March. If this helper were built on it, every
+    // assertion in the block above would pass while the route silently used the wrong day.
+    expect(new Date("2026-02-30").getUTCDate()).not.toBe(30)
+    expect(isRealCalendarDate("2026-02-30")).toBe(false)
   })
 })

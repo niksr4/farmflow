@@ -14,6 +14,7 @@ import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { aggregateLaborEntries, computeLaborTotalCost } from "@/lib/labour-cost"
 import { activityCodeExistsForTenant } from "@/lib/server/activity-codes"
+import { isRealCalendarDate } from "@/lib/date-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -75,7 +76,20 @@ async function tableHasLaborEntriesColumn(tableName: string) {
  * nothing to correct.
  */
 const invalidLabourBody = (date: unknown, laborEntries: unknown): string | null => {
-  if (!String(date ?? "").trim()) return "Date is required"
+  const trimmed = String(date ?? "").trim()
+  if (!trimmed) return "Date is required"
+  /**
+   * ⚠ "not-a-date" PASSED THIS CHECK AND DIED AT THE ::date CAST AS A 500.
+   *
+   * The form shows a 500 as "Failed to process labour record" with nothing to correct, which is
+   * the same dead end a missing date used to produce. A caller who sent a bad date gets told so.
+   *
+   * Shape first, then calendar validity: the regex accepts 2026-02-30, so the Date round-trip is
+   * what rejects it. Built from the literal parts rather than Date.parse, which accepts a great
+   * deal of nonsense and applies the host's timezone to it.
+   */
+  // Shape AND calendar validity, in one place both this route and reconciliation call.
+  if (!isRealCalendarDate(trimmed)) return "Date must be a real date in YYYY-MM-DD form"
   if (!Array.isArray(laborEntries)) return "Labour entries are required"
   return null
 }

@@ -147,6 +147,18 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
+    /**
+     * ⚠ TYPE FIRST, THEN String(). A caller sending {"name":{},"code":{}} produced the block
+     * "[object Object]" with the code "[OBJECT OBJECT]", because String({}) is a non-empty string
+     * and so passed the required-name check below. The estate ends up with a block nobody can
+     * explain, and every labour row attributed to it inherits the nonsense.
+     */
+    if (body.name !== undefined && typeof body.name !== "string") {
+      return NextResponse.json({ success: false, error: "Location name must be text" }, { status: 400 })
+    }
+    if (body.code !== undefined && body.code !== null && typeof body.code !== "string") {
+      return NextResponse.json({ success: false, error: "Location code must be text" }, { status: 400 })
+    }
     const name = String(body.name || "").trim()
     const code = body.code ? normalizeCode(String(body.code)) : normalizeCode(name)
     const estate = typeof body.estate === "string" && body.estate.trim() ? body.estate.trim() : null

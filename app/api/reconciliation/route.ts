@@ -5,7 +5,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { evaluateLabourGaps } from "@/lib/reconciliation-checks"
 import { summariseLedgerDrift } from "@/lib/inventory-ledger"
-import { todayIso } from "@/lib/date-utils"
+import { isRealCalendarDate, todayIso } from "@/lib/date-utils"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 export const dynamic = "force-dynamic"
@@ -48,8 +48,17 @@ export async function GET(request: NextRequest) {
     const end = searchParams.get("end") || todayIso()
     // Each check below swallows its own errors into a "could not run" warning, so a malformed date
     // used to come back as six identical warnings instead of one clear message.
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-      return NextResponse.json({ success: false, error: "start and end must be YYYY-MM-DD" }, { status: 400 })
+    /**
+     * Calendar validity, not just shape. The old regex accepted 2026-02-30, whose SQL cast then
+     * failed inside each individual check -- and every check swallows its own error into a "could
+     * not run" warning, so reconciliation answered `success: true` with six identical warnings
+     * rather than naming the bad input once.
+     */
+    if (!isRealCalendarDate(start) || !isRealCalendarDate(end)) {
+      return NextResponse.json(
+        { success: false, error: "start and end must be real dates in YYYY-MM-DD form" },
+        { status: 400 },
+      )
     }
 
     const checks: ReconciliationCheck[] = []

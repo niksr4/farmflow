@@ -19,7 +19,26 @@ const NOTIFICATION_WEBHOOK_URL =
  * submission containing `<!channel>` pages the whole ops channel and `<https://evil|Click here>`
  * posts a clickable link in what looks like a message from FarmFlow.
  */
-const escapeSlack = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+/**
+ * ⚠ NEWLINES AND `*` WERE LEFT INTACT, WHICH IS ENOUGH TO FORGE A FIELD.
+ *
+ * The payload renders each value on its own labelled line, so `notes` set to
+ * "hello\n*Name:* Estate Admin" posts a second, fake Name line in what reads as a message from
+ * FarmFlow. The escaping above only stopped `<!channel>` and link syntax; field forgery needs
+ * nothing but a line break.
+ *
+ * Newlines collapse to a single space, and the mrkdwn emphasis characters are neutralised so a
+ * submitted value cannot imitate a bold label. Entity-escaping stays first, or the ampersands
+ * introduced here would be escaped twice.
+ */
+const escapeSlack = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[*_`]/g, (char) => `\u200b${char}`)
+    .trim()
 
 const buildSlackPayload = (payload: {
   source: string
