@@ -33,20 +33,27 @@ import { describe, expect, it } from "vitest"
  * bug and every one should eventually go.
  */
 const KNOWN_UNVALIDATED_LOCATION_WRITES: string[] = [
+  // ⚠ ENTRIES ARE "path HANDLER", NOT JUST A PATH. A file-level allowlist exempted every handler
+  // in a file once one of them was fixed, which is how app/api/inventory-neon/route.ts DELETE
+  // stayed unguarded after its POST was corrected -- invisible to the very test written to catch
+  // it. Naming the handler means fixing POST does not quietly cover PUT.
+  //
   // The admin console's own writes. Gated on owner/admin, so the blast radius is smaller, but
   // seed-tenant in particular constructs rows for a tenant chosen by the caller.
-  "app/api/admin/seed-tenant/route.ts",
-  "app/api/admin/user-locations/route.ts",
+  "app/api/admin/seed-tenant/route.ts POST",
+  "app/api/admin/user-locations/route.ts PUT",
   // Money and stock. These matter most and should go first.
-  "app/api/dispatch/route.ts",
-  "app/api/other-sales/route.ts",
-  "app/api/sales/route.ts",
+  "app/api/dispatch/route.ts POST",
+  "app/api/dispatch/route.ts PUT",
+  "app/api/other-sales/route.ts POST",
+  "app/api/other-sales/route.ts PUT",
+  "app/api/sales/route.ts PUT",
   // The legacy Accounts write path, three routes sharing one shape.
-  "app/api/transactions-neon/batch/route.ts",
-  "app/api/transactions-neon/route.ts",
-  "app/api/transactions-neon/update/route.ts",
+  "app/api/transactions-neon/batch/route.ts POST",
+  "app/api/transactions-neon/route.ts POST",
+  "app/api/transactions-neon/update/route.ts PUT",
   // Bulk import, which writes on behalf of a file rather than a form.
-  "app/api/import-bulk/route.ts",
+  "app/api/import-bulk/route.ts POST",
 ].sort()
 
 /**
@@ -85,6 +92,51 @@ const collectRouteFiles = (dir: string): string[] => {
   return out
 }
 
+/**
+ * Split a route file into its exported handlers, so each is judged on its own.
+ *
+ * ⚠ THIS USED TO BE FILE-LEVEL, AND THAT MADE THE GUARD VACUOUS AT THE HANDLER LEVEL. One
+ * `validateLocationForTenant(` anywhere in a file exempted the WHOLE file -- so a route whose POST
+ * validated and whose PATCH did not passed cleanly. Caught in review on #127, which is the PR
+ * whose entire purpose was this class: the guard was blind to exactly the shape it existed to
+ * catch, one level down.
+ *
+ * Returns [name, body] pairs. A file's preamble (imports, helpers) is dropped, which is correct:
+ * a validation call in a shared helper is only a validation if a handler reaches it, and a helper
+ * that validates will appear inside the handler that calls it by name -- see HELPER_VALIDATES.
+ */
+const handlersOf = (source: string): Array<{ name: string; body: string }> => {
+  const pattern = /export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\s*\(/g
+  const starts: Array<{ name: string; at: number }> = []
+  for (const match of source.matchAll(pattern)) {
+    starts.push({ name: match[1], at: match.index ?? 0 })
+  }
+  return starts.map((start, index) => ({
+    name: start.name,
+    body: source.slice(start.at, index + 1 < starts.length ? starts[index + 1].at : source.length),
+  }))
+}
+
+/**
+ * A file-scoped helper that itself validates, plus the handler calling it by name.
+ *
+ * Some routes funnel their writes through one local function. Requiring the call to appear
+ * literally inside the handler would flag those falsely, so a handler also passes when it calls a
+ * helper whose own body validates.
+ */
+const validatingHelpers = (source: string): string[] => {
+  const names: string[] = []
+  const pattern = /(?:const|function)\s+([A-Za-z_$][\w$]*)\s*(?:=\s*)?(?:async\s*)?\(/g
+  for (const match of source.matchAll(pattern)) {
+    const name = match[1]
+    const from = match.index ?? 0
+    // Look only at the next ~2500 characters, which is the helper, not the rest of the file.
+    if (VALIDATES.test(source.slice(from, from + 2500))) names.push(name)
+  }
+  return [...new Set(names)]
+}
+
+/** Every handler that stores a location id without checking it, as "path POST". */
 const findUnvalidatedLocationWrites = () => {
   const root = process.cwd()
   const flagged: string[] = []
@@ -92,8 +144,15 @@ const findUnvalidatedLocationWrites = () => {
   for (const file of collectRouteFiles(resolve(root, "app/api"))) {
     const src = stripComments(readFileSync(file, "utf8"))
     if (!WRITES_LOCATION_COLUMN.test(src)) continue
-    if (VALIDATES.test(src)) continue
-    flagged.push(relative(root, file).split("\\").join("/"))
+    const path = relative(root, file).split("\\").join("/")
+    const helpers = validatingHelpers(src)
+
+    for (const handler of handlersOf(src)) {
+      if (!WRITES_LOCATION_COLUMN.test(handler.body)) continue
+      if (VALIDATES.test(handler.body)) continue
+      if (helpers.some((name) => new RegExp(`\\b${name}\\s*\\(`).test(handler.body))) continue
+      flagged.push(`${path} ${handler.name}`)
+    }
   }
 
   return flagged.sort()
@@ -137,11 +196,29 @@ describe("a caller-supplied location id is validated against the tenant before i
     ).toEqual([])
   })
 
-  it("recognises the routes that were fixed, so the detector is not just matching nothing", () => {
-    // Sanity check on the detector itself: these were fixed in #127 and must never be flagged.
+  it("recognises the handlers that were fixed, so the detector is not just matching nothing", () => {
+    /**
+     * ⚠ THIS ASSERTION WENT VACUOUS THE MOMENT THE DETECTOR BECAME PER-HANDLER, and it is worth
+     * recording because it is the same mistake one level along. It read
+     * `expect(flagged).not.toContain("app/api/journal/route.ts")` -- a bare PATH. `flagged` now
+     * holds "path HANDLER" strings, so a bare path can never appear in it and the three negative
+     * assertions could not fail for any state of the code.
+     *
+     * A negative assertion is only worth anything when the positive form is reachable, so this
+     * now names handlers that really exist and checks the detector finds SOMETHING.
+     */
     const flagged = findUnvalidatedLocationWrites()
-    expect(flagged).not.toContain("app/api/picking-records/route.ts")
-    expect(flagged).not.toContain("app/api/pepper-records/route.ts")
-    expect(flagged).not.toContain("app/api/journal/route.ts")
+
+    // Reachability: the detector must be flagging real handlers, or the negatives prove nothing.
+    expect(flagged.length).toBeGreaterThan(0)
+    expect(flagged.every((entry) => /^app\/api\/.+ (GET|POST|PUT|PATCH|DELETE)$/.test(entry))).toBe(true)
+
+    // Fixed in #127 and in this change, and must never reappear.
+    expect(flagged).not.toContain("app/api/journal/route.ts POST")
+    expect(flagged).not.toContain("app/api/journal/route.ts PATCH")
+    expect(flagged).not.toContain("app/api/picking-records/route.ts POST")
+    expect(flagged).not.toContain("app/api/pepper-records/route.ts POST")
+    expect(flagged).not.toContain("app/api/inventory-neon/route.ts POST")
+    expect(flagged).not.toContain("app/api/inventory-neon/route.ts DELETE")
   })
 })

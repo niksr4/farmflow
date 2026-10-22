@@ -520,8 +520,31 @@ export async function DELETE(request: NextRequest) {
     }
 
     const deleteAll = scope === "all" || rawLocation === "all"
-    const locationValue =
+    const requestedLocationValue =
       rawLocation && rawLocation !== "unassigned" && rawLocation !== "all" ? rawLocation : null
+
+    /**
+     * ⚠ THE DELETE PATH WRITES A location_id TOO, AND IT WAS NOT CHECKING IT.
+     *
+     * A depletion is recorded as an INSERT into transaction_history carrying this location, so the
+     * same foreign-key problem POST guards against applies here: an FK does not see row-level
+     * security, so another tenant's store id is accepted and a user restricted to some locations
+     * could write a movement against any other.
+     *
+     * Found when the guard in tests/location-id-is-tenant-validated.test.ts was changed from
+     * file-level to per-handler. POST had been fixed, and one validated call anywhere in the file
+     * exempted every other handler -- so this one was invisible to the very test written to catch
+     * it. The review on #127 predicted this shape before the guard found the instance.
+     */
+    const locationValue = requestedLocationValue
+      ? await validateLocationForTenant(inventorySql, tenantContext, sessionUser, requestedLocationValue)
+      : null
+    if (requestedLocationValue && !locationValue) {
+      return NextResponse.json(
+        { success: false, message: "Selected location is invalid for this tenant" },
+        { status: 400 },
+      )
+    }
 
     if (!deleteAll && rawLocation === "") {
       return NextResponse.json(
