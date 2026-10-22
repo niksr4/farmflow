@@ -670,6 +670,22 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         setHasExistingRecord(true)
         setAnomalyWarning(null)
 
+        /**
+         * ⚠ RE-READ THE SAVED ROW, because the DATABASE owns the computed columns.
+         *
+         * A trigger on processing_records recomputes dry_cherry_percent, fr_wp_percent,
+         * wp_dp_percent and every to-date column, and migration 155 makes the dry cherry
+         * denominator depend on the estate's processing route. The client therefore cannot know
+         * those values and no longer guesses at them.
+         *
+         * Without this reload the form keeps the values it had before the save -- 0 on a fresh
+         * record -- under a label reading "Auto-calculated". For a natural-route estate entering
+         * 100 kg of crop and 10 kg of dry cherry the screen would read 0% while the database held
+         * 10%, until somebody navigated away and back. Caught in review on #128; the earlier commit
+         * claimed the save handler already applied `data.record`, which is the LOAD handler at
+         * loadRecordForDate, not this one.
+         */
+        await loadRecordForDate(date)
         await loadRecentRecords(0, false)
         await loadDashboardData()
 

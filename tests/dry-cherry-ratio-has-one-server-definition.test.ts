@@ -196,3 +196,45 @@ describe("the dry cherry ratio has exactly one server-side definition", () => {
     expect(ratioArm).not.toMatch(/float_today[\s\S]*?\+[\s\S]*?green_today/)
   })
 })
+
+describe("the processing form reads the saved row back", () => {
+  /**
+   * ⚠ THE DATABASE OWNS THE COMPUTED COLUMNS, SO THE FORM MUST RE-READ AFTER A SAVE.
+   *
+   * A trigger recomputes dry_cherry_percent (route-dependent since migration 155), fr_wp_percent,
+   * wp_dp_percent and the to-date columns. The client cannot know them and must not guess.
+   *
+   * Without a re-read the form keeps its pre-save values -- 0 on a fresh record -- under a label
+   * reading "Auto-calculated". A natural-route estate entering 100 kg of crop and 10 kg of dry
+   * cherry would read 0% off a screen whose database row said 10%. Nothing throws; the figure is
+   * simply wrong until somebody navigates away and back.
+   *
+   * Found in review, after the commit that removed the client-side calculation claimed the save
+   * handler already applied the returned record. IT DID NOT -- that is `loadRecordForDate`, the
+   * LOAD path, which does call setRecord. Two handlers, one of which read like the other.
+   */
+  const saveHandler = () => {
+    const source = stripComments(repoFile("components/processing-tab.tsx"))
+    const start = source.indexOf("const handleSaveUnguarded")
+    expect(start, "handleSaveUnguarded not found -- renamed?").toBeGreaterThan(-1)
+    const guarded = source.indexOf("useSingleFlight(handleSaveUnguarded)")
+    expect(guarded, "the save guard wiring not found").toBeGreaterThan(start)
+    return source.slice(start, guarded)
+  }
+
+  it("finds the save handler at all", () => {
+    // Vacuity: a renamed handler would leave the assertion below inspecting an empty string, and
+    // `indexOf` returning -1 would silently make the slice a different region entirely.
+    expect(saveHandler().length).toBeGreaterThan(400)
+    expect(saveHandler()).toContain("POST")
+  })
+
+  it("re-reads the record from the server on a successful save", () => {
+    expect(
+      saveHandler(),
+      "The save handler must reload the saved row (loadRecordForDate) so the trigger-computed " +
+        "columns reach the screen. Otherwise the form shows its pre-save values under an " +
+        "Auto-calculated label.",
+    ).toMatch(/loadRecordForDate\s*\(/)
+  })
+})
