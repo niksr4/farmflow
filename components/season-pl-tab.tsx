@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { istTodayParts, todayIso } from "@/lib/date-utils"
 import InPageNav from "@/components/in-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { TrendingUp, TrendingDown, IndianRupee, ChevronDown, Package, BarChart2, Printer, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SeasonPLResponse } from "@/app/api/season-pl/route"
+import { ReportMenu } from "@/components/ui/report-menu"
+import type { ReportDefinition } from "@/lib/reports/report-definition"
+import { describeReportEstate, ESTATE_SCOPE_NOTE } from "@/lib/reports/report-definition"
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n)
@@ -110,7 +113,13 @@ function getCurrentSeasonRange(): DateRange {
   }
 }
 
-export default function SeasonPlTab() {
+export default function SeasonPlTab({
+  estateName,
+  selectedEstate,
+}: {
+  estateName?: string
+  selectedEstate?: string | null
+}) {
   const [range, setRange] = useState<DateRange>(getCurrentSeasonRange)
   const [data, setData] = useState<SeasonPLResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -136,6 +145,14 @@ export default function SeasonPlTab() {
       setData(json)
     } catch (e: any) {
       if (seq !== requestSeqRef.current) return
+      /**
+       * The previous range's figures must go with it. `range` has already moved to the new preset,
+       * so keeping a stale successful payload here means the report control stays enabled
+       * (`disabled={loading || !data?.success}`) and builds a document with the old season's
+       * revenue and gross profit under the new range's heading. The screen shows a red error card;
+       * a downloaded PDF carries no such warning, and gets mailed to an accountant.
+       */
+      setData(null)
       setError(e.message)
     } finally {
       if (seq === requestSeqRef.current) setLoading(false)
@@ -145,6 +162,95 @@ export default function SeasonPlTab() {
   useEffect(() => { fetchPl(range) }, [range, fetchPl])
 
   const handlePrint = () => window.print()
+
+  /**
+   * The P&L as a document. Until now this tab's only output was the browser's print dialog, which
+   * prints the SCREEN -- collapsed sections, charts, navigation and all -- so what came out
+   * depended on which section happened to be expanded.
+   *
+   * ⚠ A NULL IS RENDERED AS "not measured", NEVER AS 0. The route is explicit that null means the
+   * read failed rather than that the figure is zero (see the reconciliation comment in
+   * app/api/season-pl/route.ts). Printing an unknown as 0 is how this tab once accused an estate
+   * of selling more coffee than it received; a report is the worst possible place to repeat that,
+   * because the number outlives the screen.
+   */
+  const unknownOr = (value: number | null) => (value === null ? "not measured" : value)
+
+  const reportDefinition = useMemo<ReportDefinition>(
+    () => ({
+      slug: "season-profit-and-loss",
+      title: "Season Profit and Loss",
+      estateName: describeReportEstate(estateName, selectedEstate),
+      scopeNote: selectedEstate ? ESTATE_SCOPE_NOTE : undefined,
+      period: `${range.start} to ${range.end}`,
+      // /api/season-pl takes start and end, and buildRows re-queries below for any period other
+      // than the one on screen.
+      periods: ["current", "day", "week", "month", "year"],
+      buildRows: async (reportPeriod) => {
+        /**
+         * A chosen period is FETCHED. The payload is a set of sums for one range, so there is
+         * nothing to slice: reporting "this month" off the season's totals would print the
+         * season's figures under a month's heading.
+         */
+        const scoped = await (async () => {
+          if (!reportPeriod.start || !reportPeriod.end) return data
+          const params = new URLSearchParams({ start: reportPeriod.start, end: reportPeriod.end })
+          const response = await fetch(`/api/season-pl?${params.toString()}`)
+          const payload: SeasonPLResponse = await response.json()
+          if (!response.ok || !payload.success) {
+            throw new Error(payload?.error || "Could not load that period")
+          }
+          return payload
+        })()
+
+        if (!scoped || !scoped.success) return { headers: ["Line", "Value"], rows: [] }
+        return {
+          headers: ["Section", "Line", "Value"],
+          rows: [
+            ["Revenue", "Total sales (Rs)", scoped.revenue.totalSalesInr],
+            ["Revenue", "Kg sold", scoped.revenue.totalKgSold],
+            ["Revenue", "Average price per kg (Rs)", scoped.revenue.avgPricePerKg],
+            ["Costs", "Labour (Rs)", scoped.costs.laborTotalInr],
+            ["Costs", "Non-labour expenses (Rs)", scoped.costs.expensesTotalInr],
+            ["Costs", "Total costs (Rs)", scoped.costs.totalCostsInr],
+            ["Profitability", "Gross profit (Rs)", scoped.profitability.grossProfitInr],
+            ["Profitability", "Gross margin (%)", scoped.profitability.grossMarginPct],
+            ["Profitability", "Cost per kg produced (Rs)", scoped.profitability.costPerKgProduced],
+            ["Profitability", "Revenue per kg sold (Rs)", scoped.profitability.revenuePerKgSold],
+            ["Production", "Cherry (kg)", scoped.production.totalCherryKg],
+            ["Production", "Dry parchment (kg)", scoped.production.totalDryParchKg],
+            ["Production", "Dry cherry (kg)", scoped.production.totalDryCherryKg],
+            ["Production", "Cherry to dry parchment (%)", scoped.production.cherryToDryParchPct],
+            ["Production", "Processing days", scoped.production.processingDays],
+            ["Reconciliation", "Dispatch received (kg)", unknownOr(scoped.reconciliation.dispatchKgReceived)],
+            ["Reconciliation", "Sold (kg)", scoped.reconciliation.salesKgSold],
+            ["Reconciliation", "Unsold (kg)", unknownOr(scoped.reconciliation.unsoldKg)],
+            ["Reconciliation", "Closing inventory value (Rs)", unknownOr(scoped.reconciliation.closingInventoryValue)],
+            [
+              "Reconciliation",
+              "Balances",
+              scoped.reconciliation.balanceOk === null
+                ? "not measured"
+                : scoped.reconciliation.balanceOk
+                  ? "yes"
+                  : "no, more kg sold than received",
+            ],
+            ...scoped.revenue.byBuyer.map((buyer) => [
+              "Revenue by buyer",
+              buyer.buyer,
+              buyer.amountInr,
+            ]),
+            ...scoped.costs.byCategory.map((category) => [
+              "Costs by category",
+              category.category,
+              category.amountInr,
+            ]),
+          ],
+        }
+      },
+    }),
+    [data, estateName, selectedEstate, range.start, range.end],
+  )
 
   const presets: Array<{ label: string; range: DateRange }> = [
     { label: "Current season", range: getCurrentSeasonRange() },
@@ -197,7 +303,12 @@ export default function SeasonPlTab() {
               </Button>
             ))}
           </div>
-          <Button size="sm" variant="outline" onClick={handlePrint} aria-label="Print this season P&L" title="Print">
+          <ReportMenu
+            definition={reportDefinition}
+            disabled={loading || !data?.success}
+            emptyReason="No figures for this period yet"
+          />
+          <Button type="button" size="sm" variant="outline" onClick={handlePrint} aria-label="Print this season P&L" title="Print">
             <Printer className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
         </div>

@@ -1,7 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ReportMenu } from "@/components/ui/report-menu"
+import type { ReportDefinition } from "@/lib/reports/report-definition"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -27,6 +29,13 @@ type ActivityRecord = {
 
 type ActivityLogTabProps = {
   tenantId: string | null
+  estateName?: string
+  /**
+   * True while `estateName` does not yet describe `tenantId` -- the owner has selected a preview
+   * tenant and its settings are still loading. The report is held back rather than being built
+   * with the previous tenant's estate in its title.
+   */
+  estateNamePending?: boolean
 }
 
 const PAGE_SIZE = 50
@@ -59,7 +68,7 @@ const formatAmount = (amount: number | null) => {
   return `₹${Number(amount).toLocaleString("en-IN")}`
 }
 
-export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
+export default function ActivityLogTab({ tenantId, estateName, estateNamePending }: ActivityLogTabProps) {
   const [records, setRecords] = useState<ActivityRecord[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
@@ -145,6 +154,101 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
   })
   const filteredRecords = recordControls.items
 
+  /**
+   * The audit log as a document, which is the one report somebody else asks the estate for.
+   *
+   * ⚠ IT FETCHES THE WHOLE LOG RATHER THAN REPORTING WHAT IS ON SCREEN. The table paginates at
+   * fifty rows, so a report built from `filteredRecords` would hand over the most recent fifty
+   * entries under a title saying "Audit Log" -- complete-looking and wrong, which is worse than no
+   * report at all for the only artefact anybody audits.
+   *
+   * The route caps `all=true` at 2000 rows, so when there are more than that the subtitle SAYS the
+   * report is the most recent 2000 of N. A truncated report that admits it is usable; one that
+   * does not is a false statement about the estate's records.
+   */
+  const reportDefinition = useMemo<ReportDefinition>(() => {
+    const REPORT_ROW_CAP = 2000
+    const scope = sourceFilter === "all" ? "All modules" : formatSourceLabel(sourceFilter)
+    return {
+      slug: "audit-log",
+      title: "Audit Log",
+      estateName,
+      period: scope,
+      orientation: "landscape",
+      /**
+       * The period goes to the ENDPOINT, which applies it in SQL before the row cap.
+       *
+       * ⚠ THIS USED TO FILTER CLIENT-SIDE, and the comment here claimed that was "only sound
+       * because the whole log is fetched first". It is not: the route caps `all=true` at 2000 and
+       * orders by date DESC, so it returns the NEWEST 2000 events and a fiscal-year request on a
+       * tenant writing ~50 rows a day got back about the last forty days. Filtering that in the
+       * browser produced a document headed with a year that was missing most of it -- and the cap
+       * note said "most recent 2000 of N", which disclosed truncation of the LOG while saying
+       * nothing about the period being incomplete. A filter can only narrow what the query
+       * returned; it cannot recover rows the LIMIT already discarded.
+       */
+      periods: ["current", "day", "week", "month", "year"],
+      buildRows: async (reportPeriod) => {
+        const headers = ["Date", "Module", "Entry", "Detail", "Amount", "Recorded by"]
+        if (!tenantId) return { headers, rows: [] }
+
+        const params = new URLSearchParams({
+          tenantId,
+          all: "true",
+          limit: String(REPORT_ROW_CAP),
+          offset: "0",
+        })
+        if (sourceFilter !== "all") params.set("source", sourceFilter)
+        if (reportPeriod.start) params.set("from", reportPeriod.start)
+        if (reportPeriod.end) params.set("to", reportPeriod.end)
+
+        const response = await fetch(`/api/admin/tenant-activity?${params.toString()}`)
+        const payload = await response.json()
+        if (!response.ok || !payload.success) {
+          // Thrown, not swallowed into an empty report. ReportMenu surfaces it as a toast; an
+          // empty audit log would read as "nothing ever happened here".
+          throw new Error(payload?.error || "Could not load the activity log")
+        }
+
+        const fetched: ActivityRecord[] = Array.isArray(payload.records) ? payload.records : []
+        const total = Number(payload.totalCount) || fetched.length
+
+        /**
+         * No client-side period filter: the rows that came back are already the period's, and
+         * `total` is now the count WITHIN the period, so the cap note below compares two counts
+         * of the same thing.
+         */
+        const all = fetched
+        const rows: Array<Array<string | number | null>> = all.map((rec) => [
+          String(rec.event_date || "").slice(0, 10),
+          formatSourceLabel(rec.source),
+          rec.title,
+          rec.subtitle,
+          rec.amount,
+          rec.username,
+        ])
+
+        /**
+         * One note, not two. `total` is now the route's count WITHIN the same period as the rows,
+         * so the two figures describe the same thing and the note means what it says. It used to
+         * need a second branch because the count covered the whole log while the rows covered the
+         * month, which made the honest version of the sentence unwriteable.
+         */
+        if (total > fetched.length) {
+          rows.push([
+            "",
+            "",
+            `Showing the most recent ${fetched.length} of ${total} entries in this period.`,
+            "",
+            null,
+            "",
+          ])
+        }
+        return { headers, rows }
+      },
+    }
+  }, [estateName, sourceFilter, tenantId])
+
   const resolvedCountLabel =
     totalCount > records.length ? `Showing ${records.length} of ${totalCount}` : `${records.length} record(s)`
 
@@ -196,6 +300,12 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
               <RefreshCw className={cn("mr-2 h-4 w-4", isLoading ? "animate-spin" : "")} />
               Refresh
             </Button>
+            <ReportMenu
+              definition={reportDefinition}
+              disabled={isLoading || !tenantId || Boolean(estateNamePending)}
+              emptyReason="Nothing recorded yet"
+              className="h-11 shrink-0 rounded-xl bg-white"
+            />
           </FilterBar>
 
           <p className="text-xs text-muted-foreground">{resolvedCountLabel}</p>

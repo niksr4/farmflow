@@ -12,6 +12,9 @@ import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { formatCurrency } from "@/lib/format"
 import { istClock } from "@/lib/date-utils"
+import { ReportMenu } from "@/components/ui/report-menu"
+import type { ReportDefinition } from "@/lib/reports/report-definition"
+import { describeReportEstate, ESTATE_SCOPE_NOTE } from "@/lib/reports/report-definition"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 
@@ -65,7 +68,13 @@ const getDirectionBadge = (direction: ModuleLine["direction"]) => {
   return "bg-slate-50 text-slate-700 border-slate-200"
 }
 
-export default function BalanceSheetTab() {
+export default function BalanceSheetTab({
+  estateName,
+  selectedEstate,
+}: {
+  estateName?: string
+  selectedEstate?: string | null
+}) {
   const { toast } = useToast()
   const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears } = useFiscalYearSelection()
   const [summary, setSummary] = useState<SummaryPayload>(emptySummary)
@@ -136,6 +145,95 @@ export default function BalanceSheetTab() {
     [summary.modules],
   )
   const uniqueMissingModules = useMemo(() => Array.from(new Set(missingModules)), [missingModules])
+  /**
+   * The balance sheet as a document somebody can hand over.
+   *
+   * Figures are taken from the SAME `summary` state the cards above render, not re-fetched or
+   * recomputed -- a report that runs its own query is a second implementation that can disagree
+   * with the screen, which is this codebase's most common defect shape. If the screen is wrong the
+   * report is wrong in exactly the same way, which is the honest outcome.
+   */
+  const reportDefinition = useMemo<ReportDefinition>(
+    () => ({
+      slug: "live-balance-sheet",
+      title: "Live Balance Sheet",
+      estateName: describeReportEstate(estateName, selectedEstate),
+      scopeNote: selectedEstate ? ESTATE_SCOPE_NOTE : undefined,
+      period: selectedFiscalYear.label,
+      // Every period, because /api/finance-balance-sheet takes startDate/endDate and `buildRows`
+      // below re-queries for anything other than what the screen is showing. Declaring a period
+      // this tab could not serve would produce a report titled with a range it does not cover.
+      periods: ["current", "day", "week", "month", "year"],
+      buildRows: async (reportPeriod) => {
+        /**
+         * A period other than the tab's own fiscal year is FETCHED, not sliced out of `summary`.
+         * The state holds one range's totals; narrowing it to a month client-side is impossible
+         * (they are sums, not rows) and faking it would put a month's heading on a year's figures.
+         */
+        const scoped =
+          reportPeriod.start && reportPeriod.end
+            ? await (async () => {
+                const params = new URLSearchParams({
+                  startDate: reportPeriod.start as string,
+                  endDate: reportPeriod.end as string,
+                })
+                const response = await fetch(`/api/finance-balance-sheet?${params.toString()}`, {
+                  cache: "no-store",
+                })
+                const payload = await response.json()
+                if (!response.ok || !payload.success) {
+                  // Thrown so ReportMenu can say so. An empty report would read as "no money moved".
+                  throw new Error(payload?.error || "Could not load that period")
+                }
+                return {
+                  totals: {
+                    inflowBooked: Number(payload.totals?.inflowBooked) || 0,
+                    outflowBooked: Number(payload.totals?.outflowBooked) || 0,
+                    netBooked: Number(payload.totals?.netBooked) || 0,
+                    liveNetPosition: Number(payload.totals?.liveNetPosition) || 0,
+                    receivablesOutstandingLive: Number(payload.totals?.receivablesOutstandingLive) || 0,
+                    receivablesOverdueLive: Number(payload.totals?.receivablesOverdueLive) || 0,
+                    receivablesInvoicedPeriod: Number(payload.totals?.receivablesInvoicedPeriod) || 0,
+                    receivablesPaidPeriod: Number(payload.totals?.receivablesPaidPeriod) || 0,
+                    receivablesOutstandingPeriod: Number(payload.totals?.receivablesOutstandingPeriod) || 0,
+                    inventoryUsageValue: Number(payload.totals?.inventoryUsageValue) || 0,
+                  },
+                  modules: Array.isArray(payload.modules) ? (payload.modules as ModuleLine[]) : [],
+                }
+              })()
+            : summary
+
+        return {
+          headers: ["Line", "Direction", "Amount", "Records", "In booked net", "Note"],
+          rows: [
+            ["Booked inflow", "inflow", scoped.totals.inflowBooked, "", "yes", "Sales revenue"],
+            ["Booked outflow", "outflow", scoped.totals.outflowBooked, "", "yes", "Labour, expenses, restock"],
+            ["Net booked", "", scoped.totals.netBooked, "", "yes", ""],
+            ["Live net position", "", scoped.totals.liveNetPosition, "", "", "Includes receivables"],
+            ["Receivables outstanding", "memo", scoped.totals.receivablesOutstandingLive, "", "no", ""],
+            ["Receivables overdue", "memo", scoped.totals.receivablesOverdueLive, "", "no", ""],
+            ["Inventory usage value", "memo", scoped.totals.inventoryUsageValue, "", "no", ""],
+            // A blank row, then the per-module ledger. lib/spreadsheet.ts renders an all-text row
+            // followed by numbers as a sub-heading, and the PDF simply prints it.
+            ["", "", "", "", "", ""],
+            ["Ledger by module", "", "", "", "", ""],
+            ...scoped.modules.map((line) => [
+              line.label,
+              line.direction,
+              line.amount,
+              line.records,
+              line.includedInBookedNet ? "yes" : "no",
+              // The note explains a missing module, which is the difference between "zero" and
+              // "not measured" -- the distinction a reader of a balance sheet most needs.
+              line.status === "missing" ? `Not available: ${line.note}` : line.note,
+            ]),
+          ],
+        }
+      },
+    }),
+    [estateName, selectedEstate, selectedFiscalYear.label, summary],
+  )
+
   const netToneClass = summary.totals.netBooked >= 0 ? "text-emerald-700" : "text-rose-700"
   const liveToneClass = summary.totals.liveNetPosition >= 0 ? "text-emerald-700" : "text-rose-700"
 
@@ -151,10 +249,15 @@ export default function BalanceSheetTab() {
           </div>
           <div className="flex items-center gap-2">
             <FiscalYearSelect value={selectedFiscalYear} options={availableFiscalYears} onChange={setSelectedFiscalYear} />
-            <Button variant="outline" size="sm" onClick={loadSummary} disabled={isLoading}>
+            <Button type="button" variant="outline" size="sm" onClick={loadSummary} disabled={isLoading}>
               <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isLoading && "animate-spin")} />
               Refresh
             </Button>
+            <ReportMenu
+              definition={reportDefinition}
+              disabled={isLoading || summary.modules.length === 0}
+              emptyReason="No figures for this year yet"
+            />
           </div>
         </CardHeader>
         <CardContent className="space-y-4">

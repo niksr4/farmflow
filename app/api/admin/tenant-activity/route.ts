@@ -39,6 +39,18 @@ export async function GET(request: Request) {
     // `all=true` raises the ceiling enough to cover any realistic tenant's history while
     // staying bounded, rather than allowing an unbounded read of the audit tables.
     const fetchAll = searchParams.get("all") === "true"
+    /**
+     * The report's selected period, applied IN SQL so it narrows the rows BEFORE the row cap.
+     *
+     * Filtering a capped result client-side is not the same query. `ORDER BY event_date DESC
+     * LIMIT 2000` keeps the NEWEST 2000 events, so asking for a fiscal year on a tenant writing
+     * ~50 rows a day returns about the last forty days and drops the rest of the year on the
+     * floor -- a period report that silently omits events it claims to cover. Only YYYY-MM-DD is
+     * accepted; anything else is ignored rather than passed to Postgres to reject with a 500.
+     */
+    const dateOnly = (value: string | null) => (value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null)
+    const from = dateOnly(searchParams.get("from"))
+    const to = dateOnly(searchParams.get("to"))
     const maxLimit = fetchAll ? SEARCH_FETCH_CEILING : 200
     const limit = Math.min(Math.max(Number.parseInt(limitParam || "50", 10) || 50, 1), maxLimit)
     const offset = Math.max(Number.parseInt(offsetParam || "0", 10) || 0, 0)
@@ -128,11 +140,19 @@ export async function GET(request: Request) {
 
     const unionSql = includeSources.map((s) => branchMap[s]).join("\nUNION ALL\n")
 
+    // Shared by both queries below so the row cap and the "of N" total always describe the same
+    // window. event_date is already a wall-clock date, so these compare as dates, not instants.
+    const periodWhere = (fromParam: string, toParam: string) => `
+      WHERE (${fromParam}::date IS NULL OR event_date >= ${fromParam}::date)
+        AND (${toParam}::date IS NULL OR event_date <= ${toParam}::date)
+    `
+
     const countSql = `
       SELECT COUNT(*)::int AS count
       FROM (
         ${unionSql}
       ) unified
+      ${periodWhere("$2", "$3")}
     `
 
     const rowsSql = `
@@ -140,12 +160,13 @@ export async function GET(request: Request) {
       FROM (
         ${unionSql}
       ) unified
+      ${periodWhere("$4", "$5")}
       ORDER BY event_date DESC, id DESC
       LIMIT $2 OFFSET $3
     `
 
-    const params = [tenantId, limit, offset]
-    const countParams = [tenantId]
+    const params = [tenantId, limit, offset, from, to]
+    const countParams = [tenantId, from, to]
 
     const [countRows, records] = await runTenantQueries(sql, tenantContext, [
       sql.query(countSql, countParams),

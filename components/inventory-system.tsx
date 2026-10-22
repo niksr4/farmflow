@@ -554,7 +554,7 @@ export default function InventorySystem() {
 
   // auth + router
   const { user, logout, status } = useAuth()
-  const { settings: tenantSettings, isFeatureEnabled, updateSettings } = useTenantExperience()
+  const { settings: tenantSettings, describedTenantId, isFeatureEnabled, updateSettings } = useTenantExperience()
   const router = useRouter()
   const searchParams = useSearchParams()
   const tenantId = user?.tenantId || null
@@ -4774,13 +4774,21 @@ export default function InventorySystem() {
 
           {canShowBalanceSheet && (
             <TabPanel value="balance-sheet" className="space-y-6" forceMount={isTabLoaded("balance-sheet") ? true : undefined}>
-              <BalanceSheetTab key={estateRemountKey} />
+              <BalanceSheetTab
+                key={estateRemountKey}
+                estateName={tenantSettings.estateName}
+                selectedEstate={canSelectEstate ? selectedEstate : null}
+              />
             </TabPanel>
           )}
 
           {canShowSeasonPl && (
             <TabPanel value="season-pl" className="space-y-6" forceMount={isTabLoaded("season-pl") ? true : undefined}>
-              <SeasonPlTab key={estateRemountKey} />
+              <SeasonPlTab
+                key={estateRemountKey}
+                estateName={tenantSettings.estateName}
+                selectedEstate={canSelectEstate ? selectedEstate : null}
+              />
             </TabPanel>
           )}
 
@@ -4843,7 +4851,17 @@ export default function InventorySystem() {
           )}
           {canShowActivityLog && (
             <TabPanel value="activity-log" className="space-y-6" forceMount={isTabLoaded("activity-log") ? true : undefined}>
-              <ActivityLogTab tenantId={activityTenantId} />
+              <ActivityLogTab
+                tenantId={activityTenantId}
+                /**
+                 * Only pass the estate name when the settings actually describe THIS tenant.
+                 * On a preview switch the new tenantId arrives immediately while the settings
+                 * request is still in flight, so passing it unconditionally titles the new
+                 * tenant's audit export with the previous tenant's estate.
+                 */
+                estateName={describedTenantId === activityTenantId ? tenantSettings.estateName : undefined}
+                estateNamePending={describedTenantId !== activityTenantId}
+              />
             </TabPanel>
           )}
           {canShowRainfallSection && (
