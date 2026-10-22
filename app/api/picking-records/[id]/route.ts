@@ -6,7 +6,7 @@ import { canWriteModule, canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { validateLocationForTenant } from "@/lib/server/location-utils"
-import { isLocationAccessError } from "@/lib/server/location-access"
+import { isLocationAccessError, requireLocationAccess } from "@/lib/server/location-access"
 import { logServerError } from "@/lib/server/safe-logging"
 import { pickingRowProblem, type PayMode } from "@/lib/picking-pay"
 import { dayCapRefusal, DAY_CAP_STATUS } from "@/lib/server/day-cap-refusal"
@@ -123,6 +123,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     })
     if (problem) {
       return NextResponse.json({ success: false, error: problem }, { status: 400 })
+    }
+
+    /**
+     * ⚠ AUTHORIZE THE ROW BEING CHANGED, BEFORE CHECKING WHERE IT IS GOING.
+     *
+     * The lookup that produced `existing` is tenant-scoped only. A location-restricted writer who
+     * knows a row id could therefore edit a row belonging to a block they cannot write to -- and
+     * if they omit locationId from the payload, the check below never runs at all, so nothing
+     * stopped them. This row carries wages, so the edit changes what somebody is paid.
+     */
+    if (existing.location_id) {
+      await requireLocationAccess(String(existing.location_id), sessionUser)
     }
 
     // Moving a row to another block must land on one of this tenant's own, and one this user may

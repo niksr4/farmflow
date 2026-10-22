@@ -439,6 +439,22 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
     }
 
+    /**
+     * ⚠ AUTHORIZE THE ROW THIS SELECTOR FOUND, not just the location that was asked for.
+     *
+     * The id branch above already does this; this branch did not. The lookup is tenant-scoped
+     * only, so a `user` with a location allow-list could pass a date plus a locationId outside
+     * their list and delete the matching record. `pepper` is in USER_MUTATION_MODULES, so a writer
+     * reaches this handler.
+     *
+     * Checked against the ROW's own location rather than the requested one: they are the same here
+     * by construction, but reading it off the row is what stays correct if the selector ever
+     * widens.
+     */
+    if (existing[0].location_id) {
+      await requireLocationAccess(String(existing[0].location_id), sessionUser)
+    }
+
     if (isUnassigned) {
       await runTenantQuery(
         sql,

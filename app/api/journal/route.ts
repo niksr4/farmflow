@@ -10,7 +10,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { validateLocationForTenant } from "@/lib/server/location-utils"
-import { isLocationAccessError } from "@/lib/server/location-access"
+import { isLocationAccessError, requireLocationAccess } from "@/lib/server/location-access"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -296,6 +296,19 @@ export async function PATCH(request: Request) {
 
     if (!existing?.length) {
       return NextResponse.json({ success: false, error: "Entry not found" }, { status: 404 })
+    }
+    /**
+     * ⚠ AUTHORIZE THE EXISTING ENTRY'S LOCATION, not only the replacement.
+     *
+     * The lookup above is tenant-scoped, so a writer with a location allow-list who knows an entry
+     * id finds it regardless of which block it belongs to. Validating only the incoming location_id
+     * checks where the row is GOING and never where it already IS -- and when the payload omits
+     * location_id entirely, no check ran at all.
+     *
+     * PATCH only: POST is creating a row, so there is no existing location to authorize.
+     */
+    if (existing[0].location_id) {
+      await requireLocationAccess(String(existing[0].location_id), sessionUser)
     }
     if (location_id && !(await validateLocationForTenant(sql, tenantContext, sessionUser, location_id))) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
