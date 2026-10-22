@@ -614,6 +614,21 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         setHasExistingRecord(true)
         setAnomalyWarning(null)
 
+        /**
+         * ⚠ RE-READ THE SAVED ROW. The DATABASE owns the computed columns.
+         *
+         * Carried over from #128 (75db67f) through this merge. The trigger on processing_records
+         * recomputes dry_cherry_percent, fr_wp_percent, wp_dp_percent and every to-date column,
+         * and migration 155 makes the dry cherry denominator follow the estate's route - so what
+         * is stored can differ from what the form derived while typing, and the stored value is
+         * the authority.
+         *
+         * `git checkout --ours` during the merge with main dropped this line, because it lives in
+         * the same file as the conflict. The guard in
+         * tests/dry-cherry-ratio-has-one-server-definition.test.ts caught it within the minute,
+         * which is the only reason it is here.
+         */
+        await loadRecordForDate(date)
         await loadRecentRecords(0, false)
         await loadDashboardData()
 
