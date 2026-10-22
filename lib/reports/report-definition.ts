@@ -29,6 +29,28 @@ export type ReportFormat = "pdf" | "xlsx" | "csv"
 
 export const REPORT_FORMATS: ReportFormat[] = ["pdf", "xlsx", "csv"]
 
+/**
+ * How a financial report names the estate it was taken under.
+ *
+ * ⚠ IT NAMES THE SELECTION WITHOUT CLAIMING THE FIGURES ARE ONLY THAT ESTATE'S, and the
+ * distinction is the whole point. `/api/finance-balance-sheet` scopes by
+ * `location_id IS NULL OR location_id IN (...that estate's...)` -- deliberately, because a record
+ * entered before location tracking is nobody else's either -- and the Billing section it reports
+ * is tenant-wide regardless. So "Medappa Estates - Tirtha" is the correct label for WHICH estate
+ * was selected, while "Tirtha's figures" would be a false statement about WHAT is in the
+ * document. Raised on #130: without the estate at all, a Tirtha-scoped balance sheet and a
+ * whole-tenant one are indistinguishable once printed.
+ */
+export const describeReportEstate = (estateName?: string, selectedEstate?: string | null) => {
+  if (!estateName) return selectedEstate || undefined
+  if (!selectedEstate) return estateName
+  return `${estateName} - ${selectedEstate}`
+}
+
+/** The qualification that goes with the label above. Kept beside it so they cannot drift apart. */
+export const ESTATE_SCOPE_NOTE =
+  "Taken with this estate selected. Records not assigned to any estate, and tenant-wide billing, are included."
+
 export type ReportDefinition = {
   /**
    * Filename stem, no extension and no date -- `buildReportFilename` adds the period, so every
@@ -39,6 +61,12 @@ export type ReportDefinition = {
   title: string
   /** The estate (and block, if filtered). Prefixed to the title so a saved file identifies itself. */
   estateName?: string
+  /**
+   * A qualification printed under the period, for a report whose scope is narrower or wider than
+   * its title suggests. See ESTATE_SCOPE_NOTE: naming the selected estate without this would
+   * assert the figures are only that estate's, which is not what the query returns.
+   */
+  scopeNote?: string
   /** The period or filter these figures cover. A report without one is unauditable. */
   period?: string
   /**
@@ -131,6 +159,9 @@ export const buildReport = async (
    * say which one it is -- it outlives the screen that produced it.
    */
   const covered = describeReportPeriod(period, definition.period || "")
+  // The note rides WITH the period, in the one subtitle both renderers already print, so there is
+  // no third banner slot to forget to wire up in one of them.
+  const subtitle = definition.scopeNote ? `${covered}  |  ${definition.scopeNote}` : covered
 
   if (format === "csv") {
     // Spelled as an escape rather than pasted as a literal -- an invisible character in source is
@@ -143,14 +174,14 @@ export const buildReport = async (
   if (format === "xlsx") {
     const bytes = await buildXlsxArrayBufferFromCsv(csv, definition.title, {
       title,
-      subtitle: covered,
+      subtitle,
     })
     return { blob: new Blob([bytes], { type: XLSX_MIME_TYPE }), filename }
   }
 
   const bytes = buildPdfFromCsv(csv, {
     title,
-    subtitle: covered,
+    subtitle,
     footer: buildReportFooter(definition),
     orientation: definition.orientation,
   })

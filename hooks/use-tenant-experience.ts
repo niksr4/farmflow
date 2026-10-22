@@ -9,7 +9,7 @@ import {
 } from "@/lib/tenant-experience"
 
 export function useTenantExperience() {
-  const { settings, loading, error, refresh, updateSettings } = useTenantSettings()
+  const { settings, describedTenantId, loading, error, refresh, updateSettings } = useTenantSettings()
   const uiVariant = settings.uiVariant || DEFAULT_TENANT_UI_VARIANT
   const featureFlags = settings.featureFlags || DEFAULT_TENANT_FEATURE_FLAGS
 
@@ -22,6 +22,7 @@ export function useTenantExperience() {
 
   return {
     settings,
+    describedTenantId,
     uiVariant,
     featureFlags,
     isFeatureEnabled,

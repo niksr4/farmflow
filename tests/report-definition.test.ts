@@ -5,6 +5,8 @@ import {
   buildReportFilename,
   buildReportFooter,
   buildReportTitle,
+  describeReportEstate,
+  ESTATE_SCOPE_NOTE,
   type ReportDefinition,
 } from "@/lib/reports/report-definition"
 
@@ -144,7 +146,56 @@ describe("buildReport", () => {
   it("builds a workbook carrying the estate name and the period", async () => {
     const { blob } = await buildReport(definition(), "xlsx")
     expect(blob.type).toContain("spreadsheetml")
-    expect(blob.size).toBeGreaterThan(0)
+
+    /**
+     * ⚠ THE MIME TYPE AND A NON-ZERO SIZE WERE THE WHOLE TEST, which is a test of exceljs rather
+     * than of this module: both stay true if buildReport stops passing the estate title or the
+     * covered period to the renderer, and the test name claims to check exactly those two. The
+     * workbook is a zip, so read it back and assert the banner cells.
+     */
+    const ExcelJS = (await import("exceljs")).default
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(await blob.arrayBuffer())
+    const sheet = workbook.worksheets[0]
+
+    expect(String(sheet.getRow(1).getCell(1).value)).toContain("HoneyFarm Estate")
+    expect(String(sheet.getRow(2).getCell(1).value)).toContain("1 Oct to 15 Oct 2026")
+
+    // The header row has to survive the two banner rows above it, or the data is unlabelled.
+    expect(String(sheet.getRow(3).getCell(1).value)).toBe("Date")
+  })
+
+  it("names the selected estate without claiming the figures are only that estate's", async () => {
+    expect(describeReportEstate("Medappa Estates", "Tirtha")).toBe("Medappa Estates - Tirtha")
+    // No selection: the tenant name stands alone rather than gaining a dangling separator.
+    expect(describeReportEstate("Medappa Estates", null)).toBe("Medappa Estates")
+    // A selection with no tenant name still identifies the scope rather than returning nothing.
+    expect(describeReportEstate(undefined, "Tirtha")).toBe("Tirtha")
+
+    /**
+     * The note is the half that keeps the label honest. /api/finance-balance-sheet includes
+     * `location_id IS NULL` rows in every estate's view and reports tenant-wide billing, so a
+     * document headed "Medappa Estates - Tirtha" with no qualification asserts something the
+     * query does not return.
+     */
+    expect(ESTATE_SCOPE_NOTE).toMatch(/not assigned to any estate/i)
+    expect(ESTATE_SCOPE_NOTE).toMatch(/billing/i)
+  })
+
+  it("prints the scope note under the period, in every format that has a banner", async () => {
+    const withNote = { ...definition(), scopeNote: ESTATE_SCOPE_NOTE }
+
+    const pdf = await buildReport(withNote, "pdf")
+    const pdfText = new TextDecoder("latin1").decode(await pdf.blob.arrayBuffer())
+    expect(pdfText).toContain("not assigned to any estate")
+
+    const xlsx = await buildReport(withNote, "xlsx")
+    const ExcelJS = (await import("exceljs")).default
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(await xlsx.blob.arrayBuffer())
+    const banner = String(workbook.worksheets[0].getRow(2).getCell(1).value)
+    expect(banner).toContain("1 Oct to 15 Oct 2026")
+    expect(banner).toContain("not assigned to any estate")
   })
 
   it("builds a CSV with the byte-order mark Excel on Windows needs", async () => {

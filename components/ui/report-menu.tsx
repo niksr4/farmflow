@@ -70,6 +70,19 @@ export function ReportMenu({
   const [periodId, setPeriodId] = useState<ReportPeriodId>("current")
 
   /**
+   * Bumped every time the menu opens, so the periods below are rebuilt against the estate's
+   * CURRENT today rather than the one that was true when this tab first mounted.
+   *
+   * ⚠ REMOVING THE useMemo ALONE DOES NOT FIX THIS. `DropdownMenu` is Radix's uncontrolled root,
+   * so opening it does not re-render ReportMenu -- the dates would still be the mount-time ones
+   * and `buildReport` would receive bounds captured with them. The root has to become controlled
+   * for the open to be observable at all. FarmFlow runs on phones that stay open for days, so
+   * after IST midnight the menu offered yesterday's "Today" and exported yesterday's rows under
+   * it.
+   */
+  const [openNonce, setOpenNonce] = useState(0)
+
+  /**
    * The periods this tab says it can serve, in the order the module defines them.
    *
    * Derived from the definition rather than from a list here, so a tab whose endpoint takes no
@@ -82,7 +95,9 @@ export function ReportMenu({
     return buildReportPeriods({ currentLabel: definition.period }).filter((period) =>
       allowed.includes(period.id),
     )
-  }, [definition.periods, definition.period])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openNonce is the point: it is not
+    // read in the body, it exists to rebuild these dates each time the menu is opened.
+  }, [definition.periods, definition.period, openNonce])
 
   const selectedPeriod =
     offeredPeriods.find((period) => period.id === periodId) ?? offeredPeriods[0]
@@ -136,7 +151,11 @@ export function ReportMenu({
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) setOpenNonce((n) => n + 1)
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size={size} className={className}>
           {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}

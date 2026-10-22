@@ -30,6 +30,12 @@ type ActivityRecord = {
 type ActivityLogTabProps = {
   tenantId: string | null
   estateName?: string
+  /**
+   * True while `estateName` does not yet describe `tenantId` -- the owner has selected a preview
+   * tenant and its settings are still loading. The report is held back rather than being built
+   * with the previous tenant's estate in its title.
+   */
+  estateNamePending?: boolean
 }
 
 const PAGE_SIZE = 50
@@ -62,7 +68,7 @@ const formatAmount = (amount: number | null) => {
   return `₹${Number(amount).toLocaleString("en-IN")}`
 }
 
-export default function ActivityLogTab({ tenantId, estateName }: ActivityLogTabProps) {
+export default function ActivityLogTab({ tenantId, estateName, estateNamePending }: ActivityLogTabProps) {
   const [records, setRecords] = useState<ActivityRecord[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
@@ -170,11 +176,16 @@ export default function ActivityLogTab({ tenantId, estateName }: ActivityLogTabP
       period: scope,
       orientation: "landscape",
       /**
-       * ⚠ THE ENDPOINT TAKES NO DATE RANGE, so the period is applied HERE by filtering
-       * `event_date` on the rows that come back. That is honest for an audit log -- the rows carry
-       * their own date and the filter is exact -- but it is only sound because the whole log is
-       * fetched first. Narrowing a paginated page would quietly report one page of the chosen
-       * month and call it the month.
+       * The period goes to the ENDPOINT, which applies it in SQL before the row cap.
+       *
+       * ⚠ THIS USED TO FILTER CLIENT-SIDE, and the comment here claimed that was "only sound
+       * because the whole log is fetched first". It is not: the route caps `all=true` at 2000 and
+       * orders by date DESC, so it returns the NEWEST 2000 events and a fiscal-year request on a
+       * tenant writing ~50 rows a day got back about the last forty days. Filtering that in the
+       * browser produced a document headed with a year that was missing most of it -- and the cap
+       * note said "most recent 2000 of N", which disclosed truncation of the LOG while saying
+       * nothing about the period being incomplete. A filter can only narrow what the query
+       * returned; it cannot recover rows the LIMIT already discarded.
        */
       periods: ["current", "day", "week", "month", "year"],
       buildRows: async (reportPeriod) => {
@@ -188,6 +199,8 @@ export default function ActivityLogTab({ tenantId, estateName }: ActivityLogTabP
           offset: "0",
         })
         if (sourceFilter !== "all") params.set("source", sourceFilter)
+        if (reportPeriod.start) params.set("from", reportPeriod.start)
+        if (reportPeriod.end) params.set("to", reportPeriod.end)
 
         const response = await fetch(`/api/admin/tenant-activity?${params.toString()}`)
         const payload = await response.json()
@@ -201,18 +214,11 @@ export default function ActivityLogTab({ tenantId, estateName }: ActivityLogTabP
         const total = Number(payload.totalCount) || fetched.length
 
         /**
-         * `event_date` is already a YYYY-MM-DD wall-clock date, so the bounds are compared as
-         * STRINGS. Parsing it into a Date to compare would re-anchor it at UTC midnight and drop
-         * the first day of the range for any reader west of IST -- the same mistake the season
-         * range made, and the reason lib/date-utils has formatDateOnly.
+         * No client-side period filter: the rows that came back are already the period's, and
+         * `total` is now the count WITHIN the period, so the cap note below compares two counts
+         * of the same thing.
          */
-        const inPeriod = (rec: ActivityRecord) => {
-          if (!reportPeriod.start || !reportPeriod.end) return true
-          const day = String(rec.event_date || "").slice(0, 10)
-          return day >= reportPeriod.start && day <= reportPeriod.end
-        }
-
-        const all = fetched.filter(inPeriod)
+        const all = fetched
         const rows: Array<Array<string | number | null>> = all.map((rec) => [
           String(rec.event_date || "").slice(0, 10),
           formatSourceLabel(rec.source),
@@ -223,24 +229,16 @@ export default function ActivityLogTab({ tenantId, estateName }: ActivityLogTabP
         ])
 
         /**
-         * The cap note is only truthful when NO period filter was applied. Once rows are filtered,
-         * `total` counts the whole log and `all.length` counts the month, so "showing 40 of 2500"
-         * would be comparing two different things and reading as truncation that did not happen.
+         * One note, not two. `total` is now the route's count WITHIN the same period as the rows,
+         * so the two figures describe the same thing and the note means what it says. It used to
+         * need a second branch because the count covered the whole log while the rows covered the
+         * month, which made the honest version of the sentence unwriteable.
          */
-        if (!reportPeriod.start && total > fetched.length) {
+        if (total > fetched.length) {
           rows.push([
             "",
             "",
-            `Showing the most recent ${fetched.length} of ${total} entries.`,
-            "",
-            null,
-            "",
-          ])
-        } else if (reportPeriod.start && total > fetched.length) {
-          rows.push([
-            "",
-            "",
-            `Taken from the most recent ${fetched.length} of ${total} entries, so earlier activity in this period may be missing.`,
+            `Showing the most recent ${fetched.length} of ${total} entries in this period.`,
             "",
             null,
             "",
@@ -304,7 +302,7 @@ export default function ActivityLogTab({ tenantId, estateName }: ActivityLogTabP
             </Button>
             <ReportMenu
               definition={reportDefinition}
-              disabled={isLoading || !tenantId}
+              disabled={isLoading || !tenantId || Boolean(estateNamePending)}
               emptyReason="Nothing recorded yet"
               className="h-11 shrink-0 rounded-xl bg-white"
             />

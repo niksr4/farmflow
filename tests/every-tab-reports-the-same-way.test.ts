@@ -250,4 +250,39 @@ describe("a tab that offers a period actually reads it", () => {
         `offer only "current".`,
     ).toEqual([])
   })
+
+  /**
+   * Reading the bounds is necessary and NOT sufficient, which the test above cannot see.
+   *
+   * The Audit Log read `period.start` and passed that test while still being wrong: it asked the
+   * endpoint for `limit=2000`, which returns the NEWEST 2000 rows ordered by date, and then
+   * filtered those by the period in the browser. A filter can only narrow what came back, so a
+   * fiscal-year request on a tenant writing ~50 rows a day got about the last forty days and a
+   * document headed with a year that was missing most of it. Raised on #130.
+   *
+   * So: a buildRows that caps its request must send the period TO the request. The rule is keyed
+   * on the cap, because the cap is what makes a client-side filter lossy -- an uncapped read can
+   * legitimately filter whatever it holds.
+   */
+  it("sends the period to any request it caps, rather than filtering a capped response", () => {
+    const sendsADate = /\b(from|to|start|end|startDate|endDate|fromDate|toDate)\b\s*[:,=]|\bset\(\s*["'](from|to|start|end)["']/
+    const capsTheRequest = /\blimit\b\s*:\s*String|\blimit=\$\{|\bset\(\s*["']limit["']/
+
+    const offenders = multiPeriodDefinitions()
+      .filter((entry) => {
+        // Only the buildRows body matters, not the whole rest of the file: a tab's paginated
+        // on-screen fetch legitimately caps without any period at all.
+        const body = entry.body.slice(0, entry.body.indexOf("buildRows") + 4000)
+        return capsTheRequest.test(body) && !sendsADate.test(body)
+      })
+      .map((entry) => `${entry.tab} (${entry.component})`)
+
+    expect(
+      offenders,
+      `These tabs cap the rows they request and then narrow them by period in the browser. The ` +
+        `cap is applied FIRST, so the rows the period needed may already have been discarded and ` +
+        `no client-side filter can recover them -- the report omits records it claims to cover. ` +
+        `Send the period to the endpoint and let SQL apply it before the LIMIT.`,
+    ).toEqual([])
+  })
 })

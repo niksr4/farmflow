@@ -98,6 +98,19 @@ export function useTenantSettings() {
     featureFlags: DEFAULT_TENANT_FEATURE_FLAGS,
   })
   const [loading, setLoading] = useState(false)
+
+  /**
+   * WHICH tenant the settings above describe. The racing-load guard right below keeps the newest
+   * SELECTION from being overwritten by a slower earlier response, but between selecting a preview
+   * tenant and that tenant's settings arriving, `settings` still holds the previous tenant's
+   * estate name -- and a consumer handed both a new tenantId and that stale name has no way to
+   * tell. The Audit Log report is the live case: it exports the new tenant's rows under a title
+   * carrying the old tenant's estate.
+   *
+   * A `loading` flag is not enough on its own, because it is false in the gap after one tenant's
+   * load settles and before the next begins. An identity can be compared; a flag cannot.
+   */
+  const [describedTenantId, setDescribedTenantId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // loadSettings re-fires whenever the previewed tenant changes. Without cancellation an
@@ -148,6 +161,7 @@ export function useTenantSettings() {
           : DEFAULT_LABOR_WAGES
       if (signal.aborted) return
       setSettings({ bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags, laborWages })
+      setDescribedTenantId(isPreviewMode ? previewTenantId : user?.tenantId ?? null)
     } catch (err: any) {
       // Superseded by a newer tenant selection, or unmounted — not a failure to show.
       if (isAbortError(err)) return
@@ -283,6 +297,8 @@ export function useTenantSettings() {
 
   return {
     settings,
+    /** The tenant `settings` actually describes -- compare before labelling a document with it. */
+    describedTenantId,
     loading,
     error,
     refresh: loadSettings,

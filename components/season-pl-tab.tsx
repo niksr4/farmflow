@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import type { SeasonPLResponse } from "@/app/api/season-pl/route"
 import { ReportMenu } from "@/components/ui/report-menu"
 import type { ReportDefinition } from "@/lib/reports/report-definition"
+import { describeReportEstate, ESTATE_SCOPE_NOTE } from "@/lib/reports/report-definition"
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n)
@@ -112,7 +113,13 @@ function getCurrentSeasonRange(): DateRange {
   }
 }
 
-export default function SeasonPlTab({ estateName }: { estateName?: string }) {
+export default function SeasonPlTab({
+  estateName,
+  selectedEstate,
+}: {
+  estateName?: string
+  selectedEstate?: string | null
+}) {
   const [range, setRange] = useState<DateRange>(getCurrentSeasonRange)
   const [data, setData] = useState<SeasonPLResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -138,6 +145,14 @@ export default function SeasonPlTab({ estateName }: { estateName?: string }) {
       setData(json)
     } catch (e: any) {
       if (seq !== requestSeqRef.current) return
+      /**
+       * The previous range's figures must go with it. `range` has already moved to the new preset,
+       * so keeping a stale successful payload here means the report control stays enabled
+       * (`disabled={loading || !data?.success}`) and builds a document with the old season's
+       * revenue and gross profit under the new range's heading. The screen shows a red error card;
+       * a downloaded PDF carries no such warning, and gets mailed to an accountant.
+       */
+      setData(null)
       setError(e.message)
     } finally {
       if (seq === requestSeqRef.current) setLoading(false)
@@ -165,7 +180,8 @@ export default function SeasonPlTab({ estateName }: { estateName?: string }) {
     () => ({
       slug: "season-profit-and-loss",
       title: "Season Profit and Loss",
-      estateName,
+      estateName: describeReportEstate(estateName, selectedEstate),
+      scopeNote: selectedEstate ? ESTATE_SCOPE_NOTE : undefined,
       period: `${range.start} to ${range.end}`,
       // /api/season-pl takes start and end, and buildRows re-queries below for any period other
       // than the one on screen.
@@ -233,7 +249,7 @@ export default function SeasonPlTab({ estateName }: { estateName?: string }) {
         }
       },
     }),
-    [data, estateName, range.start, range.end],
+    [data, estateName, selectedEstate, range.start, range.end],
   )
 
   const presets: Array<{ label: string; range: DateRange }> = [

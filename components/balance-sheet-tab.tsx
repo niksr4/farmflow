@@ -14,6 +14,7 @@ import { formatCurrency } from "@/lib/format"
 import { istClock } from "@/lib/date-utils"
 import { ReportMenu } from "@/components/ui/report-menu"
 import type { ReportDefinition } from "@/lib/reports/report-definition"
+import { describeReportEstate, ESTATE_SCOPE_NOTE } from "@/lib/reports/report-definition"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 
@@ -67,7 +68,13 @@ const getDirectionBadge = (direction: ModuleLine["direction"]) => {
   return "bg-slate-50 text-slate-700 border-slate-200"
 }
 
-export default function BalanceSheetTab({ estateName }: { estateName?: string }) {
+export default function BalanceSheetTab({
+  estateName,
+  selectedEstate,
+}: {
+  estateName?: string
+  selectedEstate?: string | null
+}) {
   const { toast } = useToast()
   const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears } = useFiscalYearSelection()
   const [summary, setSummary] = useState<SummaryPayload>(emptySummary)
@@ -150,7 +157,8 @@ export default function BalanceSheetTab({ estateName }: { estateName?: string })
     () => ({
       slug: "live-balance-sheet",
       title: "Live Balance Sheet",
-      estateName,
+      estateName: describeReportEstate(estateName, selectedEstate),
+      scopeNote: selectedEstate ? ESTATE_SCOPE_NOTE : undefined,
       period: selectedFiscalYear.label,
       // Every period, because /api/finance-balance-sheet takes startDate/endDate and `buildRows`
       // below re-queries for anything other than what the screen is showing. Declaring a period
@@ -223,7 +231,7 @@ export default function BalanceSheetTab({ estateName }: { estateName?: string })
         }
       },
     }),
-    [estateName, selectedFiscalYear.label, summary],
+    [estateName, selectedEstate, selectedFiscalYear.label, summary],
   )
 
   const netToneClass = summary.totals.netBooked >= 0 ? "text-emerald-700" : "text-rose-700"
