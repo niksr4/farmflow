@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { canDeleteModule } from "@/lib/permissions"
+import { isAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { isMissingAttendanceSchemaError, ATTENDANCE_SCHEMA_HELP } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { MAX_REASON_LENGTH, MIN_REASON_LENGTH } from "@/lib/attendance-record-removal"
 
 /**
  * THE ONLY WAY TO REMOVE AN ATTENDANCE ROW A TERMINAL WROTE, and it costs you a reason.
@@ -33,19 +34,32 @@ import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
  * also changes a wage: removing a day removes its pay, so the next payroll run will differ and
  * somebody will ask why.
  *
- * Gated on `canDeleteModule`, so a writer cannot reach it. A writer marking the wrong person
- * present can still untick them on the muster, because that row has no check-in.
+ * Gated on `isAdminRole`. A writer marking the wrong person present can still untick them on the
+ * muster, because that row has no check-in -- but a real punch is evidence and only an admin may
+ * remove one. See the note at the check itself for why `canDeleteModule` was the wrong gate.
  */
 
-/** Short enough to type on a phone, long enough that it cannot be a stray keystroke. */
-const MIN_REASON_LENGTH = 4
-const MAX_REASON_LENGTH = 500
+// The thresholds live in lib/attendance-record-removal.ts so the dialog and this route cannot
+// disagree about what counts as a reason. See the note there on why two copies drift silently.
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const sessionUser = await requireModuleAccess("accounts")
-    if (!canDeleteModule(sessionUser.role, "accounts")) {
+    /**
+     * ⚠ `isAdminRole`, NOT `canDeleteModule`. THIS WAS WRONG WHEN FIRST WRITTEN AND THE GUARD
+     * COULD NOT SEE IT.
+     *
+     * `accounts` is in `USER_MUTATION_MODULES` (lib/permissions.ts), so
+     * `canDeleteModule("user", "accounts")` returns TRUE -- a writer passed this check. Worse, for
+     * any module on that list `canDeleteModule` and `canWriteModule` have identical bodies, so the
+     * guard's "someone weakened delete to write" tamper was only ever matching a string.
+     *
+     * The distinction matters because the whole design rests on it: a writer who ticked the wrong
+     * person can still untick them on the muster, since that row has no check-in. A real punch is
+     * evidence, and removing one is an admin act.
+     */
+    if (!isAdminRole(sessionUser.role)) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)

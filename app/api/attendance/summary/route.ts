@@ -58,6 +58,8 @@ export async function GET(request: Request) {
     const [rows, thresholdRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT
+          r.id                AS attendance_record_id,
+          r.source            AS attendance_source,
           w.id                AS worker_id,
           w.full_name,
           w.worker_type,
@@ -79,7 +81,25 @@ export async function GET(request: Request) {
           -- Shown beside the hours so a disagreement between the two is visible rather than
           -- silently resolved in favour of whichever one the report happened to read.
           COALESCE(a.allocated_fraction, 0)::float                 AS allocated_fraction,
-          COALESCE(a.allocated_cost, 0)::float                     AS allocated_cost
+          COALESCE(a.allocated_cost, 0)::float                     AS allocated_cost,
+          -- WHAT PAYROLL WOULD STOP PAYING IF THIS DAY WENT AWAY, and it is NOT allocated_cost.
+          --
+          -- app/api/payroll-summary/route.ts pays
+          --   COALESCE(salary_total, muster_total, days_present * daily_rate)
+          -- and guards that fallback with NOT EXISTS (... labour_assignments ...), so a day is
+          -- counted once: either its allocation, or the bare day rate. Never both.
+          --
+          -- FOR AN UNALLOCATED BIOMETRIC DAY THE TWO DISAGREE COMPLETELY. Saina at HoneyFarm has
+          -- two such days: allocated_cost is Rs 0 while payroll pays 2 x Rs 494 = Rs 988. A screen
+          -- offering to remove that day while reporting Rs 0 would be telling the truth about the
+          -- cost reports and lying about the wage, which is the one number anybody checks.
+          --
+          -- (SQL comments, not a JSDoc block: this is inside a tagged template literal and a
+          -- backtick in the comment would terminate the query.)
+          CASE
+            WHEN COALESCE(a.allocated_cost, 0) > 0 THEN COALESCE(a.allocated_cost, 0)
+            ELSE COALESCE(w.daily_rate, 0)
+          END::float                                               AS payroll_effect
         FROM attendance_records r
         JOIN attendance_workers w
           ON w.id = r.worker_id
@@ -135,6 +155,12 @@ export async function GET(request: Request) {
         status: string
         rescanIgnored: boolean
         allocatedFraction: number
+        /** The row's own id, so a mis-enrolled punch can be named for removal. */
+        attendanceRecordId: string
+        /** 'biometric' or 'manual'. Only a terminal can create a punch nobody can untick. */
+        source: string | null
+        /** What payroll would stop paying. See the query comment -- not the allocated cost. */
+        payrollEffect: number
       }>
     }
 
@@ -190,6 +216,9 @@ export async function GET(request: Request) {
         status: shift.status,
         rescanIgnored: shift.rescanIgnored,
         allocatedFraction,
+        attendanceRecordId: String(row.attendance_record_id),
+        source: row.attendance_source ? String(row.attendance_source) : null,
+        payrollEffect: Number(row.payroll_effect) || 0,
       })
     }
 

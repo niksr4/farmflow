@@ -180,9 +180,20 @@ describe("a punch can only be removed on purpose", () => {
   it("the audited route is admin-gated and writes an audit row carrying the reason", () => {
     const src = sourceOf(AUDITED_DELETE_ROUTE)
 
-    // canDeleteModule, not canWriteModule: a writer who ticked the wrong person can still untick
-    // them on the muster, because that row has no check-in.
-    expect(src).toMatch(/canDeleteModule\s*\(/)
+    /**
+     * ⚠ `isAdminRole`, AND NEITHER MODULE HELPER. THIS ASSERTION USED TO BE BACKWARDS.
+     *
+     * It required `canDeleteModule` and forbade `canWriteModule`, on the reading that delete is the
+     * stricter of the two. For module `accounts` THE TWO FUNCTIONS HAVE IDENTICAL BODIES --
+     * `accounts` is in `USER_MUTATION_MODULES`, so both return true for a writer. So the route was
+     * reachable by any `user`, the PR described it as admin-gated, and the tamper that swapped
+     * delete for write was caught by a string match rather than by any behaviour.
+     *
+     * Found by mounting the screen and checking a writer saw no control, which a source scan
+     * structurally cannot do: both spellings look equally correct in the text.
+     */
+    expect(src).toMatch(/isAdminRole\s*\(/)
+    expect(src).not.toMatch(/canDeleteModule\s*\(/)
     expect(src).not.toMatch(/canWriteModule\s*\(/)
 
     // A call, not an import line.
