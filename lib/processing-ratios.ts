@@ -228,3 +228,31 @@ export const dayOutturnPercent = ({
   if (dryTotal <= 0) return null
   return { label: "Day outturn", percent: percent(dryTotal, cropToday) }
 }
+
+/**
+ * The bags a day actually produced, and what to call them, on the estate's route.
+ *
+ * ⚠ THE RECENT-ENTRIES LIST PRINTED `dry_p_bags` UNCONDITIONALLY, which reads "0 bags" for every
+ * day on a natural-route estate. The parchment line is hidden on that route, so `dry_parch` is
+ * never filled and `dry_p_bags` is always 0 -- a day with 500 kg of dry cherry therefore showed
+ * nothing. Nothing errors and the figure is plausible, which is what made it worth fixing: the
+ * same list also offered a "Dry parchment bags" sort that ordered every row by zero.
+ *
+ * Takes the two figures rather than a whole record so it stays independent of which row shape the
+ * caller holds, and so the row and the sorter cannot drift apart -- they call this.
+ *
+ * On `both` the two are SUMMED, because a day that washed some and dried the rest produced both
+ * and the honest answer to "how many bags" is all of them. The label drops to the generic "bags"
+ * there, since naming one kind would be wrong about the other.
+ */
+export const bagsProducedOnRoute = (
+  bags: { dryParchBags: number | null | undefined; dryCherryBags: number | null | undefined },
+  route: ProcessingRoute,
+): { total: number; label: string } => {
+  const parchment = num(bags.dryParchBags)
+  const cherry = num(bags.dryCherryBags)
+  if (route === "wet") return { total: parchment, label: "parchment bags" }
+  if (route === "natural") return { total: cherry, label: "cherry bags" }
+  return { total: parchment + cherry, label: "bags" }
+}
+

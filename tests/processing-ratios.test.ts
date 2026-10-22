@@ -8,12 +8,7 @@ import {
   resolveProcessingRoute,
   routeProducesForm,
 } from "@/lib/crop-config"
-import {
-  cherryInputKg,
-  dayOutturnPercent,
-  deriveProcessingFigures,
-  pulpedInputKg,
-} from "@/lib/processing-ratios"
+import { bagsProducedOnRoute, cherryInputKg, dayOutturnPercent, deriveProcessingFigures, pulpedInputKg } from "@/lib/processing-ratios"
 
 /**
  * THE RATIO THAT ASSUMED AN ESTATE'S CONVENTION.
@@ -275,5 +270,62 @@ describe("the route axis itself", () => {
         expect(forms.length, `${route} is a single-line route`).toBe(1)
       }
     }
+  })
+})
+
+describe("bagsProducedOnRoute", () => {
+  /**
+   * THE RECENT-ENTRIES LIST READ "0 bags" FOR EVERY DAY ON A NATURAL-ROUTE ESTATE.
+   *
+   * It printed `dry_p_bags` unconditionally. The parchment line is hidden on that route, so
+   * `dry_parch` is never filled and the bag count is always 0 -- a day with 500 kg of dry cherry
+   * showed nothing. The same list also offered a "Dry parchment bags" sort, which ordered every
+   * row by zero. Nothing errored and 0 is a plausible number, which is what made it worth fixing.
+   *
+   * Found in review on #66, the PR that introduced the route.
+   */
+  it("counts cherry bags on a natural route, where there is no parchment", () => {
+    expect(bagsProducedOnRoute({ dryParchBags: 0, dryCherryBags: 12 }, "natural")).toEqual({
+      total: 12,
+      label: "cherry bags",
+    })
+  })
+
+  it("counts parchment bags on a wet route, where there is no dry cherry", () => {
+    expect(bagsProducedOnRoute({ dryParchBags: 8, dryCherryBags: 0 }, "wet")).toEqual({
+      total: 8,
+      label: "parchment bags",
+    })
+  })
+
+  it("sums both when both lines run, because the day produced both", () => {
+    // The label drops to the generic "bags": naming one kind would be wrong about the other.
+    expect(bagsProducedOnRoute({ dryParchBags: 8, dryCherryBags: 4 }, "both")).toEqual({
+      total: 12,
+      label: "bags",
+    })
+  })
+
+  it("ignores the line the route does not run, rather than adding it in", () => {
+    // A wet-route estate with a stray dry_cherry_bags value must not have it counted, and vice
+    // versa -- otherwise the figure drifts from what the screen shows as produced.
+    expect(bagsProducedOnRoute({ dryParchBags: 8, dryCherryBags: 99 }, "wet").total).toBe(8)
+    expect(bagsProducedOnRoute({ dryParchBags: 99, dryCherryBags: 12 }, "natural").total).toBe(12)
+  })
+
+  it("treats a missing figure as zero rather than NaN, on EITHER side", () => {
+    /**
+     * These columns are nullable and NaN would render as "NaN bags".
+     *
+     * ⚠ BOTH SIDES AND BOTH null AND undefined, because `Number(null)` is 0 while
+     * `Number(undefined)` is NaN. The first version of this test only passed `undefined` on the
+     * cherry side, so swapping the parchment side's `num()` for a bare `Number()` changed nothing
+     * and the tamper went uncaught.
+     */
+    expect(bagsProducedOnRoute({ dryParchBags: undefined, dryCherryBags: 4 }, "both").total).toBe(4)
+    expect(bagsProducedOnRoute({ dryParchBags: 8, dryCherryBags: undefined }, "both").total).toBe(8)
+    expect(bagsProducedOnRoute({ dryParchBags: undefined, dryCherryBags: undefined }, "both").total).toBe(0)
+    expect(bagsProducedOnRoute({ dryParchBags: undefined, dryCherryBags: 0 }, "wet").total).toBe(0)
+    expect(bagsProducedOnRoute({ dryParchBags: null, dryCherryBags: 5 }, "natural").total).toBe(5)
   })
 })

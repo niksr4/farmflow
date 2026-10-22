@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DEFAULT_COFFEE_VARIETIES, resolveProcessingRoute } from "@/lib/crop-config"
-import { dayOutturnPercent, deriveProcessingFigures } from "@/lib/processing-ratios"
+import { bagsProducedOnRoute, dayOutturnPercent, deriveProcessingFigures } from "@/lib/processing-ratios"
 import { useAuth } from "@/hooks/use-auth"
 import { useSearchParams } from "next/navigation"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -181,7 +181,13 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     sorters: {
       date: (r) => String(r.process_date || "").slice(0, 10),
       crop: (r) => Number(r.crop_today) || 0,
-      bags: (r) => Number(r.dry_p_bags) || 0,
+      // The bags the route actually produced. Sorting on dry_p_bags ordered every row by zero
+      // on a natural-route estate, because the parchment line is hidden there.
+      bags: (r) =>
+        bagsProducedOnRoute(
+          { dryParchBags: r.dry_p_bags, dryCherryBags: r.dry_cherry_bags },
+          processingRoute,
+        ).total,
     },
     defaultSort: "date",
   })
@@ -1593,7 +1599,11 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             sortOptions={[
               { value: "date", label: "Date" },
               { value: "crop", label: "Crop kg" },
-              { value: "bags", label: "Dry parchment bags" },
+              {
+                value: "bags",
+                // Naming parchment here was wrong on a natural-route estate, which produces none.
+                label: processingRoute === "natural" ? "Dry cherry bags" : processingRoute === "wet" ? "Dry parchment bags" : "Bags produced",
+              },
             ]}
             sortValue={recentControls.sortValue}
             onSortChange={recentControls.setSortValue}
@@ -1685,7 +1695,19 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                       </div>
                       <div className="text-right">
                         <p className="text-xl font-black text-stone-900">{rec.crop_today ?? 0}<span className="text-sm font-normal text-stone-400">kg</span></p>
-                        <p className="text-xs text-stone-400">{rec.dry_p_bags} bags</p>
+                        {(() => {
+                          // A day with 500 kg of dry cherry read "0 bags" here, because this
+                          // printed dry_p_bags and the parchment line is hidden on a natural route.
+                          const produced = bagsProducedOnRoute(
+                            { dryParchBags: rec.dry_p_bags, dryCherryBags: rec.dry_cherry_bags },
+                            processingRoute,
+                          )
+                          return (
+                            <p className="text-xs text-stone-400">
+                              {produced.total} {produced.label}
+                            </p>
+                          )
+                        })()}
                       </div>
                     </div>
                     {(rec.quality_grade || rec.moisture_pct) && (
