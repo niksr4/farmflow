@@ -45,7 +45,15 @@ export async function GET(request: NextRequest) {
 
     const periodStart = new Date(fiscalYearStart)
     const periodEnd = new Date(fiscalYearEnd)
-    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+    // Both values are bound to ::date casts below. `new Date("1")` is a valid JS date but not a valid
+    // Postgres one, so a bare Number.isNaN check let it through to a 500.
+    const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+    if (
+      !ISO_DATE.test(fiscalYearStart) ||
+      !ISO_DATE.test(fiscalYearEnd) ||
+      Number.isNaN(periodStart.getTime()) ||
+      Number.isNaN(periodEnd.getTime())
+    ) {
       return NextResponse.json(
         { success: false, error: "fiscalYearStart and fiscalYearEnd must be valid dates" },
         { status: 400 },

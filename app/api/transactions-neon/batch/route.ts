@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
@@ -84,6 +86,44 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       )
+    }
+
+    // Every location the import references must belong to this tenant. FK checks ignore RLS, and this
+    // route replaces the whole ledger, so one foreign id would be written straight through.
+    //
+    // ⚠ A NON-STRING location_id USED TO COERCE TO "" AND SKIP VALIDATION ENTIRELY. `typeof` guards
+    // the read, so a number or an object fell through to the empty string, was never added to the
+    // set below, was never checked -- and then the insert wrote the row with a NULL location. The
+    // batch reported success while that stock quietly moved into the unassigned slot. Omitted,
+    // null and "unassigned" are all legitimate ways to say "no location"; anything else is a
+    // malformed request and must not reach a ledger replacement. Raised on #131's review.
+    for (const [index, t] of transactions.entries()) {
+      const supplied = t?.location_id
+      const saysNoLocation = supplied === undefined || supplied === null
+      if (!saysNoLocation && typeof supplied !== "string") {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Transaction ${index + 1} has a location that is not a text id. Nothing has been imported.`,
+          },
+          { status: 400 },
+        )
+      }
+    }
+
+    const referencedLocationIds = new Set<string>()
+    for (const t of transactions) {
+      const raw = typeof t?.location_id === "string" ? t.location_id.trim() : ""
+      if (raw && raw !== "unassigned") referencedLocationIds.add(raw)
+    }
+    for (const locationId of referencedLocationIds) {
+      const validLocationId = await validateLocationForTenant(accountsSql, tenantContext, sessionUser, locationId)
+      if (!validLocationId) {
+        return NextResponse.json(
+          { success: false, message: "A transaction references a location that is invalid for this tenant. Nothing has been imported." },
+          { status: 400 },
+        )
+      }
     }
 
     const existingCountRows = await runTenantQuery(
@@ -199,6 +239,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error("❌ Error in batch update:", error)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, message: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }

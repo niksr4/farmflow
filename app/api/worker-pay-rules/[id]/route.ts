@@ -52,7 +52,11 @@ const updateSchema = z
     message: "A percentage of the day's pay cannot be more than 100",
   })
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 async function loadRule(tenantContext: any, id: string) {
+  // A malformed id would make the ::uuid cast throw (22P02) and surface as a 500; it is "not found".
+  if (!UUID_PATTERN.test(id)) return null
   const rows = await runTenantQuery(
     accountsSql,
     tenantContext,
@@ -173,6 +177,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   } catch (error) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    // Moving a rule onto a date the same worker (or the estate default) already has a rule for hits
+    // the unique index; that is the caller's conflict to resolve, not a server failure.
+    if ((error as any)?.code === "23505") {
+      return NextResponse.json(
+        { success: false, error: "A rule already starts on that date. Correct that one instead, or pick another date." },
+        { status: 409 },
+      )
     }
     logServerError("Failed to update a pay rule", error)
     return NextResponse.json(
