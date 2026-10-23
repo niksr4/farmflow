@@ -45,10 +45,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      # ⚠ REQUIRED BY THE ACTION, AND OMITTING IT IS A CLEAN FAILURE RATHER THAN A SILENT ONE.
-      # Without it the run dies with "Could not fetch an OIDC token" after the key check and the
-      # checkout have both passed, which reads like a credential problem and is not one.
-      id-token: write
+      # No `id-token: write`. That is only for workload identity federation
+      # (anthropic_federation_rule_id), which this does not use -- `github_token` below is what
+      # removes the need for an OIDC exchange at all. Granting it bought a different error, not a
+      # fix: the action got a token and Anthropic's service then refused because the GitHub App is
+      # not installed on this repository.
     steps:
       - name: Check the key is configured
         env:
@@ -82,6 +83,13 @@ jobs:
         # reason in the diff, pin to a commit SHA and say so here.
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # ⚠ THIS IS WHAT MAKES IT WORK WITHOUT THE CLAUDE GITHUB APP. The action's own docs call
+          # github_token "optional if using GitHub App" -- read the other way round, it is REQUIRED
+          # when the app is not installed. Two runs failed before this was supplied: first
+          # "Could not fetch an OIDC token", then "Claude Code is not installed on this
+          # repository". Both were the action trying to reach GitHub, not Anthropic. The key
+          # authenticates to the API; this authenticates to the repository.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           track_progress: true
           prompt: |
             Review this pull request for FarmFlow, a multi-tenant farm management SaaS used by
