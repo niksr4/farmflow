@@ -37,15 +37,36 @@ export default function LotTracePage({ lotId }: { lotId: string }) {
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
+  const [notFound, setNotFound] = useState(false)
+
   useEffect(() => {
+    // Guards a slow response for a previous lotId (or an unmounted page) from overwriting state.
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setNotFound(false)
     fetch(`/api/lots/${encodeURIComponent(lotId)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!d.success) throw new Error(d.error || "Lot not found")
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}))
+        if (cancelled) return
+        // Only a 404 means "no such lot". A 429/500/network drop used to land on the same screen
+        // and tell a buyer scanning a valid QR code that it was invalid.
+        if (r.status === 404) {
+          setNotFound(true)
+          return
+        }
+        if (!r.ok || !d.success) throw new Error(r.status === 429 ? "Too many requests" : "Could not load this lot")
         setData(d.lot)
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error && e.message === "Too many requests" ? e.message : "Could not load this lot")
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [lotId])
 
   const traceUrl = typeof window !== "undefined" ? window.location.href : ""
@@ -61,12 +82,26 @@ export default function LotTracePage({ lotId }: { lotId: string }) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 to-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
+        <div
+          role="status"
+          aria-label="Loading lot"
+          className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent"
+        />
       </div>
     )
   }
 
-  if (error || !data) {
+  if (error && !notFound) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gradient-to-br from-emerald-50 to-white px-4 text-center">
+        <Package className="h-12 w-12 text-gray-300" />
+        <h1 className="text-xl font-semibold text-gray-700">{error}</h1>
+        <p className="text-sm text-gray-500">This is a temporary problem, not a problem with the QR code. Please try again in a moment.</p>
+      </div>
+    )
+  }
+
+  if (notFound || !data) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gradient-to-br from-emerald-50 to-white px-4 text-center">
         <Package className="h-12 w-12 text-gray-300" />
@@ -191,7 +226,7 @@ export default function LotTracePage({ lotId }: { lotId: string }) {
             </p>
             <div className="space-y-2">
               {data.certifications.map((cert) => (
-                <div key={cert.name} className="flex items-center justify-between">
+                <div key={`${cert.name}-${cert.validUntil ?? ""}`} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-emerald-500" />
                     <span className="text-sm text-gray-700">{cert.name}</span>
