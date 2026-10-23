@@ -122,7 +122,31 @@ jobs:
               fi
             fi
 
-            candidates="${candidates}${head_date} ${n}"$'\n'
+            # ── Money first ────────────────────────────────────────────────────────────────────
+            # Since 2026-10-22 a Claude reviewer runs on EVERY pull request automatically
+            # (.github/workflows/claude-review.yml), so nothing goes unreviewed any more and this
+            # workflow's scarce hourly slot is no longer the only review a change gets. What it is
+            # still uniquely good for is an INDEPENDENT opinion -- a different model with different
+            # blind spots -- and that is worth most where a wrong number costs an estate rupees.
+            #
+            # ⚠ THIS IS ROUTING, NOT A GUARD. A pattern missing from the list below only changes
+            # the ORDER reviews arrive in; it can never let a bug through, because the Claude
+            # reviewer has already looked at every pull request regardless. Do not read it as a
+            # list of the files that matter.
+            #
+            # Fails towards 0 (money): if the file list cannot be fetched, the pull request gets
+            # the independent review rather than being quietly pushed behind everything else.
+            priority=0
+            if files=$(gh pr view "$n" --repo "$REPO" --json files --jq '.files[].path' 2>/dev/null); then
+              if printf '%s' "$files" | grep -Eq \
+                'payroll|labour|labor|picking|muster|cost|expense|balance-sheet|season-pl|reconcil|sales|dispatch|inventory|transaction|account|worker|billing|finance|wage'; then
+                priority=0
+              else
+                priority=1
+              fi
+            fi
+
+            candidates="${candidates}${priority} ${head_date} ${n}"$'\n'
           done
 
           if [ -z "${candidates//[$'\n' ]/}" ]; then
@@ -130,12 +154,15 @@ jobs:
             exit 0
           fi
 
-          # Oldest head commit first: the pull request that has been waiting longest, not the
-          # lowest number. FIFO is the only ordering that cannot starve one of them forever.
-          target=$(printf '%s' "$candidates" | sort | head -1 | awk '{print $2}')
+          # Money-touching first, then oldest head commit within each class. FIFO is still the
+          # tie-break because it is the only ordering that cannot starve a pull request forever --
+          # and a non-money change can only ever wait behind money ones, never indefinitely,
+          # since the money queue drains.
+          target=$(printf '%s' "$candidates" | sort | head -1 | awk '{print $3}')
           echo "Requesting a review on #$target"
           echo "Still waiting after this one (one per hour, longest wait first):"
-          printf '%s' "$candidates" | sort | awk -v t="$target" '$2 != t {print "  #" $2 "  head " $1}'
+          printf '%s' "$candidates" | sort | awk -v t="$target" \
+            '$3 != t {print "  #" $3 "  head " $2 "  " ($1 == 0 ? "(money)" : "")}'
           echo
 
           before=$(gh api "repos/$REPO/issues/$target/comments" --jq \

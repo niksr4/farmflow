@@ -1,0 +1,171 @@
+
+# Automatic code review on every pull request, run from this repository rather than a vendor's.
+#
+# WHY THIS EXISTS: CodeRabbit has never once auto-reviewed this repository and never will until it
+# has 10 stars -- its own comment says so, and this repo has 0. So every review in the project's
+# history was requested by hand, and a green `CodeRabbit` check has never meant a review happened.
+# On top of that the plan includes roughly ONE review an hour, which is a quota rather than a
+# property of the tool: on 2026-10-22 five quality-green pull requests sat waiting while a request
+# came back "Review rate limited" seven seconds after being made -- a refusal that reads exactly
+# like a pass if nobody opens it.
+#
+# This runs on `pull_request`, so it fires on open and on every push, unconditionally, with no
+# queue and no hourly budget. It is the first automatic review this project has had.
+#
+# ⚠ IT IS CLAUDE REVIEWING CLAUDE-WRITTEN CODE, which is weaker on shared blind spots than an
+# independent vendor. That is why CodeRabbit is kept rather than replaced: the retry workflow now
+# spends its hourly budget on the pull requests that touch money first. Treat this as broad
+# coverage, and CodeRabbit as the second opinion where a wrong number costs an estate rupees.
+#
+# ⚠ IT DOES REVIEW ITS OWN PULL REQUEST, and I claimed the opposite when adding this file.
+#
+# For a pull request from a branch in the SAME repository, GitHub runs the workflow as defined on
+# the PR's HEAD branch -- so this took effect immediately on #134 and failed there on the missing
+# id-token permission above. The "workflow comes from the base branch" rule that CLAUDE.md records
+# is real but applies to `pull_request_target`, not to `pull_request`. Reading it as applying here
+# turned a one-line permission bug into an expected empty Checks tab, which is worse than the bug.
+
+name: Claude review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+# A rapid series of pushes should leave one review of the final state, not six of the way there.
+# Each run costs API spend, and a review of a superseded commit is worth nothing anyway.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    # ⚠ PINNED, AND IT HAS TO BE. `ubuntu-latest` rolled to 26.04 on 2026-10-19 and broke the
+    # gated check on all nine open pull requests at once. Same reasoning as ci.yml.
+    permissions:
+      contents: read
+      pull-requests: write
+      # No `id-token: write`. That is only for workload identity federation
+      # (anthropic_federation_rule_id), which this does not use -- `github_token` below is what
+      # removes the need for an OIDC exchange at all. Granting it bought a different error, not a
+      # fix: the action got a token and Anthropic's service then refused because the GitHub App is
+      # not installed on this repository.
+    steps:
+      - name: Check the key is configured
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # ⚠ FAIL LOUDLY, NEVER QUIETLY PASS. A reviewer that skips when its key is missing
+          # reports success on every pull request while reviewing nothing, which is worse than
+          # having no reviewer at all because the Checks tab says it is handled. The same
+          # reasoning is why coderabbit-retry.yml fails when its token is absent.
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::ANTHROPIC_API_KEY is not set as a repository secret, so no review ran."
+            echo
+            echo "The key exists in Vercel's environment but NOT in this repository's secrets."
+            echo "Add it with:  gh secret set ANTHROPIC_API_KEY --repo niksr4/farmflow"
+            exit 1
+          fi
+          echo "Key present."
+
+      # v5: v4 pins Node 20, which the runners now force onto Node 24 and warn about on every run.
+      - uses: actions/checkout@v5
+        with:
+          # The review needs history to reason about what the branch changed, not just its tip.
+          fetch-depth: 0
+
+      - name: Review
+        uses: anthropics/claude-code-action@v1
+        # ⚠ `@v1`, NOT `@main`. A third-party action tracked at a branch is an undeclared
+        # dependency that can change under you between two runs of the same commit -- which is
+        # precisely how `ubuntu-latest` took this repo's CI down. `v1` is the vendor's stable
+        # channel; it still moves within the major, so if a run ever changes behaviour for no
+        # reason in the diff, pin to a commit SHA and say so here.
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # ⚠ THIS IS WHAT MAKES IT WORK WITHOUT THE CLAUDE GITHUB APP. The action's own docs call
+          # github_token "optional if using GitHub App" -- read the other way round, it is REQUIRED
+          # when the app is not installed. Two runs failed before this was supplied: first
+          # "Could not fetch an OIDC token", then "Claude Code is not installed on this
+          # repository". Both were the action trying to reach GitHub, not Anthropic. The key
+          # authenticates to the API; this authenticates to the repository.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # ⚠ PIN THE MODEL. Left unset, the action resolved `claude-opus-5-5`, which is not a real
+          # model id, and the API rejected the request instantly: duration_ms 209,
+          # total_cost_usd 0, modelUsage {}, and `is_error: true` with subtype "success" -- a
+          # failure that names neither the model nor the reason anywhere in the output. Three
+          # earlier runs were debugged as auth problems because of it.
+          claude_args: "--model claude-opus-5"
+          track_progress: true
+          prompt: |
+            Review this pull request for FarmFlow, a multi-tenant farm management SaaS used by
+            real coffee and pepper estates in Coorg, India. Read CLAUDE.md first; it is long,
+            partly stale, and says which parts of itself to distrust.
+
+            ## What actually breaks here
+
+            This codebase's defects do not throw. They return a confident wrong number onto a
+            screen an estate owner believes, and nothing is logged anywhere. An exception gets a
+            Sentry issue and a fix; a plausible figure gets reconciled against and built on. So
+            weight your review towards wrong answers over crashes, and say concretely which
+            estate sees which wrong figure.
+
+            Recent real examples, to calibrate what is worth reporting:
+
+            - a report applied its date period AFTER the query's 2000-row cap, so a fiscal-year
+              export silently omitted most of the year while its header claimed the year
+            - a failed refetch left the previous range's figures in state while the heading moved,
+              so a downloaded P&L showed last season's profit under a twelve-month title
+            - a permission gate used `canDeleteModule`, which is byte-identical to
+              `canWriteModule` for every module in `USER_MUTATION_MODULES`, so a writer passed a
+              check written to mean "admin"
+            - a list sorter closed over a value the memo did not track, so changing the estate's
+              processing route left the rows ordered by the old route's figure
+
+            ## Specific traps, each of which has shipped
+
+            - **IST vs UTC.** Estates are in IST, servers are UTC. Wall clocks must be formatted
+              in SQL (`to_char(... AT TIME ZONE 'Asia/Kolkata')`), never derived in the browser.
+              `new Date()` fed to date-fns `format`/`startOfWeek`/`isToday`, or any
+              `toLocaleTimeString` without an explicit `timeZone`, renders the VIEWER's calendar.
+              There are eight known signatures of this one bug.
+            - **`sql` is never falsy.** It is a stub that throws when unconfigured, so `if (!sql)`
+              is dead code. Gate on `isDbConfigured`, and on `isAdminDbConfigured` for DDL.
+            - **Tenant isolation.** Raw `sql` outside `runTenantQuery` returns zero rows rather
+              than an error on any `tenant_id` table. Zero rows is a wrong answer, not a failure.
+            - **Generated columns.** `labour_assignments.total_cost` and `picking_records.
+              total_cost` are `GENERATED ALWAYS`; naming them in an INSERT fails. `processing_
+              records` has a live recompute trigger, so the database owns the ratio columns and
+              the client must re-read the row after saving rather than computing its own.
+            - **Money screens.** Payroll, Costs, Balance Sheet, Season P&L and reconciliation are
+              where a wrong number costs real rupees. Check that two totals on one screen are
+              summing the same thing.
+            - **Buttons in forms.** `components/ui/button.tsx` sets no default `type`, so an
+              untyped `<Button>` inside a `<form>` submits. A Cancel button has written records.
+
+            ## Judge the tests, not just the code
+
+            Most guards here scan source, and a vacuous guard is the most expensive thing in the
+            repository because it is indistinguishable from a working one. Check specifically:
+
+            - does it assert a CALL (`helper\s*\(`) or merely a mention that an import satisfies?
+            - does it strip comments before scanning? A fix that documents the forbidden pattern
+              has made a raw scan match its own explanation and fail over correct code four times.
+            - is its file list hand-kept, where it could be derived from the tree?
+            - is its PREDICATE as wide as the rule it claims? A guard against "closing over
+              changing state" that matched only `useState` bindings stayed green over the exact
+              bug it was written for, because the offender was a plain `const` off a prop.
+            - would it still pass if the behaviour broke? Say so plainly if you think it would.
+
+            ## How to report
+
+            Report findings inline on the lines they concern. For each one, state the concrete
+            failure: which input or state, and what wrong output or whose screen. Severity should
+            reflect whether any tenant has rows on that path at all -- dormant code and a live
+            break look identical in a diff and are one query apart, and this project has
+            previously fixed then reverted a "red" finding on an endpoint that 404s for every
+            possible input.
+
+            Do not report formatting, import order, or anything a linter would catch. Do not
+            restate what the diff does. If the change looks correct, say that briefly rather than
+            manufacturing findings.
