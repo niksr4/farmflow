@@ -277,17 +277,24 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         updated.ripe_percent = Number.parseFloat(((ripeToday / cropToday) * 100).toFixed(2))
         updated.green_percent = Number.parseFloat(((greenToday / cropToday) * 100).toFixed(2))
         updated.float_percent = Number.parseFloat(((floatToday / cropToday) * 100).toFixed(2))
-        const greenPlusFloat = greenToday + floatToday
-        if (greenPlusFloat > 0) {
-          updated.dry_cherry_percent = Number.parseFloat(((dryCherry * 100) / greenPlusFloat).toFixed(2))
-        } else {
-          updated.dry_cherry_percent = 0
-        }
+        /**
+         * ⚠ `dry_cherry_percent` IS NOT COMPUTED HERE, AND THAT IS THE POINT OF MIGRATION 155.
+         *
+         * Its denominator depends on how the estate processes -- 0 on a wet route, crop on a
+         * natural one, crop minus ripe on both -- and only the server knows the route. This form
+         * used to compute it as `dryCherry / (green + float)`, so on a wet route the database
+         * stored 0 while the screen showed a non-zero figure, and on the others it disagreed with
+         * the stored value the moment anybody edited an input.
+         *
+         * The value shown comes from the record the server returns (see the save handler's
+         * `data.record` branch) and from the row loaded for an edit. Nothing on the client may
+         * recompute it. Caught in review on #128, in the one file my own guard did not scan --
+         * it covered lib/ and app/ while the offender sat in components/.
+         */
       } else {
         updated.ripe_percent = 0
         updated.green_percent = 0
         updated.float_percent = 0
-        updated.dry_cherry_percent = 0
       }
 
       if (ripeToday > 0) {
@@ -663,6 +670,22 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         setHasExistingRecord(true)
         setAnomalyWarning(null)
 
+        /**
+         * ⚠ RE-READ THE SAVED ROW, because the DATABASE owns the computed columns.
+         *
+         * A trigger on processing_records recomputes dry_cherry_percent, fr_wp_percent,
+         * wp_dp_percent and every to-date column, and migration 155 makes the dry cherry
+         * denominator depend on the estate's processing route. The client therefore cannot know
+         * those values and no longer guesses at them.
+         *
+         * Without this reload the form keeps the values it had before the save -- 0 on a fresh
+         * record -- under a label reading "Auto-calculated". For a natural-route estate entering
+         * 100 kg of crop and 10 kg of dry cherry the screen would read 0% while the database held
+         * 10%, until somebody navigated away and back. Caught in review on #128; the earlier commit
+         * claimed the save handler already applied `data.record`, which is the LOAD handler at
+         * loadRecordForDate, not this one.
+         */
+        await loadRecordForDate(date)
         await loadRecentRecords(0, false)
         await loadDashboardData()
 
