@@ -548,6 +548,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /**
+     * ⚠ A NON-STRING location_id COERCES TO "" AND THEN TO NULL, which skips validation and nulls
+     * the row's location silently. `undefined` and `null` legitimately mean "no location"; a
+     * number or an object is a malformed request. Same hole the batch route had -- see #131.
+     */
+    if (location_id !== undefined && location_id !== null && typeof location_id !== "string") {
+      return NextResponse.json(
+        { success: false, message: "Location must be a text id" },
+        { status: 400 },
+      )
+    }
+
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
     const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
     // location_id is bound to a uuid FK, and FK checks ignore RLS: without this a caller could stamp

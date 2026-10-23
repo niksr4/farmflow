@@ -193,6 +193,18 @@ export async function PUT(request: NextRequest) {
 
     const existingStockLocationId = existingRow?.location_id ? String(existingRow.location_id) : null
     const existingUsageLocationId = extractUsageLocationId(existingRow?.notes ? String(existingRow.notes) : "")
+    /**
+     * ⚠ A NON-STRING location_id COERCES TO "" AND THEN TO NULL, which skips validation and nulls
+     * the row's location silently. `undefined` and `null` legitimately mean "no location"; a
+     * number or an object is a malformed request. Same hole the batch route had -- see #131.
+     */
+    if (location_id !== undefined && location_id !== null && typeof location_id !== "string") {
+      return NextResponse.json(
+        { success: false, message: "Location must be a text id" },
+        { status: 400 },
+      )
+    }
+
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
     const requestedUsageLocationId =
       location_id === undefined
@@ -208,9 +220,21 @@ export async function PUT(request: NextRequest) {
           ? resolvedLocationId
           : null
 
-    // Only a location the caller is changing needs checking; an unchanged one was validated when the
-    // row was written. FK checks ignore RLS, so an unchecked id could point at another tenant.
-    if (location_id !== undefined && nextStockLocationId) {
+    /**
+     * ⚠ VALIDATE WHATEVER THE ROW WILL END UP POINTING AT, supplied or inherited.
+     *
+     * The previous comment here read "only a location the caller is changing needs checking; an
+     * unchanged one was validated when the row was written" -- and that answers the wrong
+     * question. Validation when the row was WRITTEN established the location was valid for the
+     * TENANT. It says nothing about whether THIS caller may touch it.
+     *
+     * So a non-owner, non-admin user whose location allow-list excludes the transaction's existing
+     * location could edit that row simply by OMITTING location_id: the tenant-scoped lookup still
+     * finds it, and the guard was skipped because nothing was being changed. Raised on #131's
+     * review, and the same shape as #127's three majors -- validate the row you are about to
+     * change, not only the value you are changing it to.
+     */
+    if (nextStockLocationId) {
       const validLocationId = await validateLocationForTenant(inventorySql, tenantContext, sessionUser, nextStockLocationId)
       if (!validLocationId) {
         return NextResponse.json(

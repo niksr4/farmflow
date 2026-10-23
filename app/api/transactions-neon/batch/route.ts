@@ -90,6 +90,27 @@ export async function POST(request: NextRequest) {
 
     // Every location the import references must belong to this tenant. FK checks ignore RLS, and this
     // route replaces the whole ledger, so one foreign id would be written straight through.
+    //
+    // ⚠ A NON-STRING location_id USED TO COERCE TO "" AND SKIP VALIDATION ENTIRELY. `typeof` guards
+    // the read, so a number or an object fell through to the empty string, was never added to the
+    // set below, was never checked -- and then the insert wrote the row with a NULL location. The
+    // batch reported success while that stock quietly moved into the unassigned slot. Omitted,
+    // null and "unassigned" are all legitimate ways to say "no location"; anything else is a
+    // malformed request and must not reach a ledger replacement. Raised on #131's review.
+    for (const [index, t] of transactions.entries()) {
+      const supplied = t?.location_id
+      const saysNoLocation = supplied === undefined || supplied === null
+      if (!saysNoLocation && typeof supplied !== "string") {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Transaction ${index + 1} has a location that is not a text id. Nothing has been imported.`,
+          },
+          { status: 400 },
+        )
+      }
+    }
+
     const referencedLocationIds = new Set<string>()
     for (const t of transactions) {
       const raw = typeof t?.location_id === "string" ? t.location_id.trim() : ""
