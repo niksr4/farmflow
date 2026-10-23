@@ -17,10 +17,13 @@
 # spends its hourly budget on the pull requests that touch money first. Treat this as broad
 # coverage, and CodeRabbit as the second opinion where a wrong number costs an estate rupees.
 #
-# ⚠ THIS WORKFLOW CANNOT REVIEW ITS OWN PULL REQUEST. GitHub takes `pull_request` workflows from
-# the BASE branch, so it does nothing until it is on `main`. An empty Checks tab on the PR that
-# adds it is expected, not a misconfiguration -- CLAUDE.md records a previous instance of exactly
-# this confusion costing a turn.
+# ⚠ IT DOES REVIEW ITS OWN PULL REQUEST, and I claimed the opposite when adding this file.
+#
+# For a pull request from a branch in the SAME repository, GitHub runs the workflow as defined on
+# the PR's HEAD branch -- so this took effect immediately on #134 and failed there on the missing
+# id-token permission above. The "workflow comes from the base branch" rule that CLAUDE.md records
+# is real but applies to `pull_request_target`, not to `pull_request`. Reading it as applying here
+# turned a one-line permission bug into an expected empty Checks tab, which is worse than the bug.
 
 name: Claude review
 
@@ -42,6 +45,10 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      # ⚠ REQUIRED BY THE ACTION, AND OMITTING IT IS A CLEAN FAILURE RATHER THAN A SILENT ONE.
+      # Without it the run dies with "Could not fetch an OIDC token" after the key check and the
+      # checkout have both passed, which reads like a credential problem and is not one.
+      id-token: write
     steps:
       - name: Check the key is configured
         env:
@@ -60,7 +67,8 @@ jobs:
           fi
           echo "Key present."
 
-      - uses: actions/checkout@v4
+      # v5: v4 pins Node 20, which the runners now force onto Node 24 and warn about on every run.
+      - uses: actions/checkout@v5
         with:
           # The review needs history to reason about what the branch changed, not just its tip.
           fetch-depth: 0
