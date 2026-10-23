@@ -56,13 +56,28 @@ const sourceOf = (relativePath: string) =>
 /**
  * Import the route with its database and auth edges replaced, so the handler itself runs.
  *
- * `runTenantQuery` answers `rows` for the first call (the lookup) and nothing afterwards, which is
- * enough for both paths. The tagged-template `accountsSql` is a no-op that records nothing -- what
- * matters is WHETHER a statement was issued, not its text, because the text is what a source scan
- * could already see.
+ * ⚠ THIS USED TO HARDCODE role: "admin", so NO EXECUTED TEST EVER SHOWED A WRITER BEING REFUSED --
+ * the admin gate was asserted only by a source match on /isAdminRole\s*\(/, which
+ * `if (false && !isAdminRole(...))` would satisfy. The role is a parameter now, and the 403 is a
+ * real call. Raised on #129's review.
+ *
+ * ⚠ AND `accountsSql` USED TO RECORD NOTHING, with a comment claiming the text did not matter
+ * because a source scan could see it. A scan cannot see whether the DELETE carries its tenant
+ * predicate at runtime, and the mock returning `{}` meant "a second statement was issued" passed
+ * for any statement at all. It now records the joined SQL and its bound values.
  */
-const loadRouteWithMocks = async (rows: unknown[]) => {
+/**
+ * A well-formed v4 id. The old fixture was "1111-1111-1111-1111", whose variant nibble is not in
+ * [89ab], so it is not a legal UUID at all -- every one of prod's 5,997 attendance_records ids is,
+ * and adding the route's validator is what exposed the fixture rather than the other way round.
+ */
+const VALID_RECORD_ID = "11111111-1111-4111-8111-111111111111"
+
+const loadRouteWithMocks = async (rows: unknown[], role: string = "admin") => {
   vi.resetModules()
+
+  /** Every statement the route issues, as { text, values }, so a dropped predicate is visible. */
+  const statements: Array<{ text: string; values: unknown[] }> = []
 
   const runTenantQuery = vi.fn(async () => rows.splice(0, rows.length))
   /**
@@ -70,7 +85,14 @@ const loadRouteWithMocks = async (rows: unknown[]) => {
    * `calls[0][2]` is a TYPE error rather than a value -- which has already cost one round here.
    */
   const logAuditEvent = vi.fn(async (_client: unknown, _user: unknown, _event: unknown) => {})
-  const accountsSql = Object.assign(() => ({}), { query: () => ({}) })
+  const accountsSql = Object.assign(
+    (strings: TemplateStringsArray | string, ...values: unknown[]) => {
+      const text = typeof strings === "string" ? strings : strings.join(" ? ")
+      statements.push({ text, values })
+      return {}
+    },
+    { query: () => ({}) },
+  )
 
   vi.doMock("@/lib/server/db", () => ({ accountsSql, sql: accountsSql, adminSql: accountsSql }))
   vi.doMock("@/lib/server/tenant-db", () => ({
@@ -82,14 +104,14 @@ const loadRouteWithMocks = async (rows: unknown[]) => {
     requireModuleAccess: async () => ({
       id: "user-1",
       username: "adminna",
-      role: "admin",
+      role,
       tenantId: "tenant-1",
     }),
     isModuleAccessError: () => false,
   }))
 
   const route = await import("@/app/api/attendance/records/[id]/route")
-  return { runTenantQuery, logAuditEvent, deleteHandler: route.DELETE }
+  return { runTenantQuery, logAuditEvent, statements, deleteHandler: route.DELETE }
 }
 
 describe("a punch can only be removed on purpose", () => {
@@ -134,7 +156,7 @@ describe("a punch can only be removed on purpose", () => {
         method: "DELETE",
         body: JSON.stringify({}),
       }),
-      { params: Promise.resolve({ id: "11111111-1111-1111-1111-111111111111" }) },
+      { params: Promise.resolve({ id: VALID_RECORD_ID }) },
     )
 
     expect(refused.status).toBe(400)
@@ -143,7 +165,7 @@ describe("a punch can only be removed on purpose", () => {
   })
 
   it("the audited route deletes and audits when a reason is given", async () => {
-    const { runTenantQuery, logAuditEvent, deleteHandler } = await loadRouteWithMocks([
+    const { runTenantQuery, logAuditEvent, statements, deleteHandler } = await loadRouteWithMocks([
       {
         id: "rec-1",
         worker_id: "w-1",
@@ -160,12 +182,23 @@ describe("a punch can only be removed on purpose", () => {
         method: "DELETE",
         body: JSON.stringify({ reason: "Mis-enrolled finger, device code 31" }),
       }),
-      { params: Promise.resolve({ id: "11111111-1111-1111-1111-111111111111" }) },
+      { params: Promise.resolve({ id: VALID_RECORD_ID }) },
     )
 
     expect(accepted.status).toBe(200)
-    // One read to find the row, one statement to remove it.
-    expect(runTenantQuery.mock.calls.length).toBeGreaterThanOrEqual(2)
+
+    /**
+     * ⚠ THIS USED TO BE `calls.length >= 2` AND WOULD HAVE PASSED WITH NO DELETE AT ALL.
+     * runTenantQuery returns whatever it is handed and accountsSql was a no-op, so "a second
+     * statement was issued" was satisfied by any statement whatsoever -- a change that dropped
+     * the tenant predicate, or deleted nothing, would not have failed it. Assert the statement.
+     */
+    const deleteStatement = statements.find((entry) => /DELETE\s+FROM\s+attendance_records/i.test(entry.text))
+    expect(deleteStatement, `no DELETE issued; statements were: ${statements.map((e) => e.text.slice(0, 60)).join(" | ")}`).toBeTruthy()
+    // Tenant-scoped, and scoped to the one row. Either predicate missing is a cross-tenant delete.
+    expect(deleteStatement!.text).toMatch(/tenant_id/i)
+    expect(deleteStatement!.values).toContain("tenant-1")
+    expect(deleteStatement!.values).toContain(VALID_RECORD_ID)
 
     expect(logAuditEvent).toHaveBeenCalledTimes(1)
     const event = logAuditEvent.mock.calls[0][2] as any
@@ -175,6 +208,52 @@ describe("a punch can only be removed on purpose", () => {
     expect(event.after.reason).toBe("Mis-enrolled finger, device code 31")
     expect(event.before.workerName).toBe("Saina")
     expect(event.before.checkInClock).toBe("08:01")
+  })
+
+  /**
+   * THE EXECUTED HALF OF THE ADMIN GATE.
+   *
+   * The source scan below asserts `isAdminRole` appears. That is satisfied by dead code --
+   * `if (false && !isAdminRole(...))` matches it -- and until #129's review NO test ever sent a
+   * writer through this route. This one does, and it is the assertion that would actually have
+   * caught the original `canDeleteModule` bug.
+   */
+  it("refuses a writer with 403, and touches nothing", async () => {
+    const { runTenantQuery, logAuditEvent, statements, deleteHandler } = await loadRouteWithMocks(
+      [{ id: VALID_RECORD_ID }],
+      "user",
+    )
+
+    const refused = await deleteHandler(
+      new Request("http://localhost/api/attendance/records/x", {
+        method: "DELETE",
+        body: JSON.stringify({ reason: "Mis-enrolled finger, device code 31" }),
+      }),
+      { params: Promise.resolve({ id: VALID_RECORD_ID }) },
+    )
+
+    expect(refused.status).toBe(403)
+    // A refusal that still deleted, or still audited, would answer 403 just the same.
+    expect(runTenantQuery).not.toHaveBeenCalled()
+    expect(logAuditEvent).not.toHaveBeenCalled()
+    expect(statements).toEqual([])
+  })
+
+  it("rejects a non-string reason, which String() would have turned into fifteen characters", async () => {
+    const { runTenantQuery, deleteHandler } = await loadRouteWithMocks([{ id: VALID_RECORD_ID }])
+
+    const refused = await deleteHandler(
+      new Request("http://localhost/api/attendance/records/x", {
+        method: "DELETE",
+        // String({}) is "[object Object]" -- 15 characters, past the 4-character minimum, and it
+        // would have been stored as the only surviving explanation for a pay change.
+        body: JSON.stringify({ reason: {} }),
+      }),
+      { params: Promise.resolve({ id: VALID_RECORD_ID }) },
+    )
+
+    expect(refused.status).toBe(400)
+    expect(runTenantQuery).not.toHaveBeenCalled()
   })
 
   it("the audited route is admin-gated and writes an audit row carrying the reason", () => {

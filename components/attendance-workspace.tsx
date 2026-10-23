@@ -73,7 +73,13 @@ type AttendanceWorkspaceProps = {
   /**
    * The viewer's effective role, which already accounts for preview mode so the owner previewing
    * as a writer sees what a writer sees. Used ONLY to decide whether to offer the punch-removal
-   * control; the route re-checks `canDeleteModule` and is the actual gate.
+   * control; the route re-checks `isAdminRole` and is the actual gate.
+   *
+   * ⚠ THIS SAID `canDeleteModule` AND THAT WOULD HAVE REINTRODUCED THE BUG. For every module in
+   * USER_MUTATION_MODULES -- `accounts` included -- canDeleteModule and canWriteModule have
+   * identical bodies, so a writer passes it. The route's own comment records that the first
+   * version of this gate was exactly that mistake, and the next editor "aligning" the UI with
+   * this line would have undone the fix.
    */
   role?: string | null
 }

@@ -96,16 +96,40 @@ export async function GET(request: Request) {
           --
           -- (SQL comments, not a JSDoc block: this is inside a tagged template literal and a
           -- backtick in the comment would terminate the query.)
+          -- ⚠ CORRECTED AGAIN ON #129's REVIEW, AND THE FIRST CORRECTION WAS ALSO WRONG.
+          --
+          -- This began as allocated_cost, which reads Rs 0 for an unallocated biometric day while
+          -- payroll pays the day rate. It was then changed to "allocated_cost if positive, else
+          -- the day rate", which is wrong in BOTH arms whenever an assignment exists, because
+          -- DELETING THE ATTENDANCE ROW DOES NOT DELETE THE labour_assignments ROWS.
+          --
+          -- Payroll is picking_total + COALESCE(salary, n, days_present x daily_rate), where n is
+          -- SUM(labour_assignments.total_cost) -- see app/api/payroll-summary/route.ts. So:
+          --   assignments exist      -> n is non-null, survives the delete, pay does not move at
+          --                             all. Reporting allocated_cost claimed it would stop.
+          --   zero-cost assignment   -> n is 0 but NON-NULL, so the day-rate fallback never fires
+          --                             and payroll pays 0. Reporting daily_rate was wrong upward.
+          --   no assignments at all  -> n is NULL, the fallback pays the day rate, and removing
+          --                             the punch really does stop exactly that.
+          --
+          -- So the only truthful figure is the day rate on an UNALLOCATED day, and zero otherwise.
+          -- has_allocation is returned beside it so the dialog can say the muster entry survives
+          -- and has to be corrected on its own screen, rather than implying this removes the money.
           CASE
-            WHEN COALESCE(a.allocated_cost, 0) > 0 THEN COALESCE(a.allocated_cost, 0)
+            WHEN COALESCE(a.allocation_count, 0) > 0 THEN 0
             ELSE COALESCE(w.daily_rate, 0)
-          END::float                                               AS payroll_effect
+          END::float                                               AS payroll_effect,
+          (COALESCE(a.allocation_count, 0) > 0)                    AS has_allocation
         FROM attendance_records r
         JOIN attendance_workers w
           ON w.id = r.worker_id
          AND w.tenant_id = ${tenantContext.tenantId}
         LEFT JOIN LATERAL (
-          SELECT SUM(la.day_fraction) AS allocated_fraction, SUM(la.total_cost) AS allocated_cost
+          SELECT SUM(la.day_fraction) AS allocated_fraction,
+                 SUM(la.total_cost)  AS allocated_cost,
+                 -- COUNT, not SUM: a zero-cost assignment still makes payroll's n non-null, so
+                 -- existence is the question, never the amount.
+                 COUNT(*)            AS allocation_count
           FROM labour_assignments la
           WHERE la.tenant_id = ${tenantContext.tenantId}
             AND la.worker_id = r.worker_id
@@ -161,6 +185,7 @@ export async function GET(request: Request) {
         source: string | null
         /** What payroll would stop paying. See the query comment -- not the allocated cost. */
         payrollEffect: number
+        hasAllocation: boolean
       }>
     }
 
@@ -219,6 +244,7 @@ export async function GET(request: Request) {
         attendanceRecordId: String(row.attendance_record_id),
         source: row.attendance_source ? String(row.attendance_source) : null,
         payrollEffect: Number(row.payroll_effect) || 0,
+        hasAllocation: Boolean(row.has_allocation),
       })
     }
 

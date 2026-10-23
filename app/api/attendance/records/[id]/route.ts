@@ -7,7 +7,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { isMissingAttendanceSchemaError, ATTENDANCE_SCHEMA_HELP } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
-import { MAX_REASON_LENGTH, MIN_REASON_LENGTH } from "@/lib/attendance-record-removal"
+import { MAX_REASON_LENGTH, MIN_REASON_LENGTH, isRemovableRecordId } from "@/lib/attendance-record-removal"
 
 /**
  * THE ONLY WAY TO REMOVE AN ATTENDANCE ROW A TERMINAL WROTE, and it costs you a reason.
@@ -64,8 +64,36 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
+    /**
+     * ⚠ VALIDATED AFTER THE ROLE CHECK, DELIBERATELY, so an unauthorised caller still gets 403
+     * rather than learning which ids are well-formed.
+     *
+     * The id goes into `${id}::uuid`, so a malformed one raised 22P02 and came back as a 500 --
+     * sanitizeRouteError refuses to echo "invalid input syntax", so nothing leaked, but a bad
+     * request still got the wrong status.
+     */
+    if (!isRemovableRecordId(id)) {
+      return NextResponse.json({ success: false, error: "Unknown record" }, { status: 400 })
+    }
+
     const body = await request.json().catch(() => ({}))
-    const reason = String(body?.reason ?? "").trim().slice(0, MAX_REASON_LENGTH)
+    /**
+     * ⚠ `String(body?.reason)` ACCEPTED AN OBJECT. `String({})` is "[object Object]" -- fifteen
+     * characters, comfortably past the four-character minimum -- so a client sending `{}` wrote
+     * that string into the audit event as the only surviving trace of why a worker's pay changed.
+     * The reason must be a string to begin with.
+     */
+    const rawReason = body?.reason
+    if (typeof rawReason !== "string") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Say why this record is being removed. It changes what the worker is paid.",
+        },
+        { status: 400 },
+      )
+    }
+    const reason = rawReason.trim().slice(0, MAX_REASON_LENGTH)
     if (reason.length < MIN_REASON_LENGTH) {
       return NextResponse.json(
         {

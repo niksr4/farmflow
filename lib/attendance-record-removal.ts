@@ -45,3 +45,20 @@ export const payrollEffectOfDay = (input: {
   if (allocated > 0) return allocated
   return Number(input.dailyRate) || 0
 }
+
+/**
+ * Is this a well-formed record id?
+ *
+ * The DELETE route interpolates the id as `${id}::uuid`, so a malformed one raised Postgres 22P02
+ * and surfaced as a 500. `sanitizeRouteError` refuses to echo "invalid input syntax", so nothing
+ * leaked -- but a bad request still got the wrong status, and a 500 is what you page on.
+ *
+ * Pure, so it is tested by calling it rather than by grepping the route for a regex. The same
+ * literal already exists in app/api/picking-records, app/api/labor-neon and
+ * app/api/labour-summary; consolidating those four is its own change, since they are live write
+ * paths and a validation rule that loosens by accident fails open.
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export const isRemovableRecordId = (value: unknown): value is string =>
+  typeof value === "string" && UUID_PATTERN.test(value)

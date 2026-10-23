@@ -207,9 +207,18 @@ describe("removing a punch from the monthly report", () => {
     await user.type(within(dialog).getByRole("textbox"), "Mis-enrolled finger")
     await user.click(within(dialog).getByRole("button", { name: /Remove the record/i }))
 
-    // A removal that silently did not happen is indistinguishable from one that did, until the
-    // next payroll run disagrees with the screen.
-    expect(await screen.findByText(/Insufficient role/i)).toBeTruthy()
+    /**
+     * ⚠ SCOPED TO THE DIALOG, and that is the whole assertion.
+     *
+     * `screen.findByText` matches anywhere in the document, so this passed while the message was
+     * rendered by the page BEHIND the modal overlay -- invisible to the writer, and off-screen
+     * entirely on a phone. A removal that silently did not happen is indistinguishable from one
+     * that did until the next payroll run disagrees, so "the error exists in the DOM" is not the
+     * property worth testing; "the person who pressed the button can see it" is.
+     */
+    expect(await within(dialog).findByText(/Insufficient role/i)).toBeTruthy()
+    // And the dialog stays open, so there is somewhere for that message to live.
+    expect(screen.getByRole("dialog")).toBeTruthy()
   })
 })
 
