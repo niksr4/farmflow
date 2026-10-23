@@ -129,7 +129,10 @@ async function resolveManualScope(searchParams?: Awaited<ManualsPageRouteProps["
       planId,
       userRole: effectiveRole,
     }
-  } catch {
+  } catch (error) {
+    // Falling back is right (a manual should still render), but silently: a broken scope read made
+    // every user see the default plan's manual with no trace of why.
+    console.error("manuals: could not resolve the tenant's module scope", error instanceof Error ? error.message : "unknown error")
     return FALLBACK_SCOPE
   }
 }

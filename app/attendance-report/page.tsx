@@ -51,7 +51,12 @@ export default function AttendanceReportPage() {
       if (!targetDate) setDate(payload.reportDate ?? "")
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return
+      // Clear the previous day's figures too: leaving them under an error banner reads as the
+      // report for the date now shown in the picker.
       setError("Network error loading the report")
+      setRows([])
+      setSummary(null)
+      setDevices(null)
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
@@ -136,6 +141,10 @@ export default function AttendanceReportPage() {
                   a.download = `attendance-${reportDate || date}${filter === "all" ? "" : `-${filter}`}.xlsx`
                   a.click()
                   URL.revokeObjectURL(url)
+                } catch {
+                  // Without this the rejection was unhandled: the button just went back to
+                  // "Download Excel" and the clerk never learned that no file was produced.
+                  setError("Could not build the Excel file. Try Download CSV instead.")
                 } finally {
                   setBuildingXlsx(false)
                 }
@@ -194,7 +203,11 @@ export default function AttendanceReportPage() {
             </div>
           )}
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
           {!error && !loading && rows.length === 0 && (
             <p className="text-sm text-muted-foreground">
