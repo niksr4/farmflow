@@ -60,11 +60,52 @@ const rows = await sql`
 
 const uncovered = rows.filter((r) => !r.rls_enabled || !r.rls_forced)
 
-console.log(`Checked ${rows.length} tenant_id tables on ${useProd ? "PROD" : "DEV"}.`)
-if (uncovered.length === 0) {
-  console.log("✓ Every tenant table has RLS enabled and forced.")
+/**
+ * ⚠ VIEWS. The query above filters `table_type = 'BASE TABLE'`, which is CORRECT -- RLS is a
+ * table-level feature and a view cannot have it. But it also meant this checker could never see a
+ * view at all, and a view is the other way to read a tenant table.
+ *
+ * A view without `security_invoker = true` executes with its OWNER's privileges. Every view here
+ * is owned by neondb_owner, which bypasses RLS, and app_runtime holds SELECT on them -- so such a
+ * view returns EVERY tenant's rows to a correctly-scoped session, silently.
+ *
+ * That is not hypothetical. Measured on production 2026-10-23: four of five views had
+ * security_invoker set and `inventory_summary` did not. It survived precisely because this script
+ * reported PASS while being structurally unable to look. The sibling views were fixed by hand at
+ * some point and the fifth was missed, with nothing to catch it.
+ *
+ * Derived from pg_class, never a list of view names, so a view added tomorrow is covered tomorrow.
+ */
+const views = await sql`
+  SELECT c.relname AS view_name,
+         COALESCE(
+           (SELECT option_value FROM pg_options_to_table(c.reloptions)
+            WHERE option_name = 'security_invoker'),
+           'false'
+         ) AS security_invoker
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE c.relkind = 'v' AND n.nspname = 'public'
+  ORDER BY c.relname
+`
+
+const leakyViews = views.filter((v) => String(v.security_invoker).toLowerCase() !== 'true')
+
+console.log(`Checked ${rows.length} tenant_id tables and ${views.length} views on ${useProd ? "PROD" : "DEV"}.`)
+
+if (leakyViews.length > 0) {
+  console.error(`✗ ${leakyViews.length} view(s) run as their OWNER and therefore bypass RLS:`)
+  for (const v of leakyViews) {
+    console.error(`   - ${v.view_name} (security_invoker=${v.security_invoker})`)
+  }
+  console.error("Run scripts/156-every-view-runs-as-its-caller.sql to fix.")
+}
+
+if (uncovered.length === 0 && leakyViews.length === 0) {
+  console.log("✓ Every tenant table has RLS enabled and forced, and every view runs as its caller.")
   process.exit(0)
 }
+if (uncovered.length === 0) process.exit(1)
 
 console.error(`✗ ${uncovered.length} tenant table(s) missing RLS:`)
 for (const r of uncovered) {
