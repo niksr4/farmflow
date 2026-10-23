@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { FieldLabel } from "@/components/ui/field-label"
+import { isAdminRole } from "@/lib/permissions"
+import { useSingleFlight } from "@/hooks/use-single-flight"
+import { isUsableRemovalReason, MAX_REASON_LENGTH, MIN_REASON_LENGTH } from "@/lib/attendance-record-removal"
+import { Trash2 } from "lucide-react"
 import { averageWorkedHours, formatHoursHm, formatWorkedHours, shiftStatusLabel, type ShiftStatus } from "@/lib/attendance-hours"
 import AttendanceMonthlyGrid from "@/components/attendance-monthly-grid"
 import AttendanceYearlySummary from "@/components/attendance-yearly-summary"
@@ -30,6 +37,17 @@ import { neutraliseFormula } from "@/lib/csv-safe"
 
 type DayRow = {
   date: string
+  /** The row's own id, so one day can be named for removal. */
+  attendanceRecordId: string
+  source: string | null
+  /**
+   * What PAYROLL stops paying if this day is removed. ZERO when the day carries a muster
+   * allocation, because deleting the attendance row leaves labour_assignments untouched and
+   * payroll keeps paying from it. See the comment in app/api/attendance/summary/route.ts.
+   */
+  payrollEffect: number
+  /** True when a muster allocation exists for this worker-day and will SURVIVE the removal. */
+  hasAllocation: boolean
   /** Already IST, formatted server-side. Rendered as-is; re-offsetting it is the bug. */
   checkInClock: string | null
   checkOutClock: string | null
@@ -97,6 +115,7 @@ function ViewToggle({ view, onChange }: { view: ReportView; onChange: (next: Rep
     { value: "yearly", label: "Yearly summary" },
     { value: "hours", label: "Hours & allocation" },
   ]
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {options.map((option) => (
@@ -136,7 +155,7 @@ const STATUS_TONE: Record<ShiftStatus, string> = {
   absent: "text-stone-400",
 }
 
-export default function AttendanceReportTab() {
+export default function AttendanceReportTab({ role }: { role?: string | null }) {
   const [startDate, setStartDate] = useState(firstOfMonth())
   const [endDate, setEndDate] = useState(today())
   const [workers, setWorkers] = useState<WorkerRow[]>([])
@@ -168,6 +187,56 @@ export default function AttendanceReportTab() {
       setLoading(false)
     }
   }, [startDate, endDate])
+
+  /**
+   * REMOVING ONE ATTENDANCE RECORD, on purpose and on the record.
+   *
+   * This screen is the only place the removal can sensibly live. The muster roll lists ACTIVE
+   * workers only, so a punch belonging to somebody since deactivated -- which is what a
+   * mis-enrolled finger leaves behind -- is invisible there. The summary route joins workers
+   * without an active filter, so this report can see it.
+   *
+   * This is an AFFORDANCE, not the gate -- the route re-checks and a forged request still gets a
+   * 403. It must nonetheless agree with the route: `isAdminRole`, not `canDeleteModule`, which
+   * returns true for a writer because `accounts` is in USER_MUTATION_MODULES.
+   */
+  const mayRemovePunch = isAdminRole(role)
+  const [removing, setRemoving] = useState<{ worker: WorkerRow; day: DayRow } | null>(null)
+  const [reason, setReason] = useState("")
+  /**
+   * The removal's own error and in-flight flag, SEPARATE from the page-level ones.
+   *
+   * setError writes to a paragraph at the top of the report, which sits BEHIND the dialog's
+   * overlay -- so a failed removal changed nothing the writer could see, and on a phone the
+   * message was off-screen entirely. useSingleFlight blocks a duplicate call but leaves the
+   * button enabled and silent, so a slow estate connection looked like a dead button.
+   */
+  const [removalError, setRemovalError] = useState<string | null>(null)
+  const [removalBusy, setRemovalBusy] = useState(false)
+
+  const submitRemoval = useSingleFlight(async () => {
+    if (!removing || !isUsableRemovalReason(reason)) return
+    setRemovalError(null)
+    setRemovalBusy(true)
+    try {
+      const res = await fetch(`/api/attendance/records/${removing.day.attendanceRecordId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok || !payload.success) throw new Error(payload?.error || "Could not remove that record")
+      setRemoving(null)
+      setReason("")
+      await run()
+    } catch (caught: any) {
+      // Surfaced IN THE DIALOG, not swallowed and not behind the overlay. A removal that silently
+      // did not happen looks identical to one that did until the next payroll run disagrees.
+      setRemovalError(caught?.message || "Could not remove that record")
+    } finally {
+      setRemovalBusy(false)
+    }
+  })
 
   const exportCsv = useCallback(() => {
     const header = ["Worker", "Type", "Estate", "Days present", "Full", "Half", "Short", "Still in", "Hours", "Avg hrs/day", "Days timed", "Days allocated", "Cost"]
@@ -334,6 +403,25 @@ export default function AttendanceReportTab() {
                                   {shiftStatusLabel(d.status)}
                                   {d.rescanIgnored && <span className="ml-1 font-normal text-stone-400">· second scan too soon to be a punch-out</span>}
                                   {d.allocatedFraction > 0 && <span className="ml-1 font-normal text-stone-400">· {d.allocatedFraction}d allocated</span>}
+                                  {d.source === "biometric" && d.allocatedFraction === 0 && (
+                                    // The shape of a mis-enrolled finger: a terminal punch nobody
+                                    // allocated. Payroll still pays the day rate for it.
+                                    <span className="ml-1 font-normal text-amber-700 dark:text-amber-500">· punched but never allocated</span>
+                                  )}
+                                  {mayRemovePunch && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRemoving({ worker: w, day: d })
+                                        setReason("")
+                                      }}
+                                      className="ml-2 inline-flex h-7 items-center gap-1 rounded-md px-2 align-middle text-[11px] font-semibold text-stone-500 hover:bg-rose-50 hover:text-rose-700 dark:text-stone-400 dark:hover:bg-rose-950/40"
+                                      aria-label={`Remove the attendance record for ${w.name} on ${d.date}`}
+                                    >
+                                      <Trash2 className="h-3 w-3" aria-hidden="true" />
+                                      Remove
+                                    </button>
+                                  )}
                                 </span>
                               </div>
                             ))}
@@ -348,6 +436,125 @@ export default function AttendanceReportTab() {
           </table>
         </div>
       )}
+
+      {/*
+        THE REMOVAL DIALOG.
+
+        It states the payroll consequence BEFORE asking for a reason, and that consequence is
+        payrollEffect -- which is now ZERO whenever the day carries a muster allocation.
+
+        THIS COMMENT PREVIOUSLY ARGUED THE OPPOSITE AND WAS WRONG, as was the code under it.
+        Deleting an attendance row does NOT delete the matching labour_assignments rows, and
+        payroll pays COALESCE(salary, SUM(assignment cost), days x rate). So on an allocated day
+        the removal moves no money at all, and a dialog promising the allocated cost would stop
+        was a false statement on a money screen. The honest split:
+          allocated    -> payroll does not change; say so, and send them to the muster
+          unallocated  -> the day rate really does stop
+      */}
+      <Dialog
+        open={!!removing}
+        onOpenChange={(open) => {
+          // Escape and the overlay are dismissals too, so they get the same in-flight block.
+          if (!open && !removalBusy) { setRemoving(null); setReason(""); setRemovalError(null) }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogTitle>Remove this attendance record</DialogTitle>
+          {removing && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="font-semibold text-stone-800 dark:text-stone-100">{removing.worker.name}</p>
+                <p className="mt-0.5 text-stone-600 dark:text-stone-300">
+                  {removing.day.date}
+                  {removing.day.checkInClock ? ` · ${removing.day.checkInClock}` : ""}
+                  {removing.day.checkOutClock ? ` to ${removing.day.checkOutClock}` : ""}
+                  {removing.day.source === "biometric" ? " · from the terminal" : ""}
+                </p>
+                {removing.day.hasAllocation ? (
+                  <>
+                    <p className="mt-2 font-semibold text-amber-700 dark:text-amber-500">
+                      Payroll will not change.
+                    </p>
+                    <p className="mt-1 text-[11px] text-stone-600 dark:text-stone-300">
+                      This day is allocated on the muster, and removing the attendance record does
+                      not remove that allocation, so the worker is still paid for it. Correct the
+                      muster entry too if the day should not be paid.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-2 font-semibold text-rose-700 dark:text-rose-400">
+                      Payroll will stop paying ₹{Math.round(removing.day.payrollEffect).toLocaleString("en-IN")} for this day.
+                    </p>
+                    <p className="mt-1 text-[11px] text-stone-500 dark:text-stone-400">
+                      Nothing was allocated to this day, so it is paid at the worker&apos;s day rate.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <FieldLabel
+                  htmlFor="removal-reason"
+                  label="Why is this being removed? *"
+                  tooltip="Removing a day changes what the worker is paid, so the next payroll run will differ and somebody will ask why."
+                />
+                <Textarea
+                  id="removal-reason"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value.slice(0, MAX_REASON_LENGTH))}
+                  rows={3}
+                  placeholder="Mis-enrolled finger, device code 31"
+                  className="mt-1"
+                />
+                <p className="mt-1 text-[11px] text-stone-500 dark:text-stone-400">
+                  The record itself is gone afterwards. This reason is the only trace left, so write
+                  what somebody would need in six weeks.
+                </p>
+              </div>
+
+              {/*
+                The failure is rendered HERE, inside the dialog, because setError writes to a
+                paragraph at the top of the report that the overlay covers -- so a failed removal
+                used to change nothing the writer could see. role="alert" so a screen reader
+                announces it rather than leaving the button looking inert.
+              */}
+              {removalError && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                >
+                  {removalError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2">
+                {/* Explicit type on BOTH: components/ui/button.tsx sets none, and an untyped
+                    button inside a form submits. See the forms section of CLAUDE.md. */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  /* Disabled in flight: closing the dialog mid-DELETE let the record vanish with
+                     no confirmation anywhere on screen. */
+                  disabled={removalBusy}
+                  onClick={() => { setRemoving(null); setReason(""); setRemovalError(null) }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={!isUsableRemovalReason(reason) || removalBusy}
+                  onClick={() => void submitRemoval()}
+                  title={isUsableRemovalReason(reason) ? undefined : `Give a reason of at least ${MIN_REASON_LENGTH} characters`}
+                >
+                  {removalBusy ? "Removing..." : "Remove the record"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
